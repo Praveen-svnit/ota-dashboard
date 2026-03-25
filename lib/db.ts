@@ -46,19 +46,6 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_ota_listing_propertyId ON OtaListing(propertyId);
     CREATE INDEX IF NOT EXISTS idx_ota_listing_liveDate   ON OtaListing(ota, liveDate);
     CREATE INDEX IF NOT EXISTS idx_ota_listing_status     ON OtaListing(status);
-
-    CREATE TABLE IF NOT EXISTS RnsDaily (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      date      TEXT NOT NULL,
-      channel   TEXT NOT NULL,
-      ota       TEXT NOT NULL,
-      rns       INTEGER NOT NULL DEFAULT 0,
-      syncedAt  TEXT NOT NULL,
-      UNIQUE (date, channel)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_rns_daily_date ON RnsDaily(date);
-    CREATE INDEX IF NOT EXISTS idx_rns_daily_ota  ON RnsDaily(ota);
   `);
 
   // Migrations for existing DBs

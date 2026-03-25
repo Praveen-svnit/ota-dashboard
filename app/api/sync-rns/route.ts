@@ -44,9 +44,9 @@ export async function POST() {
   const db  = getDb();
 
   const upsert = db.prepare(`
-    INSERT INTO RnsDaily (date, channel, ota, rns, syncedAt)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT (date, channel) DO UPDATE
+    INSERT INTO RnsStay (stay_date, ota, guest_status, rns, revenue, syncedAt)
+    VALUES (?, ?, ?, ?, 0, ?)
+    ON CONFLICT (stay_date, ota, guest_status) DO UPDATE
       SET rns = excluded.rns, syncedAt = excluded.syncedAt
   `);
 
@@ -79,7 +79,7 @@ export async function POST() {
   }
 
   const insertMany = db.transaction((rns: Row[]) => {
-    for (const r of rns) upsert.run(r.date, r.channel, r.ota, r.rns, now);
+    for (const r of rns) upsert.run(r.date, r.ota, r.channel, r.rns, now);
     return rns.length;
   });
 
