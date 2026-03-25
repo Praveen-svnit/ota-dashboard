@@ -12,17 +12,17 @@ const OTA_SLUG_MAP: Record<string, string> = {
 const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip"];
 
 const T = {
-  pageBg:   "#F8FAFC",
+  pageBg:   "#F4F7FB",
   cardBg:   "#FFFFFF",
-  cardBdr:  "#E4E8F0",
-  headerBg: "#F8FAFC",
-  expandBg: "#F8F9FC",
-  orange:   "#FF6B00",
-  orangeL:  "#FFF0E6",
-  orangeT:  "#FFE0C7",
+  cardBdr:  "#D8E1EC",
+  headerBg: "#F6F9FC",
+  expandBg: "#F7FAFD",
+  orange:   "#0F766E",
+  orangeL:  "#DFF8F3",
+  orangeT:  "#BFEFE4",
   textPri:  "#0F172A",
   textSec:  "#475569",
-  textMut:  "#94A3B8",
+  textMut:  "#7C8EA5",
   live:     "#16A34A",
   liveL:    "#DCFCE7",
   notLive:  "#DC2626",
@@ -87,12 +87,13 @@ function liveColor(pct: number): { text: string; bar: string } {
 }
 
 interface Stats { live: number; soldOut: number; total: number; onboardedThisMonth: number; mtdListings: number; }
-interface CatRow { ota: string; live: number; exception: number; inProcess: number; tatExhausted: number; }
+interface CatRow { ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number; }
 interface TatStat { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: Stats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; }
 
 export default function ListingDashboardPage() {
   const router = useRouter();
+  const [view,        setView]        = useState<"overview" | "ota">("overview");
   const [selectedOta, setSelectedOta] = useState<string | null>(null);
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -164,62 +165,94 @@ export default function ListingDashboardPage() {
   useEffect(() => { load(); loadNl(); }, []);
 
   return (
-    <div style={{ padding: "18px 22px", background: T.pageBg, minHeight: "100vh" }}>
+    <div style={{ padding: "22px 24px", background: "linear-gradient(180deg, #F7FAFD 0%, #EEF4FA 100%)", minHeight: "100vh" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        .trow:hover > td { background: #F9FAFB !important; }
-        .srow:hover > td { background: #F5F7FA !important; }
+        .trow:hover > td { background: #F5FBFA !important; }
+        .srow:hover > td { background: #F3F8FD !important; }
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 3, height: 20, background: T.orange, borderRadius: 2 }} />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 14, padding: "16px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: T.textPri }}>Listing Dashboard</div>
-            <div style={{ fontSize: 10, color: T.textMut }}>OTA analytics · live from DB</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
           </div>
         </div>
-        {/* OTA toggle */}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            onClick={() => setSelectedOta(null)}
-            style={{
-              padding: "5px 12px", fontSize: 11, fontWeight: 700,
-              border: `1px solid ${selectedOta === null ? T.orange : "#E2E8F0"}`,
-              borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
-              background: selectedOta === null ? T.orange : "#FFFFFF",
-              color:      selectedOta === null ? "#FFFFFF" : "#64748B",
-              transition: "all 0.12s",
-            }}
-          >
-            Overview
-          </button>
-          {OTA_LIST_ORDER.map(name => {
-            const active = selectedOta === name;
-            const color  = OTA_COLORS[name] ?? T.orange;
+        {/* View toggle — Overview / OTA Wise */}
+        <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
+          {(["overview", "ota"] as const).map(v => {
+            const active = view === v;
             return (
               <button
-                key={name}
-                onClick={() => setSelectedOta(name)}
+                key={v}
+                onClick={() => setView(v)}
                 style={{
-                  padding: "5px 12px", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${active ? color : "#E2E8F0"}`,
-                  borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
-                  background: active ? color : "#FFFFFF",
-                  color:      active ? "#FFFFFF" : "#64748B",
-                  transition: "all 0.12s",
+                  padding: "7px 18px", fontSize: 11, fontWeight: 700,
+                  borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit",
+                  background: active ? "#FFFFFF" : "transparent",
+                  color:      active ? T.textPri : "#94A3B8",
+                  boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
+                  transition: "all 0.13s ease",
                 }}
               >
-                {name}
+                {v === "overview" ? "Overview" : "OTA Wise"}
               </button>
             );
           })}
         </div>
       </div>
 
-      {selectedOta !== null ? (
-        <OtaDetailView otaName={selectedOta} />
+      {view === "ota" ? (
+        /* ── OTA Wise view ── */
+        <div>
+          {/* OTA filter row */}
+          <div style={{
+            display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
+            marginBottom: 18, padding: "12px 16px",
+            background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
+            borderRadius: 14, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Select OTA</span>
+            {OTA_LIST_ORDER.map(name => {
+              const active = selectedOta === name;
+              const color  = OTA_COLORS[name] ?? T.orange;
+              return (
+                <button
+                  key={name}
+                  onClick={() => setSelectedOta(active ? null : name)}
+                  style={{
+                    padding: "6px 14px", fontSize: 11, fontWeight: 700,
+                    border: `1px solid ${active ? color : T.cardBdr}`,
+                    borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
+                    background: active ? color : "#FFFFFF",
+                    color:      active ? "#FFFFFF" : "#64748B",
+                    boxShadow: active ? `0 4px 12px ${color}30` : "none",
+                    transition: "all 0.13s ease",
+                  }}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* OTA detail or empty state */}
+          {selectedOta ? (
+            <OtaDetailView otaName={selectedOta} />
+          ) : (
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              padding: "60px 24px", background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
+              borderRadius: 18, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>◈</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.textPri, marginBottom: 6 }}>Select an OTA to view analytics</div>
+              <div style={{ fontSize: 11, color: T.textMut }}>Month-wise TAT · Not Live Properties · Sub-status breakdown</div>
+            </div>
+          )}
+        </div>
       ) : (
         <>
 
@@ -240,52 +273,50 @@ export default function ListingDashboardPage() {
         return (
           <>
             {/* ── KPI Cards ── */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
 
               {/* Live Props */}
-              <div style={{ ...kpi, flex: "2 1 220px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: T.orange, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Total Live Props</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <span style={{ fontSize: 9, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em" }}>Live</span>
-                    <span style={{ fontSize: 22, fontWeight: 900, color: T.live, background: T.liveL, padding: "4px 14px", borderRadius: 8, lineHeight: 1.2 }}>
+              <div style={{ ...kpi, flex: "2 1 200px", borderLeft: `3px solid ${T.orange}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: T.textSec }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.live }}>Live</span>
+                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.live, background: T.liveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
                       {data.stats.live.toLocaleString()}
                     </span>
-                  </div>
-                  <span style={{ color: T.textMut, fontSize: 14, fontWeight: 300 }}>|</span>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                    <span style={{ fontSize: 9, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em" }}>Sold Out</span>
-                    <span style={{ fontSize: 22, fontWeight: 900, color: T.notLive, background: T.notLiveL, padding: "4px 14px", borderRadius: 8, lineHeight: 1.2 }}>
+                  </span>
+                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.notLive }}>Sold Out</span>
+                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.notLive, background: T.notLiveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
                       {data.stats.soldOut.toLocaleString()}
                     </span>
-                  </div>
-                  <div style={{ marginLeft: "auto" }}>
-                    <span style={{ fontSize: 9, color: T.textMut, display: "block", textAlign: "center", marginBottom: 3 }}>Total</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: T.textSec, background: "#F1F5F9", padding: "4px 12px", borderRadius: 8, display: "block", textAlign: "center" }}>
+                  </span>
+                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.textSec }}>Total</span>
+                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 14, fontWeight: 800, color: T.textSec, background: "#F1F5F9", padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
                       {data.stats.total.toLocaleString()}
                     </span>
-                  </div>
+                  </span>
                 </div>
               </div>
 
               {/* Onboarded */}
-              <div style={{ ...kpi, flex: "1 1 120px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: T.orange, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: `3px solid ${T.orange}` }}>
+                <div style={{ fontSize: 8, fontWeight: 700, color: T.orange, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
                   Onboarded · {new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}
                 </div>
-                <span style={{ fontSize: 26, fontWeight: 900, color: T.orange, background: T.orangeL, padding: "4px 16px", borderRadius: 8, display: "inline-block", lineHeight: 1.3 }}>
+                <span style={{ fontSize: 19, fontWeight: 900, color: T.orange, background: T.orangeL, padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
                   {data.stats.onboardedThisMonth.toLocaleString()}
                 </span>
-                <div style={{ fontSize: 10, color: T.textMut, marginTop: 6 }}>New FH properties</div>
               </div>
 
               {/* MTD */}
-              <div style={{ ...kpi, flex: "1 1 120px", borderLeft: "3px solid #7C3AED" }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>MTD New Listings</div>
-                <span style={{ fontSize: 26, fontWeight: 900, color: "#7C3AED", background: "#EDE9FE", padding: "4px 16px", borderRadius: 8, display: "inline-block", lineHeight: 1.3 }}>
+              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: "3px solid #7C3AED" }}>
+                <div style={{ fontSize: 8, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>MTD New Listings</div>
+                <span style={{ fontSize: 19, fontWeight: 900, color: "#7C3AED", background: "#EDE9FE", padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
                   {data.stats.mtdListings.toLocaleString()}
                 </span>
-                <div style={{ fontSize: 10, color: T.textMut, marginTop: 6 }}>OTA listings this month</div>
               </div>
             </div>
 
@@ -295,36 +326,40 @@ export default function ListingDashboardPage() {
               const otasSorted = cats.map(r => r.ota);
               const catMap: Record<string, CatRow> = Object.fromEntries(cats.map(r => [r.ota, r]));
               const totals = cats.reduce((acc, r) => ({
-                live: acc.live + r.live, exception: acc.exception + r.exception,
-                inProcess: acc.inProcess + r.inProcess, tatExhausted: acc.tatExhausted + r.tatExhausted,
-              }), { live: 0, exception: 0, inProcess: 0, tatExhausted: 0 });
-              const grandTot = totals.live + totals.exception + totals.inProcess + totals.tatExhausted;
+                live: acc.live + r.live,
+                exception: acc.exception + r.exception,
+                readyToGoLive: acc.readyToGoLive + (r.readyToGoLive ?? 0),
+                inProcess: acc.inProcess + r.inProcess,
+                tatExhausted: acc.tatExhausted + r.tatExhausted,
+              }), { live: 0, exception: 0, readyToGoLive: 0, inProcess: 0, tatExhausted: 0 });
+              const grandTot = totals.live + totals.exception + totals.readyToGoLive + totals.inProcess + totals.tatExhausted;
 
               const ROWS = [
                 { key: "live",         label: "Live", color: "#166534", bg: "#F2FBF5", accent: "#22C55E" },
                 { key: "exception",    label: "Exception", color: "#9A6700", bg: "#FFF8E8", accent: "#EAB308" },
+                { key: "readyToGoLive", label: "Ready to Go Live", color: "#0F766E", bg: "#ECFDF5", accent: "#10B981" },
                 { key: "inProcess",    label: "Listing In Progress (Within TAT)", color: "#155E75", bg: "#F0FBFF", accent: "#06B6D4" },
                 { key: "tatExhausted", label: "TAT Exhausted", color: "#B42318", bg: "#FFF4F2", accent: "#F97066" },
               ] as const;
               const TABLE_THEME = {
-                shellBg: "#FFFFFF",
-                shellBorder: "#D0D7E2",
-                headerBg: "#FCFDFE",
-                headerBorder: "#DCE3EB",
-                title: "#111827",
-                subtitle: "#667085",
-                badgeBg: "#F2F4F7",
-                badgeText: "#344054",
-                sectionBg: "#F8FAFC",
-                sectionBorder: "#DCE3EB",
+                shellBg: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
+                shellBorder: "#D6E0EB",
+                headerBg: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)",
+                headerBorder: "#D8E4EE",
+                title: "#0F172A",
+                subtitle: "#64748B",
+                badgeBg: "#EEF7F6",
+                badgeText: "#0F766E",
+                sectionBg: "#F6FAFD",
+                sectionBorder: "#DCE6EF",
                 stickyBg: "#FFFFFF",
-                stickyMutedBg: "#F8FAFC",
-                gridSoft: "#E3E8EF",
-                totalRowBg: "#F4F7FA",
-                totalCellBg: "#E8EDF4",
-                totalText: "#101828",
-                mutedText: "#667085",
-                headerText: "#475467",
+                stickyMutedBg: "#F4F9F8",
+                gridSoft: "#E2EAF2",
+                totalRowBg: "#EDF7F5",
+                totalCellBg: "#E4F3EF",
+                totalText: "#0F766E",
+                mutedText: "#64748B",
+                headerText: "#4A5E75",
               };
 
               const TH_STICKY: React.CSSProperties = {
@@ -377,19 +412,19 @@ export default function ListingDashboardPage() {
               ] as const;
 
               return (
-                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 14, overflow: "hidden", marginBottom: 20, boxShadow: "0 10px 26px rgba(16, 24, 40, 0.05)" }}>
+                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
 
                   {/* Header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 4px #CCFBF1" }} />
-                      <div style={{ fontSize: 13, fontWeight: 700, color: TABLE_THEME.title }}>OTA Listing Status</div>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 5px #D6F5EF" }} />
+                      <div style={{ fontSize: 14, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.01em" }}>OTA Listing Status</div>
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: TABLE_THEME.badgeText, background: TABLE_THEME.badgeBg, padding: "2px 8px", borderRadius: 99, fontWeight: 600, border: "1px solid rgba(49, 93, 140, 0.12)" }}>
+                      <span style={{ fontSize: 10, color: TABLE_THEME.badgeText, background: TABLE_THEME.badgeBg, padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid rgba(15, 118, 110, 0.12)" }}>
                         {grandTot.toLocaleString()} listings
                       </span>
-                      <span style={{ fontSize: 10, color: TABLE_THEME.badgeText, background: "#ECFDF3", padding: "2px 8px", borderRadius: 99, fontWeight: 600, border: "1px solid #D1FADF" }}>
+                      <span style={{ fontSize: 10, color: "#166534", background: "#ECFDF3", padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid #D1FADF" }}>
                         {(grandTot > 0 ? ((totals.live + totals.exception) / grandTot) * 100 : 0).toFixed(1)}% live rate
                       </span>
                     </div>
@@ -946,8 +981,11 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
   search: string; selOtas: string[]; selSss: string[]; category: string;
   onSearch: (v: string) => void; onOtas: (v: string[]) => void; onSss: (v: string[]) => void; onCategory: (v: string) => void; onPage: (p: number) => void;
 }) {
+  type SortKey = "status" | "subStatus" | "liveDate" | "tat";
   const nonLiveSS = columns.filter(c => c !== "Live" && c !== "Exception");
   const hasFilters = search || selOtas.length > 0 || selSss.length > 0 || category;
+  const [sortBy, setSortBy] = useState<SortKey>("tat");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   function fmtDate(d: string | null) {
     if (!d) return "—";
@@ -955,13 +993,55 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
     return isNaN(dt.getTime()) ? d : dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
   }
 
+  function onSort(key: SortKey) {
+    if (sortBy === key) {
+      setSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(key);
+    setSortDir(key === "tat" ? "desc" : "asc");
+  }
+
+  const sortedRows = React.useMemo(() => {
+    if (!data?.rows) return [];
+    const rows = [...data.rows];
+    rows.sort((a, b) => {
+      let av: string | number = "";
+      let bv: string | number = "";
+
+      if (sortBy === "status") {
+        av = (a.status ?? "").toLowerCase();
+        bv = (b.status ?? "").toLowerCase();
+      } else if (sortBy === "subStatus") {
+        av = (a.subStatus ?? "").toLowerCase();
+        bv = (b.subStatus ?? "").toLowerCase();
+      } else if (sortBy === "liveDate") {
+        av = a.liveDate ? new Date(a.liveDate).getTime() : -1;
+        bv = b.liveDate ? new Date(b.liveDate).getTime() : -1;
+      } else {
+        av = a.tat ?? -1;
+        bv = b.tat ?? -1;
+      }
+
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return rows;
+  }, [data?.rows, sortBy, sortDir]);
+
+  function sortIndicator(key: SortKey) {
+    if (sortBy !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
+  }
+
   return (
-    <div style={{ marginTop: 20, background: T.cardBg, border: `1px solid ${T.cardBdr}`, borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
+    <div style={{ marginTop: 22, background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Not Live Properties</span>
-          {data && <span style={{ fontSize: 10, color: T.notLive, background: T.notLiveL, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{data.total.toLocaleString()} records</span>}
+          <span style={{ fontSize: 12, fontWeight: 800, color: T.textPri }}>Not Live Properties</span>
+          {data && <span style={{ fontSize: 10, color: T.notLive, background: T.notLiveL, padding: "3px 9px", borderRadius: 999, fontWeight: 700, border: "1px solid #FECACA" }}>{data.total.toLocaleString()} records</span>}
         </div>
         {/* Filters */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -972,9 +1052,9 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
             { val: "tatExhausted", label: "TAT Exhausted" },
           ].map(btn => (
             <button key={btn.val} onClick={() => onCategory(btn.val)} style={{
-              padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 5, cursor: "pointer",
+              padding: "5px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
               border: `1px solid ${category === btn.val ? T.orange : T.cardBdr}`,
-              background: category === btn.val ? T.orangeL : "#F8FAFD",
+              background: category === btn.val ? T.orangeL : "#FFFFFF",
               color: category === btn.val ? T.orange : T.textSec,
             }}>{btn.label}</button>
           ))}
@@ -984,13 +1064,13 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
             <input
               value={search} placeholder="Search name / ID…"
               onChange={e => onSearch(e.target.value)}
-              style={{ paddingLeft: 22, paddingRight: 8, paddingTop: 5, paddingBottom: 5, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 6, outline: "none", width: 180, color: T.textPri, background: "#FFFFFF" }}
+              style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 190, color: T.textPri, background: "#FFFFFF" }}
             />
           </div>
           <CheckboxDropdown label="OTAs" options={otas} selected={selOtas} onChange={onOtas} />
           <CheckboxDropdown label="Sub-Status" options={nonLiveSS} selected={selSss} onChange={onSss} />
           {hasFilters && (
-            <button onClick={() => { onSearch(""); onOtas([]); onSss([]); onCategory(""); }} style={{ padding: "5px 10px", fontSize: 11, background: "#F1F5F9", border: `1px solid ${T.cardBdr}`, borderRadius: 6, cursor: "pointer", color: T.textSec, fontWeight: 600 }}>
+            <button onClick={() => { onSearch(""); onOtas([]); onSss([]); onCategory(""); }} style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
               Clear
             </button>
           )}
@@ -1002,22 +1082,52 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
         <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
           <thead>
             <tr style={{ background: T.headerBg }}>
-              {["FH ID", "Property Name", "City", "FH Live", "OTA", "Status", "Sub Status", "OTA Live", "TAT (days)"].map((h, i) => (
-                <th key={h} style={{
-                  padding: "7px 12px", fontSize: 9, fontWeight: 700, color: T.textMut,
-                  textTransform: "uppercase", letterSpacing: "0.08em",
-                  textAlign: i <= 1 ? "left" : "center",
-                  borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
-                  whiteSpace: "nowrap", background: T.headerBg,
-                }}>{h}</th>
-              ))}
+              {[
+                { label: "FH ID" },
+                { label: "Property Name" },
+                { label: "City" },
+                { label: "FH Live" },
+                { label: "OTA" },
+                { label: "Status", key: "status" as SortKey },
+                { label: "Sub Status", key: "subStatus" as SortKey },
+                { label: "OTA Live", key: "liveDate" as SortKey },
+                { label: "TAT (days)", key: "tat" as SortKey },
+              ].map((h, i) => {
+                const sortable = !!h.key;
+                return (
+                  <th
+                    key={h.label}
+                    onClick={sortable ? () => onSort(h.key!) : undefined}
+                    style={{
+                      padding: "7px 12px",
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: sortable && sortBy === h.key ? T.orange : T.textMut,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      textAlign: i <= 1 ? "left" : "center",
+                      borderBottom: `1px solid ${T.cardBdr}`,
+                      borderRight: `1px solid ${T.cardBdr}`,
+                      whiteSpace: "nowrap",
+                      background: T.headerBg,
+                      cursor: sortable ? "pointer" : "default",
+                      userSelect: "none",
+                    }}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {h.label}
+                      {sortable && <span style={{ fontSize: 10, color: sortBy === h.key ? T.orange : T.textMut }}>{sortIndicator(h.key!)}</span>}
+                    </span>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
             )}
-            {!loading && data?.rows.map((row, i) => {
+            {!loading && sortedRows.map((row, i) => {
               const sc = getSSColor(row.subStatus ?? "");
               const otaCol = OTA_COLORS[row.ota] ?? T.orange;
               const isTatError = row.tatError > 0;
@@ -1122,9 +1232,11 @@ function actionBtn(bg: string, color: string, disabled: boolean): React.CSSPrope
 }
 
 const kpi: React.CSSProperties = {
-  background: "#FFFFFF", border: "1px solid #E4E8F0",
-  borderRadius: 10, padding: "12px 14px",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+  background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
+  border: "1px solid #D8E1EC",
+  borderRadius: 16,
+  padding: "8px 10px",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
 };
 
 const TH_STICKY: React.CSSProperties = {
@@ -1154,3 +1266,4 @@ const TD_CELL: React.CSSProperties = {
   background: "#FFFFFF",
   borderRight: "1px solid #E4E8F0", borderBottom: "1px solid #E4E8F0",
 };
+

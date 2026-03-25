@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import PropertyRnsView from "@/components/dashboard/PropertyRnsView";
 
 const MONTHS_IDX = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -83,7 +82,8 @@ const NL_TAT_METRICS = [
 interface CatRow   { ota: string; live: number; exception: number; inProcess: number; tatExhausted: number; }
 interface TatStat  { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; ssStatusPivot: Record<string, Record<string, Record<string, number>>>; }
-interface NLRow    { propertyId: string; name: string; city: string; fhLiveDate: string|null; ota: string; status: string|null; subStatus: string|null; liveDate: string|null; tat: number; }
+interface NLRow    { propertyId: string; name: string; city: string; fhLiveDate: string|null; ota: string; status: string|null; subStatus: string|null; liveDate: string|null; tat: number; tatError?: number; }
+type NLSortKey = "status" | "subStatus" | "liveDate" | "tat";
 interface NLData   { rows: NLRow[]; total: number; page: number; pages: number; }
 interface OvrRow   { fhId: string; fhLiveDate: string|null; ota: string; tat: number; }
 
@@ -99,24 +99,23 @@ const cardHeader: React.CSSProperties = { display: "flex", alignItems: "center",
 type RnsRow = { quarter: string; cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number };
 
 // Month-wise TAT table — months as rows, metrics as columns
-function MergedMonthTable({ title, rows, rnsRows, revRows }: { title: string; rows: Array<Record<string, number | string>>; rnsRows?: RnsRow[]; revRows?: RnsRow[] }) {
-  const [view,       setView]       = useState<"TAT" | "PROD">("TAT");
-  const [prodMetric, setProdMetric] = useState<"RNs" | "RNPD" | "Revenue" | "RPD">("RNs");
+function MergedMonthTable({ title, rows, onMonthClick }: {
+  title: string;
+  rows: Array<Record<string, number | string>>;
+  onMonthClick?: (month: string) => void;
+}) {
   if (rows.length === 0) return null;
 
-  const now    = new Date();
-  const d1Days = Math.max(now.getDate() - 1, 1);
-  const cmKey  = `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][now.getMonth()]} ${now.getFullYear()}`;
+  const [showAllMonths, setShowAllMonths] = useState(false);
+  const sorted = [...rows].reverse();
+  const visibleRows = showAllMonths ? sorted : sorted.slice(0, 4);
 
-  const isRevBased = prodMetric === "Revenue" || prodMetric === "RPD";
-  const isPerDay   = prodMetric === "RNPD"    || prodMetric === "RPD";
+  // Color scheme: indigo/blue for FH, red for Not Live
+  const FH_COLOR  = "#2563EB";
+  const FH_BG     = "#EFF6FF";
+  const FH_BG2    = "#DBEAFE";
 
-  // Newest first
-  const sorted     = [...rows].reverse();
-  const activeRows = isRevBased ? (revRows ?? rnsRows ?? []) : (rnsRows ?? []);
-  const rnsSorted  = [...activeRows].reverse();
-
-  const TH = (opts?: { color?: string; bg?: string; span?: number }): React.CSSProperties => ({
+  const TH = (opts?: { color?: string; bg?: string }): React.CSSProperties => ({
     padding: "7px 10px", fontSize: 9, fontWeight: 700,
     color: opts?.color ?? T.textSec, background: opts?.bg ?? T.headerBg,
     borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
@@ -129,21 +128,21 @@ function MergedMonthTable({ title, rows, rnsRows, revRows }: { title: string; ro
   });
   const SL: React.CSSProperties = { padding: "7px 14px", whiteSpace: "nowrap", borderRight: `2px solid ${T.cardBdr}`, borderBottom: `1px solid ${T.cardBdr}`, fontWeight: 700, color: T.textPri, fontSize: 11, position: "sticky", left: 0, zIndex: 1, background: T.cardBg };
 
-  function Num({ v, color, bg, suffix }: { v: number; color: string; bg: string; suffix?: string }) {
+  function Num({ v, color, bg, suffix, onClick }: { v: number; color: string; bg: string; suffix?: string; onClick?: () => void }) {
     if (!v) return <span style={{ color: "#D1D5DB", fontSize: 10 }}>—</span>;
-    return <span style={{ fontWeight: 700, fontSize: 11, color, background: bg, border: `1px solid ${color}25`, borderRadius: 4, padding: "1px 7px" }}>{v}{suffix ?? ""}</span>;
+    return (
+      <span
+        onClick={onClick}
+        style={{ fontWeight: 700, fontSize: 11, color, background: bg, border: `1px solid ${color}25`, borderRadius: 4, padding: "1px 7px", cursor: onClick ? "pointer" : "default", textDecoration: onClick ? "underline" : "none", textDecorationColor: `${color}66` }}
+      >
+        {v}{suffix ?? ""}
+      </span>
+    );
   }
 
   const sum  = (key: string) => sorted.reduce((s, r) => s + ((r[key] as number) || 0), 0);
   const wavg = (key: string, cnt: string) => { const t = sum(cnt); return t ? Math.round(sorted.reduce((s, r) => s + ((r[key] as number)||0) * ((r[cnt] as number)||0), 0) / t) : 0; };
 
-  const LIVE_BKTS = [
-    { key: "l_d0_7",   label: "0–7d",   color: "#15803D", bg: "#DCFCE7" },
-    { key: "l_d8_15",  label: "8–15d",  color: "#B45309", bg: "#FEF3C7" },
-    { key: "l_d16_30", label: "16–30d", color: "#C2410C", bg: "#FFEDD5" },
-    { key: "l_d31_60", label: "31–60d", color: "#DC2626", bg: "#FEE2E2" },
-    { key: "l_d60p",   label: "60+d",   color: "#7F1D1D", bg: "#FEE2E2" },
-  ];
   const NL_BKTS = [
     { key: "nl_d0_15",  label: "0–15d",  color: "#16A34A", bg: "#DCFCE7" },
     { key: "nl_d16_30", label: "16–30d", color: "#B45309", bg: "#FEF3C7" },
@@ -152,216 +151,68 @@ function MergedMonthTable({ title, rows, rnsRows, revRows }: { title: string; ro
     { key: "nl_d90p",   label: "90+d",   color: "#7F1D1D", bg: "#FEE2E2" },
   ];
 
-  // RNS view helpers
-  const rnsSum = (key: keyof RnsRow) => rnsSorted.reduce((s, r) => s + (r[key] as number), 0);
-
   return (
     <div style={card}>
       <div style={cardHeader}>
         <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>{title}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {onMonthClick && <span style={{ fontSize: 10, color: FH_COLOR, background: FH_BG, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Click a row to filter properties</span>}
           <span style={{ fontSize: 10, color: T.textMut }}>Last 12 months · newest first</span>
-          {(rnsRows && rnsRows.length > 0) && (
-            <>
-              {/* Main toggle: TAT | Production */}
-              <div style={{ display: "flex", borderRadius: 6, border: `1px solid ${T.cardBdr}`, overflow: "hidden" }}>
-                {(["TAT", "PROD"] as const).map(v => (
-                  <button key={v} onClick={() => setView(v)} style={{ padding: "3px 10px", border: "none", borderLeft: v === "PROD" ? `1px solid ${T.cardBdr}` : "none", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 600, background: view === v ? T.textPri : "#FFF", color: view === v ? "#FFF" : T.textSec }}>
-                    {v === "PROD" ? "Production" : "TAT"}
-                  </button>
-                ))}
-              </div>
-              {/* Sub-toggles — only in Production mode */}
-              {view === "PROD" && (
-                <>
-                  <div style={{ display: "flex", borderRadius: 6, border: `1px solid ${T.cardBdr}`, overflow: "hidden" }}>
-                    {(["RNs", "RNPD"] as const).map(v => (
-                      <button key={v} onClick={() => setProdMetric(v)} style={{ padding: "3px 10px", border: "none", borderLeft: v === "RNPD" ? `1px solid ${T.cardBdr}` : "none", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 600, background: prodMetric === v ? "#4338CA" : "#FFF", color: prodMetric === v ? "#FFF" : T.textSec }}>
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", borderRadius: 6, border: `1px solid ${T.cardBdr}`, overflow: "hidden" }}>
-                    {(["Revenue", "RPD"] as const).map(v => (
-                      <button key={v} onClick={() => setProdMetric(v)} style={{ padding: "3px 10px", border: "none", borderLeft: v === "RPD" ? `1px solid ${T.cardBdr}` : "none", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 600, background: prodMetric === v ? "#4338CA" : "#FFF", color: prodMetric === v ? "#FFF" : T.textSec }}>
-                        {v === "Revenue" ? "Rev" : "RPD"}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
+          {sorted.length > 4 && (
+            <button
+              onClick={() => setShowAllMonths(v => !v)}
+              style={{ padding: "4px 10px", borderRadius: 999, border: `1px solid ${T.cardBdr}`, background: "#FFF", color: T.textSec, fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+            >
+              {showAllMonths ? "Show latest 4" : `Show older ${sorted.length - 4}`}
+            </button>
           )}
         </div>
       </div>
 
-      {/* ── Production view ── */}
-      {view === "PROD" && (
-        <div style={{ overflowX: "auto" }}>
-          {rnsSorted.length === 0 ? (
-            <div style={{ padding: "20px 16px", textAlign: "center", color: T.textMut, fontSize: 11 }}>
-              {isRevBased ? "Revenue data not available — sync data first" : "No production data available"}
-            </div>
-          ) : (() => {
-            const MNLIST = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-            function getTrendVal(rx: RnsRow): number {
-              const [qm, qy] = rx.quarter.split(" ");
-              const qm0 = MNLIST.indexOf(qm ?? "");
-              const totalDays = new Date(Number(qy), qm0 + 1, 0).getDate();
-              if (totalDays === 0 || d1Days === 0) return 0;
-              if (isPerDay) {
-                if (rx.quarter === cmKey) return Math.round(rx.cmMTD / d1Days);
-                return totalDays > 0 ? Math.round(rx.cmTotal / totalDays) : 0;
-              }
-              if (rx.quarter === cmKey) return Math.round(rx.cmMTD / d1Days * totalDays);
-              return rx.cmTotal;
-            }
-
-            const chrono = [...rnsSorted].reverse();
-
-            const colLabel = prodMetric === "RNs" ? "CM RNs" : prodMetric === "RNPD" ? "RNPD" : prodMetric === "Revenue" ? "CM Rev" : "RPD";
-
-            return (
-            <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH(), textAlign: "left", minWidth: 90, position: "sticky", left: 0, zIndex: 3 }}>Month</th>
-                  <th style={TH({ color: T.textSec })}>LM {isPerDay ? "Per Day" : "MTD"}</th>
-                  <th style={TH({ color: "#4338CA", bg: "#EEF2FF" })}>{colLabel}</th>
-                  <th style={TH({ color: "#059669", bg: "#ECFDF5" })}>LM vs CM</th>
-                  <th style={TH({ color: T.textSec })}>LM Total{isPerDay ? "/Day" : ""}</th>
-                  <th style={TH({ color: "#6366F1", bg: "#EEF2FF" })}>CM Projection</th>
-                  <th style={{ ...TH({ color: T.orange, bg: T.orangeL }), borderRight: "none" }}>LM vs CM</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rnsSorted.map((r, i) => {
-                  const isCurrent = r.quarter === cmKey;
-                  const [qMon, qYrStr] = r.quarter.split(" ");
-                  const qYr      = Number(qYrStr);
-                  const qMon0    = MNLIST.indexOf(qMon ?? "");
-                  const totalDays = new Date(qYr, qMon0 + 1, 0).getDate();
-                  const cmVal    = isPerDay ? (d1Days > 0 ? Math.round(r.cmMTD / d1Days) : 0) : r.cmMTD;
-                  const lmVal    = isPerDay ? (d1Days > 0 ? Math.round(r.lmMTD / d1Days) : 0) : r.lmMTD;
-                  const lmTVal   = isPerDay ? (totalDays > 0 ? Math.round(r.lmTotal / totalDays) : 0) : r.lmTotal;
-                  const tv       = getTrendVal(r);
-                  const pct      = lmVal  > 0 ? Math.round(((cmVal - lmVal)  / lmVal)  * 100) : null;
-                  const pctTot   = lmTVal > 0 ? Math.round(((tv    - lmTVal) / lmTVal) * 100) : null;
-                  const rowBg    = i % 2 === 0 ? T.cardBg : T.rowAlt;
-                  const pfx      = isRevBased ? "₹" : "";
-                  const fmt      = (v: number) => `${pfx}${v.toLocaleString("en-IN")}`;
-                  const chronoIdx = chrono.findIndex(cx => cx.quarter === r.quarter);
-
-                  return (
-                    <tr key={r.quarter} style={{ background: rowBg, borderBottom: `1px solid ${T.cardBdr}` }}>
-                      <td style={{ ...SL, background: rowBg }}>{r.quarter}{isCurrent && <span style={{ marginLeft: 4, fontSize: 9, color: T.orange }}>d-1</span>}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}>
-                        <span style={{ fontWeight: 700, fontSize: 12, color: T.textSec }}>{lmVal > 0 ? fmt(lmVal) : <span style={{ color: "#D1D5DB" }}>—</span>}</span>
-                      </td>
-                      <td style={{ padding: "7px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}>
-                        <span style={{ fontWeight: 700, fontSize: 12, color: "#4338CA" }}>{fmt(cmVal)}</span>
-                        {pct !== null && <span style={{ fontSize: 10, color: pct >= 0 ? "#059669" : "#DC2626", marginLeft: 4 }}>{pct >= 0 ? "▲" : "▼"}</span>}
-                      </td>
-                      <td style={{ padding: "7px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}>
-                        {pct === null ? <span style={{ color: "#D1D5DB" }}>—</span> : <span style={{ fontWeight: 700, fontSize: 12, color: pct >= 0 ? "#059669" : "#DC2626" }}>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct)}%</span>}
-                      </td>
-                      <td style={{ padding: "7px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}>
-                        <span style={{ fontWeight: 700, fontSize: 12, color: T.textSec }}>{lmTVal > 0 ? fmt(lmTVal) : <span style={{ color: "#D1D5DB" }}>—</span>}</span>
-                      </td>
-                      {(() => {
-                        const prev  = chronoIdx > 0 ? getTrendVal(chrono[chronoIdx - 1]) : null;
-                        const tvUp  = prev !== null && tv > prev;
-                        const tvDn  = prev !== null && tv < prev;
-                        const tvClr = tvUp ? "#059669" : tvDn ? "#DC2626" : "#6366F1";
-                        return (
-                          <td style={{ padding: "7px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}>
-                            <span style={{ fontWeight: 700, fontSize: 12, color: tvClr }}>{fmt(tv)}</span>
-                            {prev !== null && <span style={{ fontSize: 10, color: tvClr, marginLeft: 4 }}>{tvUp ? "▲" : tvDn ? "▼" : "—"}</span>}
-                          </td>
-                        );
-                      })()}
-                      <td style={{ padding: "7px 12px", textAlign: "center", borderRight: "none" }}>
-                        {pctTot === null ? <span style={{ color: "#D1D5DB" }}>—</span> : <span style={{ fontWeight: 700, fontSize: 12, color: pctTot >= 0 ? "#059669" : "#DC2626" }}>{pctTot >= 0 ? "▲" : "▼"} {Math.abs(pctTot)}%</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: T.orangeL, borderTop: `2px solid ${T.orange}44` }}>
-                  <td style={{ ...SL, background: T.orangeL, color: T.orange }}>Total</td>
-                  <td style={{ padding: "8px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, fontWeight: 700, color: T.textSec }}>{isRevBased ? `₹${rnsSum("lmMTD").toLocaleString("en-IN")}` : rnsSum("lmMTD").toLocaleString("en-IN")}</td>
-                  <td style={{ padding: "8px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}` }}><span style={{ fontWeight: 900, color: "#4338CA", fontSize: 13 }}>{isRevBased ? `₹${rnsSum("cmMTD").toLocaleString("en-IN")}` : rnsSum("cmMTD").toLocaleString("en-IN")}</span></td>
-                  <td style={{ padding: "8px 12px", borderRight: `1px solid ${T.cardBdr}` }} />
-                  <td style={{ padding: "8px 12px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, fontWeight: 700, color: T.textMut }}>{isRevBased ? `₹${rnsSum("lmTotal").toLocaleString("en-IN")}` : rnsSum("lmTotal").toLocaleString("en-IN")}</td>
-                  <td style={{ padding: "8px 12px", borderRight: `1px solid ${T.cardBdr}` }} />
-                  <td style={{ padding: "8px 12px", borderRight: "none" }} />
-                </tr>
-              </tfoot>
-            </table>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* ── TAT view ── */}
-      {view === "TAT" && (
       <div style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
           <thead>
             <tr>
               <th rowSpan={2} style={{ ...TH(), textAlign: "left", minWidth: 90, position: "sticky", left: 0, zIndex: 3, verticalAlign: "bottom" }}>Month</th>
-              <th rowSpan={2} style={{ ...TH({ color: T.orange, bg: T.orangeL }), verticalAlign: "bottom", minWidth: 60 }}>FH Props</th>
-              <th rowSpan={2} style={{ ...TH({ color: T.live, bg: T.liveL }), verticalAlign: "bottom", minWidth: 55 }}>Live</th>
-              <th colSpan={5} style={TH({ color: T.live, bg: T.liveL })}>Live TAT Breakdown</th>
-              <th rowSpan={2} style={{ ...TH({ color: "#6366F1", bg: "#EEF2FF" }), verticalAlign: "bottom", borderRight: `2px solid ${T.cardBdr}` }}>Avg TAT</th>
+              <th rowSpan={2} style={{ ...TH({ color: FH_COLOR, bg: FH_BG }), verticalAlign: "bottom", minWidth: 60 }}>FH Props</th>
               <th rowSpan={2} style={{ ...TH({ color: T.notLive, bg: T.notLiveL }), verticalAlign: "bottom", minWidth: 60 }}>Not Live</th>
-              <th colSpan={5} style={TH({ color: T.notLive, bg: T.notLiveL })}>Pending Breakdown</th>
+              <th colSpan={5} style={TH({ color: T.textSec, bg: "#F1F5F9" })}>Pending Breakdown</th>
               <th rowSpan={2} style={{ ...TH({ color: "#6366F1", bg: "#EEF2FF" }), verticalAlign: "bottom", borderRight: "none" }}>Avg Pend</th>
             </tr>
             <tr>
-              {LIVE_BKTS.map(b => <th key={b.key} style={TH({ color: b.color, bg: b.bg + "88" })}>{b.label}</th>)}
-              {NL_BKTS.map(b  => <th key={b.key} style={TH({ color: b.color, bg: b.bg + "88" })}>{b.label}</th>)}
+              {NL_BKTS.map(b => <th key={b.key} style={TH({ color: b.color, bg: b.bg + "88" })}>{b.label}</th>)}
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r, i) => (
-              <tr key={r.quarter as string} style={{ background: i % 2 === 0 ? T.cardBg : T.rowAlt }}>
-                <td style={{ ...SL, background: i % 2 === 0 ? T.cardBg : T.rowAlt }}>{r.quarter as string}</td>
-                <td style={TD({ bg: T.orangeL })}><Num v={(r.fhTotal as number)||0} color={T.orange} bg={T.orangeT} /></td>
-                <td style={TD({ bg: T.liveL })}><Num v={(r.liveCount as number)||0} color={T.live} bg="#BBF7D0" /></td>
-                {LIVE_BKTS.map(b => <td key={b.key} style={TD()}><Num v={(r[b.key] as number)||0} color={b.color} bg={b.bg} /></td>)}
-                <td style={{ ...TD({ bg: "#EEF2FF" }), borderRight: `2px solid ${T.cardBdr}` }}>
-                  <Num v={(r.avgTat as number)||0} color="#6366F1" bg="#E0E7FF" suffix="d" />
-                </td>
+            {visibleRows.map((r, i) => (
+              <tr
+                key={r.quarter as string}
+                style={{ background: i % 2 === 0 ? T.cardBg : T.rowAlt, cursor: onMonthClick ? "pointer" : "default" }}
+                onClick={onMonthClick ? () => onMonthClick(r.quarter as string) : undefined}
+                title={onMonthClick ? `Filter properties for ${r.quarter as string}` : undefined}
+              >
+                <td style={{ ...SL, background: i % 2 === 0 ? T.cardBg : T.rowAlt, color: onMonthClick ? FH_COLOR : T.textPri }}>{r.quarter as string}</td>
+                <td style={TD({ bg: FH_BG })}><Num v={(r.fhTotal as number)||0} color={FH_COLOR} bg={FH_BG2} /></td>
                 <td style={TD({ bg: T.notLiveL })}><Num v={(r.nlCount as number)||0} color={T.notLive} bg="#FECACA" /></td>
                 {NL_BKTS.map(b => <td key={b.key} style={TD()}><Num v={(r[b.key] as number)||0} color={b.color} bg={b.bg} /></td>)}
-                <td style={{ ...TD({ bg: "#EEF2FF" }), borderRight: "none" }}>
-                  <Num v={(r.avgPending as number)||0} color="#6366F1" bg="#E0E7FF" suffix="d" />
-                </td>
+                <td style={{ ...TD({ bg: "#EEF2FF" }), borderRight: "none" }}><Num v={(r.avgPending as number)||0} color="#6366F1" bg="#E0E7FF" suffix="d" /></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr style={{ background: T.orangeL, borderTop: `2px solid ${T.orange}44` }}>
-              <td style={{ ...SL, background: T.orangeL, color: T.orange }}>Total</td>
-              <td style={TD({ bg: T.orangeT, bold: true })}><span style={{ fontWeight: 900, color: T.orange }}>{sum("fhTotal") || "—"}</span></td>
-              <td style={TD({ bg: T.liveL })}><Num v={sum("liveCount")} color={T.live} bg="#BBF7D0" /></td>
-              {LIVE_BKTS.map(b => <td key={b.key} style={TD({ bg: T.orangeL })}><Num v={sum(b.key)} color={b.color} bg={b.bg} /></td>)}
-              <td style={{ ...TD({ bg: "#EEF2FF" }), borderRight: `2px solid ${T.cardBdr}` }}><Num v={wavg("avgTat","liveCount")} color="#6366F1" bg="#E0E7FF" suffix="d" /></td>
+            <tr style={{ background: FH_BG, borderTop: `2px solid ${FH_COLOR}33` }}>
+              <td style={{ ...SL, background: FH_BG, color: FH_COLOR }}>Total</td>
+              <td style={TD({ bg: FH_BG2, bold: true })}><span style={{ fontWeight: 900, color: FH_COLOR }}>{sum("fhTotal") || "—"}</span></td>
               <td style={TD({ bg: T.notLiveL })}><Num v={sum("nlCount")} color={T.notLive} bg="#FECACA" /></td>
-              {NL_BKTS.map(b  => <td key={b.key} style={TD({ bg: T.orangeL })}><Num v={sum(b.key)} color={b.color} bg={b.bg} /></td>)}
+              {NL_BKTS.map(b => <td key={b.key} style={TD({ bg: FH_BG })}><Num v={sum(b.key)} color={b.color} bg={b.bg} /></td>)}
               <td style={{ ...TD({ bg: "#EEF2FF" }), borderRight: "none" }}><Num v={wavg("avgPending","nlCount")} color="#6366F1" bg="#E0E7FF" suffix="d" /></td>
             </tr>
           </tfoot>
         </table>
       </div>
-      )}
     </div>
   );
 }
-
 function MonthTable({ title, subtitle, rows, metrics, emptyMsg }: {
   title: string;
   subtitle?: string;
@@ -502,15 +353,39 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [nlSearch,  setNlSearch]  = useState("");
   const [nlCategory,setNlCat]     = useState("");
   const [nlSss,     setNlSss]     = useState<string[]>([]);
+  const [nlFhMonth, setNlFhMonth] = useState("");
+  const [nlSortBy,  setNlSortBy]  = useState<NLSortKey>("tat");
+  const [nlSortDir, setNlSortDir] = useState<"asc" | "desc">("desc");
   const [ssActiveGroup, setSsActiveGroup] = useState<string | null>(null);
   const [nlPage,    setNlPage]    = useState(1);
 
-  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss) {
+  const nlSortedRows = useMemo(() => {
+    if (!nlData?.rows) return [];
+    return [...nlData.rows].sort((a, b) => {
+      let av: string | number = "";
+      let bv: string | number = "";
+      if (nlSortBy === "status")    { av = (a.status    ?? "").toLowerCase(); bv = (b.status    ?? "").toLowerCase(); }
+      else if (nlSortBy === "subStatus") { av = (a.subStatus ?? "").toLowerCase(); bv = (b.subStatus ?? "").toLowerCase(); }
+      else if (nlSortBy === "liveDate")  { av = a.liveDate ? new Date(a.liveDate).getTime() : -1; bv = b.liveDate ? new Date(b.liveDate).getTime() : -1; }
+      else { av = a.tat ?? -1; bv = b.tat ?? -1; }
+      if (av < bv) return nlSortDir === "asc" ? -1 : 1;
+      if (av > bv) return nlSortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [nlData?.rows, nlSortBy, nlSortDir]);
+
+  function nlToggleSort(key: NLSortKey) {
+    if (nlSortBy === key) { setNlSortDir(d => d === "asc" ? "desc" : "asc"); return; }
+    setNlSortBy(key); setNlSortDir(key === "tat" ? "desc" : "asc");
+  }
+
+  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss, fhMonth = nlFhMonth) {
     setNlLoading(true);
     const p = new URLSearchParams({ otas: otaName, page: String(page), size: "50" });
     if (search)     p.set("search", search);
     if (category)   p.set("category", category);
     if (sss.length) p.set("sss", sss.join(","));
+    if (fhMonth)    p.set("fhMonth", fhMonth);
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
       .then(d => { setNlData(d); setNlPage(page); })
@@ -551,13 +426,25 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   useEffect(() => {
     setDashData(null); setOvrLive([]); setOvrNotLive([]);
     setRnsMonthly({}); setRevMonthly({}); setNlData(null);
-    setNlCat(""); setNlSearch(""); setNlSss([]); setSsActiveGroup(null);
+    setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function goToCategory(cat: string) {
-    setNlCat(cat); setNlSearch(""); setNlSss([]);
-    loadNl(1, "", cat, []);
+    setNlCat(cat); setNlSearch(""); setNlSss([]); setNlFhMonth("");
+    loadNl(1, "", cat, [], "");
+    setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+  }
+
+  function goToMonth(month: string) {
+    setNlFhMonth(month); setNlSearch(""); setNlCat(""); setNlSss([]);
+    loadNl(1, "", "", [], month);
+    setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+  }
+
+  function goToSss(subs: string[]) {
+    setNlSss(subs); setNlSearch(""); setNlCat(""); setNlFhMonth("");
+    loadNl(1, "", "", subs, "");
     setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
   }
 
@@ -670,13 +557,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const tatStat      = dashData?.tatStats[otaName];
 
   const KPI_TILES = [
+    { label: "Total",         value: total,                     color: T.orange,  bg: T.orangeL,  cat: "all"          },
+    { label: "Live %",        value: livePct.toFixed(1) + "%",  color: T.live,    bg: T.liveL,    cat: null           },
     { label: "Live",          value: live,                      color: T.live,    bg: T.liveL,    cat: "live"         },
     { label: "Exception",     value: exception,                 color: "#B45309", bg: "#FEF3C7",  cat: "exception"    },
     { label: "In Process",    value: inProcess,                 color: "#1D4ED8", bg: "#DBEAFE",  cat: "inProcess"    },
     { label: "TAT Exhausted", value: tatExhausted,              color: T.notLive, bg: T.notLiveL, cat: "tatExhausted" },
     { label: "Avg TAT",       value: tatStat ? `${tatStat.avgTat}d` : "—", color: "#6366F1", bg: "#EEF2FF", cat: null },
-    { label: "Total",         value: total,                     color: T.orange,  bg: T.orangeL,  cat: "all"          },
-    { label: "Live %",        value: livePct.toFixed(1) + "%",  color: T.live,    bg: T.liveL,    cat: null           },
   ] as const;
 
   const TAT_CHIPS = [
@@ -700,6 +587,15 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         .nl-row:hover > td { background: #F8FAFD !important; }
         .kpi-tile { transition: filter 0.12s, transform 0.12s, box-shadow 0.12s; }
         .kpi-tile:hover { filter: brightness(0.97); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.10) !important; }
+        .ss-card { box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05); }
+        .ss-head-cell, .ss-body-cell, .ss-sticky-cell, .ss-total-cell, .ss-filter-btn {
+          transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+        }
+        .ss-filter-btn:hover { transform: translateY(-1px); }
+        .ss-col-head:hover { filter: brightness(0.98); }
+        .ss-detail-row:hover > td { background: #F8FAFC !important; }
+        .ss-clickable-num { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+        .ss-clickable-num:hover { opacity: 0.8; }
       `}</style>
 
       {/* Header */}
@@ -730,35 +626,25 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             })}
           </div>
 
-          {/* TAT · Live — horizontal chips below KPI tiles */}
-          {tatStat && (
-            <div style={{ ...card, marginBottom: 12 }}>
-              <div style={cardHeader}><span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>TAT · Live</span></div>
-              <div style={{ padding: "8px 12px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {TAT_CHIPS.map(chip => (
-                  <div key={chip.label} style={{ display: "flex", alignItems: "center", gap: 8, background: chip.bg, border: `1px solid ${chip.color}30`, borderRadius: 7, padding: "6px 14px", flex: "1 1 80px", minWidth: 80 }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: chip.color, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>{chip.label}</span>
-                    <span style={{ fontSize: 15, fontWeight: 900, color: chip.color, marginLeft: "auto" }}>{String(chip.value)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Status × Sub-status */}
           {(() => {
             const xPivot = dashData.ssStatusPivot[otaName] ?? {};
             const ssCols = dashData.columns.filter(col => (dashData.pivot[otaName]?.[col] ?? 0) > 0);
 
             const SS_COLS = [
-              { label: "Revenue",           subs: ["Revenue"],                                                                          color: "#C2410C", bg: "#FFF7ED" },
-              { label: "Supply/Operations", subs: ["Supply/Operations"],                                                                color: "#6D28D9", bg: "#F5F3FF" },
-              { label: "GoMMT",             subs: ["Pending at GoMMT"],                                                                 color: "#1D4ED8", bg: "#EFF6FF" },
-              { label: "OTA",               subs: ssCols.filter(s => s.startsWith("Pending at ") && s !== "Pending at GoMMT"),          color: "#0369A1", bg: "#F0F9FF" },
-              { label: "Live",              subs: ssCols.filter(s => s === "Live" || s === "FH Live"),                                  color: "#16A34A", bg: "#DCFCE7" },
-              { label: "Exception",         subs: ["Exception"],                                                                        color: "#B45309", bg: "#FEF3C7" },
-              { label: "Blank",             subs: ["Blank"],                                                                            color: "#64748B", bg: "#F1F5F9" },
-              { label: "Churned",           subs: ["Churned"],                                                                          color: "#DC2626", bg: "#FEE2E2" },
+              { label: "Live",              subs: ssCols.filter(s => s === "Live" || s === "FH Live"), color: "#16A34A", bg: "#DCFCE7" },
+              { label: "Supply/Operations", subs: ["Supply/Operations"],                               color: "#6D28D9", bg: "#F5F3FF" },
+              { label: "Revenue",           subs: ["Revenue"],                                         color: "#C2410C", bg: "#FFF7ED" },
+              { label: "OTA Team",          subs: ["OTA Team"],                                        color: "#B45309", bg: "#FEF3C7" },
+              ...ssCols.filter(s => s.startsWith("Pending at ")).map(s => ({
+                label: s,
+                subs:  [s],
+                color: "#1D4ED8",
+                bg:    "#DBEAFE",
+              })),
+              { label: "Exception",         subs: ["Exception"],                                       color: "#B45309", bg: "#FEF3C7" },
+              { label: "Blank",             subs: ["Blank"],                                           color: "#64748B", bg: "#F1F5F9" },
+              { label: "Churned",           subs: ["Churned"],                                         color: "#DC2626", bg: "#FEE2E2" },
             ].filter(c => c.subs.some(s => ssCols.includes(s)));
 
             const colData = SS_COLS.map(col => {
@@ -791,81 +677,113 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             };
             function stColor(st: string) { return STATUS_COLORS[st] ?? { text: "#475569", bg: "#F1F5F9" }; }
 
-            const TH: React.CSSProperties = { padding: "6px 10px", fontSize: 9, fontWeight: 700, background: T.headerBg, borderBottom: `2px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`, textAlign: "center", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.05em", color: T.textSec };
+            const TH: React.CSSProperties = {
+              padding: "7px 11px",
+              fontSize: 9,
+              fontWeight: 700,
+              background: "#F8FAFC",
+              borderBottom: `1px solid ${T.cardBdr}`,
+              borderRight: `1px solid ${T.cardBdr}`,
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: T.textSec,
+            };
 
             return (
-              <div style={{ ...card, marginBottom: 12 }}>
-                <div style={cardHeader}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Status × Sub-status</span>
+              <div style={{ ...card, marginBottom: 12, borderColor: "#D8E1EC", borderRadius: 12 }} className="ss-card">
+                <div style={{ ...cardHeader, background: "linear-gradient(180deg, #FBFCFE 0%, #F8FAFC 100%)", borderBottom: `1px solid #D8E1EC` }}>
+                  <button
+                    onClick={() => setSsActiveGroup(null)}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      padding: 0,
+                      margin: 0,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: T.textPri,
+                      cursor: activeCol ? "pointer" : "default",
+                    }}
+                    title={activeCol ? "Back to default view" : undefined}
+                  >
+                    Status × Sub-status
+                  </button>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {activeCol && (
-                      <button onClick={() => setSsActiveGroup(null)} style={{ padding: "2px 9px", fontSize: 10, fontWeight: 600, border: `1px solid ${T.cardBdr}`, borderRadius: 5, background: "#FFF", color: T.textSec, cursor: "pointer" }}>
-                        ✕ Default
+                      <button className="ss-filter-btn" onClick={() => setSsActiveGroup(null)} style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, border: `1px solid ${activeCol.color}35`, borderRadius: 999, background: activeCol.bg, color: activeCol.color, cursor: "pointer", boxShadow: `0 4px 12px ${activeCol.color}18`, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", background: "#FFFFFFAA", border: `1px solid ${activeCol.color}25`, fontSize: 10, lineHeight: 1 }}>×</span>
+                        Clear selection
                       </button>
                     )}
-                    <span style={{ fontSize: 10, fontWeight: 800, color: T.orange, background: T.orangeL, border: `1px solid ${T.orange}30`, padding: "2px 10px", borderRadius: 99 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: T.orange, background: T.orangeL, border: `1px solid ${T.orange}30`, padding: "3px 10px", borderRadius: 99, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)" }}>
                       {ssGrandTotal} total
                     </span>
                   </div>
                 </div>
 
-                <div style={{ overflowX: "auto" }}>
+                <div style={{ overflowX: "auto", background: "#FCFDFE" }}>
                   <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
                     <thead>
                       <tr>
-                        <th style={{ ...TH, textAlign: "left", minWidth: 100, position: "sticky", left: 0, zIndex: 3 }}>
-                          {activeCol
-                            ? <span style={{ color: activeCol.color }}>{activeCol.label}</span>
-                            : <span style={{ color: T.textMut, fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0 }}>Status</span>}
+                        <th className="ss-head-cell" style={{ ...TH, textAlign: "left", minWidth: 100, position: "sticky", left: 0, zIndex: 3, background: "#F8FAFC" }}>
+                          <span style={{ color: T.textMut, fontWeight: 400, fontStyle: "italic", textTransform: "none", letterSpacing: 0 }}>Status</span>
                         </th>
                         {colData.map(col => {
                           const isActive = ssActiveGroup === col.label;
                           return (
                             <th key={col.label}
+                              className="ss-head-cell ss-col-head"
                               onClick={() => setSsActiveGroup(isActive ? null : col.label)}
-                              style={{ ...TH, color: isActive ? "#FFF" : col.color, background: isActive ? col.color : col.bg, cursor: "pointer", minWidth: 72 }}>
+                              style={{ ...TH, color: isActive ? "#FFF" : col.color, background: isActive ? col.color : col.bg, cursor: "pointer", minWidth: 72, boxShadow: isActive ? `inset 0 -2px 0 rgba(255,255,255,0.35), 0 6px 14px ${col.color}22` : "inset 0 -1px 0 rgba(255,255,255,0.5)" }}>
                               {col.label} · {col.colTotal}
                             </th>
                           );
                         })}
-                        <th style={{ ...TH, color: T.orange, background: T.orangeL, borderRight: "none", minWidth: 60 }}>Total</th>
+                        <th className="ss-head-cell" style={{ ...TH, color: T.orange, background: T.orangeL, borderRight: "none", minWidth: 60 }}>Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr style={{ background: T.headerBg }}>
-                        <td style={{ padding: "8px 12px", fontWeight: 800, fontSize: 10, color: T.orange, textTransform: "uppercase", letterSpacing: "0.07em", borderRight: `1px solid ${T.cardBdr}`, position: "sticky", left: 0, zIndex: 1, background: T.headerBg }}>Total</td>
+                      <tr style={{ background: "#F8FAFC" }}>
+                        <td className="ss-sticky-cell" style={{ padding: "8px 12px", fontWeight: 800, fontSize: 10, color: T.orange, textTransform: "uppercase", letterSpacing: "0.07em", borderRight: `1px solid ${T.cardBdr}`, position: "sticky", left: 0, zIndex: 1, background: "#F8FAFC" }}>Total</td>
                         {colData.map(col => {
                           const isActive = ssActiveGroup === col.label;
                           const dimmed = activeCol && !isActive;
                           return (
-                            <td key={col.label} style={{ padding: "8px 10px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, background: col.bg + "55", opacity: dimmed ? 0.2 : 1 }}>
-                              {col.colTotal > 0 ? <span style={{ fontWeight: 800, color: col.color, fontSize: 12 }}>{col.colTotal}</span> : <span style={{ color: "#D1D5DB" }}>—</span>}
+                            <td key={col.label} className="ss-body-cell" onClick={() => col.colTotal > 0 ? goToSss(col.activeSubs) : undefined}
+                              style={{ padding: "8px 10px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, background: col.bg + "55", opacity: dimmed ? 0.24 : 1, cursor: col.colTotal > 0 ? "pointer" : "default" }}>
+                              {col.colTotal > 0
+                                ? <span className="ss-clickable-num" style={{ fontWeight: 800, color: col.color, fontSize: 12, textDecorationColor: `${col.color}55` }}>{col.colTotal}</span>
+                                : <span style={{ color: "#D1D5DB" }}>—</span>}
                             </td>
                           );
                         })}
-                        <td style={{ padding: "8px 12px", textAlign: "center", background: T.orangeT, borderRight: "none" }}>
-                          <span style={{ fontWeight: 900, color: T.orange, fontSize: 13 }}>{ssGrandTotal}</span>
+                        <td className="ss-total-cell" onClick={() => goToSss([])}
+                          style={{ padding: "8px 12px", textAlign: "center", background: T.orangeT, borderRight: "none", cursor: "pointer" }}>
+                          <span className="ss-clickable-num" style={{ fontWeight: 900, color: T.orange, fontSize: 13, textDecorationColor: `${T.orange}55` }}>{ssGrandTotal}</span>
                         </td>
                       </tr>
                       {activeCol && detailRows.map(([st, n], ri) => {
                         const stSc  = stColor(st);
                         const rowBg = ri % 2 === 0 ? T.cardBg : T.rowAlt;
                         return (
-                          <tr key={st} style={{ background: rowBg, borderBottom: `1px solid ${T.cardBdr}` }}>
-                            <td style={{ padding: "7px 12px", fontWeight: 600, fontSize: 10, borderRight: `1px solid ${T.cardBdr}`, position: "sticky", left: 0, zIndex: 1, background: rowBg, whiteSpace: "nowrap" }}>
-                              <span style={{ color: stSc.text, background: stSc.bg, padding: "2px 8px", borderRadius: 4 }}>{st}</span>
+                          <tr key={st} className="ss-detail-row" style={{ background: rowBg, borderBottom: `1px solid ${T.cardBdr}` }}>
+                            <td className="ss-sticky-cell" style={{ padding: "7px 12px", fontWeight: 600, fontSize: 10, borderRight: `1px solid ${T.cardBdr}`, position: "sticky", left: 0, zIndex: 1, background: rowBg, whiteSpace: "nowrap" }}>
+                              <span style={{ color: stSc.text, background: stSc.bg, padding: "3px 8px", borderRadius: 999, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)" }}>{st}</span>
                             </td>
                             {colData.map(col => {
                               const isActive = ssActiveGroup === col.label;
                               const v = col.stBreakdown[st] ?? 0;
                               return (
-                                <td key={col.label} style={{ padding: "7px 10px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, background: v > 0 && isActive ? col.bg + "88" : undefined, opacity: isActive ? 1 : 0.2 }}>
+                                <td key={col.label} className="ss-body-cell" style={{ padding: "7px 10px", textAlign: "center", borderRight: `1px solid ${T.cardBdr}`, background: v > 0 && isActive ? col.bg + "88" : undefined, opacity: isActive ? 1 : 0.24 }}>
                                   {v > 0 ? <span style={{ fontWeight: 700, fontSize: 12, color: col.color }}>{v}</span> : <span style={{ color: "#D1D5DB", fontSize: 10 }}>—</span>}
                                 </td>
                               );
                             })}
-                            <td style={{ padding: "7px 12px", textAlign: "center", background: T.orangeL, borderRight: "none" }}>
-                              <span style={{ fontWeight: 800, fontSize: 12, color: T.orange }}>{n}</span>
+                            <td className="ss-total-cell" onClick={() => activeCol && goToSss(activeCol.activeSubs)}
+                              style={{ padding: "7px 12px", textAlign: "center", background: T.orangeL, borderRight: "none", cursor: "pointer" }}>
+                              <span className="ss-clickable-num" style={{ fontWeight: 800, fontSize: 12, color: T.orange, textDecorationColor: `${T.orange}55` }}>{n}</span>
                             </td>
                           </tr>
                         );
@@ -886,109 +804,167 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           <MergedMonthTable
             title={`Month-wise · ${otaName}`}
             rows={mergedMonthData}
-            rnsRows={rnsRows}
-            revRows={revRows}
+            onMonthClick={goToMonth}
           />
         </div>
       )}
 
-      {/* RNS Production section */}
-      <div style={{ marginBottom: 16 }}>
-        <PropertyRnsView ota={otaName} />
-      </div>
 
       {/* Property List */}
-      <div id="prop-section" style={card}>
-        <div style={cardHeader}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Properties · {otaName}</span>
-            {nlCategory && <span style={{ fontSize: 10, fontWeight: 600, color: T.orange, background: T.orangeL, padding: "2px 8px", borderRadius: 4 }}>{CAT_LABELS[nlCategory] ?? nlCategory}</span>}
+      <div id="prop-section" style={{ background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
+        {/* Header + Filters */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: T.textPri }}>Not Live Properties · {otaName}</span>
+            {nlData && <span style={{ fontSize: 10, color: T.notLive, background: T.notLiveL, padding: "3px 9px", borderRadius: 999, fontWeight: 700, border: "1px solid #FECACA" }}>{nlData.total.toLocaleString()} records</span>}
+            {nlFhMonth && <span style={{ fontSize: 10, fontWeight: 600, color: "#2563EB", background: "#EFF6FF", padding: "3px 9px", borderRadius: 999, border: "1px solid #BFDBFE" }}>📅 {nlFhMonth}</span>}
+            {nlCategory && <span style={{ fontSize: 10, fontWeight: 600, color: T.orange, background: T.orangeL, padding: "3px 9px", borderRadius: 999, border: `1px solid ${T.orange}30` }}>{CAT_LABELS[nlCategory] ?? nlCategory}</span>}
           </div>
-          {nlData && <span style={{ fontSize: 10, color: T.textMut }}>{nlData.total.toLocaleString()} results</span>}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {([
+              { val: "",             label: "All" },
+              { val: "inProcess",    label: "In Process" },
+              { val: "tatExhausted", label: "TAT Exhausted" },
+            ] as const).map(btn => (
+              <button key={btn.val} onClick={() => { setNlCat(btn.val); loadNl(1, nlSearch, btn.val, nlSss); }}
+                style={{ padding: "5px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
+                  border: `1px solid ${nlCategory === btn.val ? T.orange : T.cardBdr}`,
+                  background: nlCategory === btn.val ? T.orangeL : "#FFFFFF",
+                  color: nlCategory === btn.val ? T.orange : T.textSec }}>
+                {btn.label}
+              </button>
+            ))}
+            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
+              <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
+                placeholder="Search name / ID…"
+                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 190, color: T.textPri, background: "#FFFFFF" }} />
+            </div>
+            {ssOptions.length > 0 && (
+              <CheckboxDropdown label="Sub-Status" options={ssOptions} selected={nlSss}
+                onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
+            )}
+            {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth) && (
+              <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); loadNl(1, "", "", [], ""); }}
+                style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
+                Clear
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Filters */}
-        <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.cardBdr}`, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
-            placeholder="Search name or ID…"
-            style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 6, outline: "none", minWidth: 160, color: T.textPri, background: "#FFF" }} />
+        {/* Table */}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+            <thead>
+              <tr style={{ background: T.headerBg }}>
+                {[
+                  { label: "FH ID" },
+                  { label: "Property Name" },
+                  { label: "City" },
+                  { label: "FH Live" },
+                  { label: "OTA" },
+                  { label: "Status",     key: "status"    as NLSortKey },
+                  { label: "Sub Status", key: "subStatus" as NLSortKey },
+                  { label: "OTA Live",   key: "liveDate"  as NLSortKey },
+                  { label: "TAT (days)", key: "tat"       as NLSortKey },
+                ].map((h, i) => {
+                  const sortable = !!h.key;
+                  return (
+                    <th key={h.label} onClick={sortable ? () => nlToggleSort(h.key!) : undefined}
+                      style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
+                        color: sortable && nlSortBy === h.key ? T.orange : T.textMut,
+                        textTransform: "uppercase", letterSpacing: "0.08em",
+                        textAlign: i <= 1 ? "left" : "center",
+                        borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
+                        whiteSpace: "nowrap", background: T.headerBg,
+                        cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {h.label}
+                        {sortable && <span style={{ fontSize: 10, color: nlSortBy === h.key ? T.orange : T.textMut }}>
+                          {nlSortBy === h.key ? (nlSortDir === "asc" ? "↑" : "↓") : "↕"}
+                        </span>}
+                      </span>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {nlLoading && (
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
+              )}
+              {!nlLoading && nlSortedRows.map((row, i) => {
+                const sc = getSSColor(row.subStatus ?? "");
+                const otaCol = OTA_COLORS[row.ota] ?? T.orange;
+                const isTatError = (row.tatError ?? 0) > 0;
+                return (
+                  <tr key={`${row.propertyId}-${row.ota}-${i}`} style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.orange, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color: otaCol }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: otaCol, flexShrink: 0 }} />{row.ota}
+                      </span>
+                    </td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.status ?? ""}>{row.status || "—"}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                      {row.subStatus
+                        ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>{row.subStatus}</span>
+                        : <span style={{ color: T.textMut }}>—</span>}
+                    </td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                      {row.tat > 0
+                        ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span>
+                        : <span style={{ color: T.textMut }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!nlLoading && nlData?.rows.length === 0 && (
+                <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {([
-              { label: "All", cat: "" }, { label: "Live", cat: "live" }, { label: "Exception", cat: "exception" },
-              { label: "In Process", cat: "inProcess" }, { label: "TAT Exhausted", cat: "tatExhausted" },
-            ] as const).map(({ label, cat }) => {
-              const active = nlCategory === cat;
-              return (
-                <button key={cat} onClick={() => { setNlCat(cat); loadNl(1, nlSearch, cat, nlSss); }}
-                  style={{ padding: "4px 10px", fontSize: 10, fontWeight: active ? 700 : 500, borderRadius: 5, cursor: "pointer", border: `1px solid ${active ? T.orange : T.cardBdr}`, background: active ? T.orange : "#FFF", color: active ? "#FFF" : T.textSec }}>
+        {/* Pagination */}
+        {nlData && nlData.pages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
+            <span style={{ fontSize: 10, color: T.textMut }}>
+              {((nlData.page - 1) * 50 + 1).toLocaleString()}–{Math.min(nlData.page * 50, nlData.total).toLocaleString()} of {nlData.total.toLocaleString()}
+            </span>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {([
+                { label: "«", p: 1,               dis: nlData.page === 1 },
+                { label: "‹", p: nlData.page - 1, dis: nlData.page === 1 },
+                { label: "›", p: nlData.page + 1, dis: nlData.page === nlData.pages },
+                { label: "»", p: nlData.pages,    dis: nlData.page === nlData.pages },
+              ] as const).map(({ label, p, dis }) => (
+                <button key={label} onClick={() => loadNl(p)} disabled={dis}
+                  style={{ padding: "3px 9px", fontSize: 11, fontWeight: 700,
+                    background: dis ? "#F1F5F9" : T.orange, color: dis ? T.textMut : "#FFFFFF",
+                    border: "none", borderRadius: 5, cursor: dis ? "not-allowed" : "pointer" }}>
                   {label}
                 </button>
-              );
-            })}
-          </div>
-
-          {ssOptions.length > 0 && (
-            <CheckboxDropdown label="Sub-status" options={ssOptions} selected={nlSss}
-              onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
-          )}
-
-          {(nlSearch || nlCategory || nlSss.length > 0) && (
-            <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); loadNl(1, "", "", []); }}
-              style={{ padding: "4px 9px", fontSize: 10, fontWeight: 600, borderRadius: 5, cursor: "pointer", border: `1px solid ${T.cardBdr}`, background: "#FFF", color: T.textSec }}>
-              ✕ Clear
-            </button>
-          )}
-        </div>
-
-        {nlLoading ? (
-          <div style={{ textAlign: "center", padding: 40, fontSize: 12, color: T.textMut }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>
-        ) : nlData && nlData.rows.length > 0 ? (
-          <>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-                <thead>
-                  <tr style={{ background: T.headerBg, borderBottom: `1px solid ${T.cardBdr}` }}>
-                    {["Property ID","Name","City","FH Live Date","OTA Live Date","Sub-status","TAT"].map(h => (
-                      <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontWeight: 700, color: T.textSec, fontSize: 10, whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {nlData.rows.map((row, idx) => {
-                    const ss = row.subStatus ? getSSColor(row.subStatus) : null;
-                    const tatColor = row.tat > 30 ? T.notLive : row.tat > 15 ? "#B45309" : T.live;
-                    return (
-                      <tr key={`${row.propertyId}-${idx}`} className="nl-row" style={{ borderBottom: `1px solid ${T.cardBdr}` }}>
-                        <td style={{ padding: "7px 12px", color: T.textPri, fontWeight: 600, whiteSpace: "nowrap" }}>{row.propertyId}</td>
-                        <td style={{ padding: "7px 12px", color: T.textSec, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name || "—"}</td>
-                        <td style={{ padding: "7px 12px", color: T.textSec, whiteSpace: "nowrap" }}>{row.city || "—"}</td>
-                        <td style={{ padding: "7px 12px", color: T.textSec, whiteSpace: "nowrap" }}>{fmtDate(row.fhLiveDate)}</td>
-                        <td style={{ padding: "7px 12px", color: T.textSec, whiteSpace: "nowrap" }}>{fmtDate(row.liveDate)}</td>
-                        <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>
-                          {ss ? <span style={{ fontSize: 10, fontWeight: 600, color: ss.text, background: ss.bg, padding: "2px 7px", borderRadius: 4 }}>{row.subStatus}</span> : <span style={{ color: T.textMut }}>—</span>}
-                        </td>
-                        <td style={{ padding: "7px 12px", fontWeight: 700, color: tatColor, whiteSpace: "nowrap" }}>{row.tat}d</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              ))}
+              <span style={{ padding: "3px 8px", fontSize: 10, color: T.textSec, fontWeight: 600 }}>
+                {nlData.page} / {nlData.pages}
+              </span>
             </div>
-            {nlData.pages > 1 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderTop: `1px solid ${T.cardBdr}` }}>
-                <span style={{ fontSize: 11, color: T.textMut }}>Page {nlPage} of {nlData.pages}</span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <button disabled={nlPage <= 1} onClick={() => loadNl(nlPage - 1)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, borderRadius: 5, cursor: nlPage <= 1 ? "default" : "pointer", border: `1px solid ${T.cardBdr}`, background: "#FFF", color: nlPage <= 1 ? T.textMut : T.textSec, opacity: nlPage <= 1 ? 0.5 : 1 }}>‹ Prev</button>
-                  <button disabled={nlPage >= nlData.pages} onClick={() => loadNl(nlPage + 1)} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 600, borderRadius: 5, cursor: nlPage >= nlData.pages ? "default" : "pointer", border: `1px solid ${T.cardBdr}`, background: "#FFF", color: nlPage >= nlData.pages ? T.textMut : T.textSec, opacity: nlPage >= nlData.pages ? 0.5 : 1 }}>Next ›</button>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ textAlign: "center", padding: 40, fontSize: 12, color: T.textMut }}>No properties found</div>
+          </div>
         )}
       </div>
     </div>
   );
 }
+
+
+
+
+
+

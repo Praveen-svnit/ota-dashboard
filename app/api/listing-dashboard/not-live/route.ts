@@ -25,10 +25,18 @@ export async function GET(req: NextRequest) {
     const category = (sp.get("category") ?? "").trim(); // "inProcess" | "tatExhausted" | ""
     const otaList  = (sp.get("otas") ?? "").split(",").map(s => s.trim()).filter(Boolean);
     const sssList  = (sp.get("sss")  ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    const fhMonth  = (sp.get("fhMonth") ?? "").trim(); // "Mar 2025" → filter p.fhLiveDate LIKE '2025-03-%'
     const offset   = (page - 1) * size;
 
+    // When fhMonth is set (click-through from Month-wise table) and no explicit category chosen,
+    // use the same conditions as overdue-listings API: fhStatus=Live + subStatus!='live' (includes exception).
+    // This ensures the property count matches exactly what the month table shows.
+    const monthMode = !!fhMonth && !category;
+
     let conditions: string[];
-    if (category === "live") {
+    if (monthMode) {
+      conditions = ["LOWER(COALESCE(o.subStatus,'')) != 'live'", "p.fhStatus = 'Live'"];
+    } else if (category === "live") {
       conditions = ["LOWER(COALESCE(o.subStatus,'')) = 'live'"];
     } else if (category === "exception") {
       conditions = ["LOWER(COALESCE(o.subStatus,'')) = 'exception'"];
@@ -54,6 +62,15 @@ export async function GET(req: NextRequest) {
       const rawVals = expandToRaw(sssList);
       conditions.push(`LOWER(COALESCE(o.subStatus,'')) IN (${rawVals.map(() => "?").join(",")})`);
       params.push(...rawVals);
+    }
+    if (fhMonth) {
+      const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const [mon, yr] = fhMonth.split(" ");
+      const mi = MONTH_NAMES.indexOf(mon ?? "");
+      if (mi >= 0 && yr) {
+        conditions.push(`p.fhLiveDate LIKE ?`);
+        params.push(`${yr}-${String(mi + 1).padStart(2, "0")}-%`);
+      }
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

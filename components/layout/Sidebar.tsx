@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+
+interface SessionUser { id: string; username: string; name: string; role: string; ota: string | null; }
 
 interface SidebarProps {
   lastRefreshed: Date | null;
@@ -12,9 +14,19 @@ interface SidebarProps {
 export default function Sidebar({ lastRefreshed }: SidebarProps) {
   const pathname  = usePathname();
   const router    = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed,  setCollapsed]  = useState(false);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => d && setSessionUser(d.user));
+  }, []);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
 
   const [syncing,   setSyncing]   = useState(false);
   const [syncLog,   setSyncLog]   = useState<string | null>(null);
@@ -144,19 +156,26 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-
+        <NavLink icon="📍" label="GMB Tracker"          href="/gmb-tracker" />
         {/* Listings */}
         <SectionHeader label="Listings" />
         <NavLink icon="≡" label="Property Status" href="/listings" />
 
+        {/* CRM */}
+        <SectionHeader label="CRM" />
+        <NavLink icon="◈" label="Property CRM"   href="/crm" />
+
         {/* Team */}
         <SectionHeader label="Team & Workflow" />
-        <NavLink icon="◉" label="Team & Workflow" href="/team" />
-        <NavLink icon="◎" label="Performance"     href="/performance" />
-        <NavLink icon="◆" label="TL Performance"  href="/tl-performance" />
+        <NavLink icon="◉" label="Team"             href="/team" />
+        <NavLink icon="◧" label="Workflow"          href="/workflow" />
+        <NavLink icon="◎" label="IC Performance"   href="/performance" />
+        <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
 
         {/* Reports */}
         <SectionHeader label="Reports" />
+        <NavLink icon="•" label="Summary" href="/reports/summary" />
+        <NavLink icon="◔" label="Monthly TAT" href="/reports/monthly-tat" />
         <NavLink icon="⚠" label="Incomplete Data" href="/incomplete" />
         <NavLink icon="★" label="BDC Genius"       href="/reports/genius" />
         <NavLink icon="✦" label="BDC Hygiene"     href="/reports/hygiene" />
@@ -234,6 +253,39 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
               ? `Updated ${lastRefreshed.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
               : "Not yet loaded"}
           </div>
+        )}
+
+        {/* User info + logout */}
+        {sessionUser && !collapsed && (
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #F1F5F9",
+            display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EFF6FF",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 800, color: "#2563EB", flexShrink: 0 }}>
+              {sessionUser.name[0].toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#1E293B",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {sessionUser.name}
+              </div>
+              <div style={{ fontSize: 9, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {sessionUser.role}{sessionUser.ota ? ` · ${sessionUser.ota}` : ""}
+              </div>
+            </div>
+            <button onClick={handleLogout} title="Sign out"
+              style={{ background: "none", border: "none", cursor: "pointer",
+                color: "#94A3B8", fontSize: 14, padding: "2px 4px", flexShrink: 0 }}>
+              ⏻
+            </button>
+          </div>
+        )}
+        {sessionUser && collapsed && (
+          <button onClick={handleLogout} title="Sign out"
+            style={{ marginTop: 8, width: "100%", background: "none", border: "none",
+              cursor: "pointer", color: "#94A3B8", fontSize: 16, padding: "6px 0" }}>
+            ⏻
+          </button>
         )}
       </div>
 
@@ -318,3 +370,4 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     </aside>
   );
 }
+

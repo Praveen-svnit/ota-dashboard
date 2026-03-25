@@ -100,6 +100,42 @@ export async function GET() {
       tatCounts[r.ota] = { inTat: r.inTatCnt, afterTat: r.afterTatCnt, avgTat: r.avgTat ?? null };
     }
 
+    // Ready-to-go-live count per OTA (no fhStatus filter — RTGL can predate FH live)
+    const rtglRows = db.prepare(`
+      SELECT o.ota, COUNT(*) AS cnt
+      FROM OtaListing o
+      WHERE LOWER(o.status) IN ('ready to go live', 'ready to go live ')
+      GROUP BY o.ota
+    `).all() as Array<{ ota: string; cnt: number }>;
+
+    const rtglCounts: Record<string, number> = {};
+    for (const r of rtglRows) rtglCounts[r.ota] = r.cnt;
+
+    // Monthly in-TAT / after-TAT breakdown per OTA (L12M)
+    const l12mCutoff = new Date(now);
+    l12mCutoff.setMonth(l12mCutoff.getMonth() - 11);
+    const l12mCutoffStr = `${l12mCutoff.getFullYear()}-${String(l12mCutoff.getMonth() + 1).padStart(2, "0")}-01`;
+
+    const tatMonthlyRows = db.prepare(`
+      SELECT o.ota,
+        strftime('%Y-%m', o.liveDate) AS month,
+        SUM(CASE WHEN o.tat <= 15 AND o.tatError = 0 THEN 1 ELSE 0 END) AS inTatCnt,
+        SUM(CASE WHEN o.tat > 15 THEN 1 ELSE 0 END) AS afterTatCnt
+      FROM OtaListing o
+      JOIN Property p ON p.id = o.propertyId
+      WHERE LOWER(p.fhStatus) IN ('live', 'soldout')
+        AND o.liveDate IS NOT NULL
+        AND o.liveDate >= ?
+      GROUP BY o.ota, strftime('%Y-%m', o.liveDate)
+    `).all(l12mCutoffStr) as Array<{ ota: string; month: string; inTatCnt: number; afterTatCnt: number }>;
+
+    const tatMonthly: Record<string, Record<string, { inTat: number; afterTat: number }>> = {};
+    for (const ota of OTAS) tatMonthly[ota] = {};
+    for (const r of tatMonthlyRows) {
+      if (!tatMonthly[r.ota]) tatMonthly[r.ota] = {};
+      tatMonthly[r.ota][r.month] = { inTat: r.inTatCnt, afterTat: r.afterTatCnt };
+    }
+
     // TAT per OTA
     const tatRows = db.prepare(`
       SELECT o.ota,
@@ -117,6 +153,20 @@ export async function GET() {
       tatByOta[row.ota] = row.avgTat !== null ? Math.round(row.avgTat) : null;
     }
 
+    // Full daily DOD for L12M — used for month×day matrix in individual tab
+    const dodFullRows = db.prepare(`
+      SELECT ota, DATE(liveDate) AS d, COUNT(*) AS cnt
+      FROM OtaListing
+      WHERE liveDate IS NOT NULL AND liveDate >= ?
+      GROUP BY ota, DATE(liveDate)
+    `).all(l12mCutoffStr) as Array<{ ota: string; d: string; cnt: number }>;
+
+    const dodFull: Record<string, Record<string, number>> = {};
+    for (const r of dodFullRows) {
+      if (!dodFull[r.ota]) dodFull[r.ota] = {};
+      dodFull[r.ota][r.d] = r.cnt;
+    }
+
     return Response.json({
       fhLive,
       otaLive,
@@ -124,6 +174,9 @@ export async function GET() {
       trackerMtd,
       trackerLive,
       tatCounts,
+      tatMonthly,
+      rtglCounts,
+      dodFull,
       dod: { labels: dodLabels, byOta: dodByOta },
       tatByOta,
       fhColFound: "fhLiveDate",

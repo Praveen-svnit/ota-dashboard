@@ -91,14 +91,17 @@ export async function GET() {
       SELECT ota,
         SUM(CASE WHEN LOWER(subStatus) = 'live' THEN 1 ELSE 0 END) AS live,
         SUM(CASE WHEN LOWER(subStatus) = 'exception' THEN 1 ELSE 0 END) AS exception,
+        SUM(CASE WHEN LOWER(COALESCE(status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS readyToGoLive,
         SUM(CASE WHEN LOWER(subStatus) != 'live' AND LOWER(COALESCE(subStatus,'')) != 'exception'
+                  AND LOWER(COALESCE(status,'')) != 'ready to go live'
                   AND tat <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS inProcess,
         SUM(CASE WHEN LOWER(subStatus) != 'live' AND LOWER(COALESCE(subStatus,'')) != 'exception'
+                  AND LOWER(COALESCE(status,'')) != 'ready to go live'
                   AND tat > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS tatExhausted
       FROM OtaListing
       GROUP BY ota
       ORDER BY live DESC
-    `).all() as Array<{ ota: string; live: number; exception: number; inProcess: number; tatExhausted: number }>;
+    `).all() as Array<{ ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number }>;
 
     // ── TAT-exhausted sub-status breakdown (for expandable row) ─────────────
     const tatBreakdownRows = db.prepare(`
