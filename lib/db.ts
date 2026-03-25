@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 
-const DB_PATH = process.env.OTA_DB_PATH ?? path.join(process.cwd(), "..", "ota-inv-db", "data", "ota.db");
+const DB_PATH = process.env.OTA_DB_PATH ?? path.join(process.cwd(), "ota.db");
 
 const globalForDb = globalThis as unknown as { _db?: Database.Database };
 
