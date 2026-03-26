@@ -105,6 +105,11 @@ interface Log {
 interface Property {
   id: string; name: string; city: string; fhStatus: string; fhLiveDate: string;
 }
+interface Task {
+  id: number; title: string; description: string; status: string; priority: string;
+  assignedTo: string | null; assignedName: string | null; createdByName: string | null;
+  dueDate: string | null; createdAt: string;
+}
 
 
 function statusPill(status: string) {
@@ -152,7 +157,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [activeOta,  setActiveOta]  = useState<string | null>(null);
 
   // Tasks
-  interface Task { id: number; title: string; description: string; status: string; priority: string; assignedTo: string | null; assignedName: string | null; createdByName: string | null; dueDate: string | null; createdAt: string; }
   const [tasks,        setTasks]        = useState<Task[]>([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [taskUsers,    setTaskUsers]    = useState<{ id: string; name: string }[]>([]);
