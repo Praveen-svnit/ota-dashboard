@@ -11,6 +11,7 @@
     "sync:rns": "node sync-rns.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",

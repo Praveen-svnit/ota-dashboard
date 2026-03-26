@@ -71,22 +71,16 @@ const PROPOSED_LEADS: TeamLead[] = [
     ],
   },
   {
-    name: "Jyoti", color: "#E83F6F",
-    otas: ["Cleartrip", "Ixigo"],
+    name: "Abhijeet", color: "#6366F1",
+    otas: ["GoMMT", "Expedia", "Indigo", "Cleartrip", "Ixigo"],
     interns: [
+      { name: "Rudra",    otas: ["GoMMT"],      priority: "P1" },
+      { name: "Mohit",    otas: ["Expedia"],    priority: "P1" },
+      { name: "Abhishek", otas: ["Indigo"],     priority: "P2" },
+      { name: "Umesh",    otas: [], role: "Ria Travels", priority: "P2" },
+      { name: "Jyoti",    otas: ["Cleartrip", "Ixigo"], role: "Sub-TL", priority: "P1" },
       { name: "Karan",    otas: ["Cleartrip"], priority: "P3" },
       { name: "Shrishti", otas: ["Ixigo"],     priority: "P3", pip: true },
-      { name: "Rahul",    otas: [],            priority: "P3", pip: true },
-    ],
-  },
-  {
-    name: "Abhijeet", color: "#6366F1",
-    otas: ["GoMMT", "Expedia", "Indigo"],
-    interns: [
-      { name: "Rudra",    otas: ["GoMMT"],   priority: "P1" },
-      { name: "Mohit",    otas: ["Expedia"], priority: "P1" },
-      { name: "Abhishek", otas: ["Indigo"],  priority: "P2" },
-      { name: "Umesh",    otas: [], role: "Ria Travels", priority: "P2" },
       { name: "Vishal",     otas: [], role: "FH Listing",              priority: "P1" },
       { name: "Ajay Dhama", otas: [], role: "FH Images and GMB Images", priority: "P1" },
       { name: "Yash",       otas: [], role: "OTA RLD",    priority: "P1" },
@@ -191,45 +185,18 @@ function TeamCard({ lead, isProposed = false }: { lead: TeamLead; isProposed?: b
    PAGE
 ══════════════════════════════════════════════════════════════ */
 export default function TeamPage() {
-  const currentTotal  = CURRENT_LEADS.reduce((n, t) => n + t.interns.length, 0);
   const proposedTotal = PROPOSED_LEADS.reduce((n, t) => n + t.interns.length, 0);
 
   return (
     <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-
-        {/* ── LEFT: Current Structure ─────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Current Structure</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#64748B", background: "#F1F5F9", border: "1px solid #E2E8F0", borderRadius: 20, padding: "2px 9px" }}>
-              {currentTotal} members
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {CURRENT_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} />)}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div style={{ width: 1, background: "linear-gradient(to bottom, transparent, #E2E8F0 20%, #E2E8F0 80%, transparent)", alignSelf: "stretch", flexShrink: 0 }} />
-
-        {/* ── RIGHT: Proposed Structure ───────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Proposed Structure</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 9px" }}>
-              {proposedTotal} members
-            </span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 20, padding: "2px 8px", marginLeft: 2 }}>
-              Draft
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {PROPOSED_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} isProposed />)}
-          </div>
-        </div>
-
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Team Structure</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 9px" }}>
+          {proposedTotal} members
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+        {PROPOSED_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} isProposed />)}
       </div>
     </div>
   );

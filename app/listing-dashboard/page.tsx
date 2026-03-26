@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import OtaDetailView from "@/components/dashboard/OtaDetailView";
+import GmbTab from "@/components/dashboard/GmbTab";
 
 const OTA_SLUG_MAP: Record<string, string> = {
   "GoMMT":"gommt","Booking.com":"booking-com","Agoda":"agoda","Expedia":"expedia",
@@ -93,7 +94,7 @@ interface DashData { pivot: Record<string, Record<string, number>>; columns: str
 
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [view,        setView]        = useState<"overview" | "ota">("overview");
+  const [view,        setView]        = useState<"overview" | "gmb" | "ota">("overview");
   const [selectedOta, setSelectedOta] = useState<string | null>(null);
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -180,14 +181,18 @@ export default function ListingDashboardPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
           </div>
         </div>
-        {/* View toggle — Overview / OTA Wise */}
+        {/* View toggle — Overview / GMB / OTA Wise */}
         <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-          {(["overview", "ota"] as const).map(v => {
-            const active = view === v;
+          {([
+            { key: "overview", label: "Overview" },
+            { key: "gmb",      label: "GMB" },
+            { key: "ota",      label: "OTA Wise" },
+          ] as { key: "overview" | "gmb" | "ota"; label: string }[]).map(({ key, label }) => {
+            const active = view === key;
             return (
               <button
-                key={v}
-                onClick={() => setView(v)}
+                key={key}
+                onClick={() => setView(key)}
                 style={{
                   padding: "7px 18px", fontSize: 11, fontWeight: 700,
                   borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit",
@@ -197,14 +202,16 @@ export default function ListingDashboardPage() {
                   transition: "all 0.13s ease",
                 }}
               >
-                {v === "overview" ? "Overview" : "OTA Wise"}
+                {label}
               </button>
             );
           })}
         </div>
       </div>
 
-      {view === "ota" ? (
+      {view === "gmb" ? (
+        <GmbTab />
+      ) : view === "ota" ? (
         /* ── OTA Wise view ── */
         <div>
           {/* OTA filter row */}
