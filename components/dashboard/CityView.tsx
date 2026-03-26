@@ -12,20 +12,43 @@ interface CityData {
 
 const ACCENT = "#2563EB";
 
+// Generate last 12 months as options
+function getMonthOptions() {
+  const options: { value: string; label: string }[] = [
+    { value: "", label: "Last 30 Days" },
+  ];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("en-IN", { month: "short", year: "numeric" });
+    options.push({ value, label });
+  }
+  return options;
+}
+
+const MONTH_OPTIONS = getMonthOptions();
+
 export default function CityView() {
   const [data,       setData]       = useState<CityData | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
   const [search,     setSearch]     = useState("");
-  const [selectedOta, setSelectedOta] = useState("all");
+  const [selectedOta,   setSelectedOta]   = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("");
 
   useEffect(() => {
-    fetch("/api/city-production")
+    setLoading(true);
+    setData(null);
+    const url = selectedMonth
+      ? `/api/city-production?month=${selectedMonth}`
+      : "/api/city-production";
+    fetch(url)
       .then((r) => r.json())
       .then((d) => { if (d.error) setError(d.error); else setData(d); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedMonth]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -55,7 +78,9 @@ export default function CityView() {
       {/* Header */}
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Day-on-Day Production — Last 30 Days</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>
+            Day-on-Day Production — {selectedMonth ? MONTH_OPTIONS.find((o) => o.value === selectedMonth)?.label : "Last 30 Days"}
+          </span>
           <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8 }}>city wise · estimated from live property share</span>
         </div>
 
@@ -88,6 +113,16 @@ export default function CityView() {
               );
             })}
           </div>
+
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 11, background: "#FFF", color: "#374151", cursor: "pointer" }}
+          >
+            {MONTH_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
 
           <input
             value={search}

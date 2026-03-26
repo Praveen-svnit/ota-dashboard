@@ -151,6 +151,14 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [noteInput,  setNoteInput]  = useState<Record<number, string>>({});
   const [activeOta,  setActiveOta]  = useState<string | null>(null);
 
+  // Tasks
+  interface Task { id: number; title: string; description: string; status: string; priority: string; assignedTo: string | null; assignedName: string | null; createdByName: string | null; dueDate: string | null; createdAt: string; }
+  const [tasks,        setTasks]        = useState<Task[]>([]);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskUsers,    setTaskUsers]    = useState<{ id: string; name: string }[]>([]);
+  const [newTask,      setNewTask]      = useState({ title: "", description: "", priority: "medium", assignedTo: "", dueDate: "" });
+  const [savingTask,   setSavingTask]   = useState(false);
+
   function load() {
     setLoading(true);
     fetch(`/api/crm/properties/${propertyId}`)
@@ -159,13 +167,45 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
         setProperty(d.property ?? null);
         setListings(d.listings ?? []);
         setLogs(d.logs ?? []);
-
         if (d.listings?.length) {
           const preferred = d.listings.find((l: { ota: string }) => l.ota === defaultOta);
           setActiveOta(preferred ? preferred.ota : d.listings[0].ota);
         }
       })
       .finally(() => setLoading(false));
+    fetch(`/api/crm/tasks?propertyId=${encodeURIComponent(propertyId)}`)
+      .then((r) => r.json()).then((d) => setTasks(d.tasks ?? []));
+    fetch("/api/crm/users/list")
+      .then((r) => r.json()).then((d) => setTaskUsers(d.users ?? []));
+  }
+
+  async function createTask() {
+    if (!newTask.title.trim()) return;
+    setSavingTask(true);
+    await fetch("/api/crm/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyId, ...newTask }),
+    });
+    setSavingTask(false);
+    setNewTask({ title: "", description: "", priority: "medium", assignedTo: "", dueDate: "" });
+    setShowTaskForm(false);
+    fetch(`/api/crm/tasks?propertyId=${encodeURIComponent(propertyId)}`)
+      .then((r) => r.json()).then((d) => setTasks(d.tasks ?? []));
+  }
+
+  async function updateTaskStatus(taskId: number, status: string) {
+    await fetch(`/api/crm/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status } : t));
+  }
+
+  async function deleteTask(taskId: number) {
+    await fetch(`/api/crm/tasks/${taskId}`, { method: "DELETE" });
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }
 
   useEffect(() => {
@@ -758,6 +798,103 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Tasks Panel */}
+          <div style={{ marginTop: 16, background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Tasks</span>
+                {tasks.filter((t) => t.status === "open").length > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 20, padding: "1px 8px" }}>
+                    {tasks.filter((t) => t.status === "open").length} open
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setShowTaskForm((v) => !v)} style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: showTaskForm ? "#0F172A" : "#F8FAFC", color: showTaskForm ? "#FFF" : "#374151", cursor: "pointer" }}>
+                {showTaskForm ? "Cancel" : "+ Add Task"}
+              </button>
+            </div>
+
+            {/* New task form */}
+            {showTaskForm && (
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC", display: "flex", flexDirection: "column", gap: 10 }}>
+                <input
+                  placeholder="Task title *"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))}
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, outline: "none" }}
+                />
+                <textarea
+                  placeholder="Description (optional)"
+                  value={newTask.description}
+                  onChange={(e) => setNewTask((p) => ({ ...p, description: e.target.value }))}
+                  rows={2}
+                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, outline: "none", resize: "none", fontFamily: "inherit" }}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <select value={newTask.priority} onChange={(e) => setNewTask((p) => ({ ...p, priority: e.target.value }))}
+                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
+                  </select>
+                  <select value={newTask.assignedTo} onChange={(e) => setNewTask((p) => ({ ...p, assignedTo: e.target.value }))}
+                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>
+                    <option value="">Unassigned</option>
+                    {taskUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                  <input type="date" value={newTask.dueDate} onChange={(e) => setNewTask((p) => ({ ...p, dueDate: e.target.value }))}
+                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12 }} />
+                </div>
+                <button onClick={createTask} disabled={!newTask.title.trim() || savingTask}
+                  style={{ padding: "8px 0", borderRadius: 8, border: "none", background: newTask.title.trim() ? "#2563EB" : "#E2E8F0", color: newTask.title.trim() ? "#FFF" : "#94A3B8", fontSize: 12, fontWeight: 700, cursor: newTask.title.trim() ? "pointer" : "not-allowed" }}>
+                  {savingTask ? "Creating…" : "Create Task"}
+                </button>
+              </div>
+            )}
+
+            {/* Task list */}
+            <div style={{ padding: tasks.length === 0 ? "24px 16px" : "6px 0" }}>
+              {tasks.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#94A3B8", fontSize: 12 }}>No tasks yet</div>
+              ) : tasks.map((task) => {
+                const priorityColor = task.priority === "high" ? "#DC2626" : task.priority === "medium" ? "#D97706" : "#64748B";
+                const isDone = task.status === "done";
+                return (
+                  <div key={task.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <button onClick={() => updateTaskStatus(task.id, isDone ? "open" : "done")}
+                      style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1, border: `2px solid ${isDone ? "#059669" : "#CBD5E1"}`, background: isDone ? "#059669" : "#FFF", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#FFF", fontSize: 10 }}>
+                      {isDone ? "✓" : ""}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: isDone ? "#94A3B8" : "#1E293B", textDecoration: isDone ? "line-through" : "none", lineHeight: 1.4 }}>
+                        {task.title}
+                      </div>
+                      {task.description && (
+                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2, lineHeight: 1.4 }}>{task.description}</div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, marginTop: 5, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 10, background: priorityColor + "18", color: priorityColor }}>
+                          {task.priority}
+                        </span>
+                        {task.assignedName && (
+                          <span style={{ fontSize: 10, color: "#475569" }}>→ {task.assignedName}</span>
+                        )}
+                        {task.dueDate && (
+                          <span style={{ fontSize: 10, color: new Date(task.dueDate) < new Date() && !isDone ? "#DC2626" : "#64748B" }}>
+                            Due {task.dueDate}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => deleteTask(task.id)}
+                      style={{ background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}
+                      title="Delete task">×</button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

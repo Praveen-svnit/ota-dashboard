@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 /* ─── OTA config ─────────────────────────────────────────────── */
 const OTA_COLORS: Record<string, string> = {
@@ -104,8 +105,8 @@ function healthColor(live: number, total: number) {
 }
 
 /* ─── Property Tile ──────────────────────────────────────────── */
-function PropertyTile({ prop, expanded, onToggle }: {
-  prop: Property; expanded: boolean; onToggle: () => void;
+function PropertyTile({ prop, expanded, onToggle, onOtaClick }: {
+  prop: Property; expanded: boolean; onToggle: () => void; onOtaClick: (ota: string) => void;
 }) {
   const liveOtas  = OTA_LIST.filter((o) => prop.otas[o]?.subStatus?.toLowerCase() === "live");
   const liveCount = liveOtas.length;
@@ -175,11 +176,13 @@ function PropertyTile({ prop, expanded, onToggle }: {
               return (
                 <span
                   key={ota}
-                  title={[OTA_SHORT[ota], id, fmtDate(prop.otas[ota]?.liveDate ?? null)].filter(Boolean).join(" · ")}
+                  title={`Open ${ota} in CRM`}
+                  onClick={(e) => { e.stopPropagation(); onOtaClick(ota); }}
                   style={{
                     fontSize: 9, fontWeight: 800, padding: "3px 8px",
                     borderRadius: 6, letterSpacing: 0.4,
                     background: color, color: "#FFFFFF",
+                    cursor: "pointer",
                   }}
                 >
                   {OTA_SHORT[ota]}
@@ -230,13 +233,19 @@ function PropertyTile({ prop, expanded, onToggle }: {
               return (
                 <div
                   key={ota}
+                  onClick={() => onOtaClick(ota)}
+                  title={`Open ${ota} in CRM`}
                   style={{
                     display: "flex", alignItems: "center", gap: 8,
                     padding: "6px 10px",
                     background: isLive ? color + "12" : "#F9FAFB",
                     border: `1px solid ${isLive ? color + "30" : "#E5E7EB"}`,
                     borderRadius: 8,
+                    cursor: "pointer",
+                    transition: "opacity 0.1s",
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                 >
                   <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: isLive ? color : T.textMut }} />
                   <span style={{ fontSize: 10, fontWeight: 700, color: isLive ? color : T.textMut, minWidth: 46 }}>
@@ -269,6 +278,7 @@ function PropertyTile({ prop, expanded, onToggle }: {
                   <span style={{ fontSize: 10, fontWeight: 600, color: isLive ? T.success : T.textMut }}>
                     {isLive ? date : "Not Listed"}
                   </span>
+                  <span style={{ fontSize: 10, color: T.textMut, marginLeft: 4 }}>→</span>
                 </div>
               );
             })}
@@ -314,6 +324,7 @@ function SearchInput({ placeholder, value, onChange }: {
 
 /* ─── Page ───────────────────────────────────────────────────── */
 export default function ListingsPage() {
+  const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [fetchedAt, setFetchedAt]   = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -463,6 +474,7 @@ export default function ListingsPage() {
                 prop={prop}
                 expanded={expanded.has(prop.fhId)}
                 onToggle={() => toggleExpand(prop.fhId)}
+                onOtaClick={(ota) => router.push(`/crm/${prop.fhId}?ota=${encodeURIComponent(ota)}`)}
               />
             ))}
             {pageItems.length === 0 && (

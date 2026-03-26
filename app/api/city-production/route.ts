@@ -9,21 +9,31 @@ const DB_TO_OTA: Record<string, string> = {
   "Ixigo": "Ixigo", "Akbar Travels": "Akbar Travels",
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const db = getDb();
-
-    const end   = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 29);
     const fmt = (d: Date) => d.toISOString().split("T")[0];
 
-    // All 30 dates
+    const { searchParams } = new URL(req.url);
+    const monthParam = searchParams.get("month"); // e.g. "2026-03"
+
+    let start: Date, end: Date;
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y, m] = monthParam.split("-").map(Number);
+      start = new Date(y, m - 1, 1);
+      end   = new Date(y, m, 0); // last day of month
+    } else {
+      end   = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - 29);
+    }
+
+    // All dates in range
     const dates: string[] = [];
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      dates.push(fmt(d));
+    const cur = new Date(start);
+    while (cur <= end) {
+      dates.push(fmt(cur));
+      cur.setDate(cur.getDate() + 1);
     }
 
     // Get city per property
