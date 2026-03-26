@@ -163,14 +163,14 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <NavLink icon="◈" label="Property CRM"    href="/crm" />
 
         {/* Team */}
-        <SectionHeader label="Team & Workflow" />
-        <NavLink icon="◉" label="Team"             href="/team" />
-        <NavLink icon="◧" label="Workflow"          href="/workflow" />
-        <NavLink icon="◎" label="IC Performance"   href="/performance" />
-        <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
-        {sessionUser?.role === "admin" && (
+        {sessionUser?.role === "admin" && (<>
+          <SectionHeader label="Team & Workflow" />
+          <NavLink icon="◉" label="Team"             href="/team" />
+          <NavLink icon="◧" label="Workflow"          href="/workflow" />
+          <NavLink icon="◎" label="IC Performance"   href="/performance" />
+          <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
           <NavLink icon="👤" label="User Management" href="/crm/users" />
-        )}
+        </>)}
 
         {/* Reports */}
         <SectionHeader label="Reports" />
