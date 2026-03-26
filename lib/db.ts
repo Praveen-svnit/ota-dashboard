@@ -204,6 +204,25 @@ function initSchema(db: Database.Database) {
       .run("user_admin_1", "admin", adminHash, "Admin", "admin", new Date().toISOString());
   }
 
+  // Tasks table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS Tasks (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      propertyId  TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      description TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      priority    TEXT NOT NULL DEFAULT 'medium',
+      assignedTo  TEXT,
+      createdBy   TEXT,
+      dueDate     TEXT,
+      createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_propertyId ON Tasks(propertyId);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status     ON Tasks(status);
+  `);
+
   // Migrate GeniusData to append-only (drop UNIQUE on bdc_id for history tracking)
   // If the UNIQUE index exists → recreate table without it
   const hasUniq = (db.prepare(
