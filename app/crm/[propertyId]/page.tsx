@@ -740,67 +740,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
             );
           })()}
 
-          {/* Activity Log — below OTA card */}
-          <div style={{ marginTop: 16, background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9",
-              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Activity Log</span>
-              <span style={{ fontSize: 10, color: "#94A3B8" }}>
-                {activeListing ? activeListing.ota : "All"} · {otaLogs.length} entries
-              </span>
-            </div>
-            <div style={{ padding: "8px 0" }}>
-              {otaLogs.length === 0 ? (
-                <div style={{ padding: "24px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>
-                  No activity yet
-                </div>
-              ) : otaLogs.map((log) => (
-                <div key={log.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-                      background: (ACTION_COLORS[log.action] ?? "#64748B") + "18",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 12, color: ACTION_COLORS[log.action] ?? "#64748B",
-                    }}>
-                      {log.action === "note_added" ? "✎" : log.action === "assigned" ? "◎" : "↻"}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>
-                          {log.userName || "System"}
-                        </span>
-                        <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
-                      </div>
-                      {log.action === "note_added" ? (
-                        <div style={{ fontSize: 11, color: "#475569", marginTop: 2, lineHeight: 1.4 }}>{log.note}</div>
-                      ) : log.action === "metric_updated" ? (
-                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
-                            background: "#D1FAE5", color: "#059669", marginRight: 5 }}>METRIC</span>
-                          <strong>{log.field}</strong>:{" "}
-                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                          {" → "}
-                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                          Changed <strong>{log.field}</strong>:{" "}
-                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                          {" → "}
-                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                        </div>
-                      )}
-                      {log.note && log.action !== "note_added" && (
-                        <div style={{ fontSize: 10, color: "#6366F1", marginTop: 3, fontStyle: "italic" }}>"{log.note}"</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Tasks Panel */}
           <div style={{ marginTop: 16, background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -895,6 +834,67 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Activity Log — below OTA card */}
+          <div style={{ marginTop: 16, background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9",
+              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Activity Log</span>
+              <span style={{ fontSize: 10, color: "#94A3B8" }}>
+                {activeListing ? activeListing.ota : "All"} · {otaLogs.length} entries
+              </span>
+            </div>
+            <div style={{ padding: "8px 0" }}>
+              {otaLogs.length === 0 ? (
+                <div style={{ padding: "24px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>
+                  No activity yet
+                </div>
+              ) : otaLogs.map((log) => (
+                <div key={log.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
+                      background: (ACTION_COLORS[log.action] ?? "#64748B") + "18",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, color: ACTION_COLORS[log.action] ?? "#64748B",
+                    }}>
+                      {log.action === "note_added" ? "✎" : log.action === "assigned" ? "◎" : "↻"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>
+                          {log.userName || "System"}
+                        </span>
+                        <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
+                      </div>
+                      {log.action === "note_added" ? (
+                        <div style={{ fontSize: 11, color: "#475569", marginTop: 2, lineHeight: 1.4 }}>{log.note}</div>
+                      ) : log.action === "metric_updated" ? (
+                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
+                            background: "#D1FAE5", color: "#059669", marginRight: 5 }}>METRIC</span>
+                          <strong>{log.field}</strong>:{" "}
+                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
+                          {" → "}
+                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                          Changed <strong>{log.field}</strong>:{" "}
+                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
+                          {" → "}
+                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
+                        </div>
+                      )}
+                      {log.note && log.action !== "note_added" && (
+                        <div style={{ fontSize: 10, color: "#6366F1", marginTop: 3, fontStyle: "italic" }}>"{log.note}"</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
