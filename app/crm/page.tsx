@@ -222,18 +222,27 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* Tasks Panel */}
+      {/* Tasks Preview Panel */}
       {showTasks && (
         <div style={{ background: "#FFF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "16px", marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF", marginBottom: 12 }}>
-            Open Tasks ({summary?.tasksOpen ?? 0})
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF" }}>
+              Open Tasks ({summary?.tasksOpen ?? 0})
+            </div>
+            <Link href="/tasks" style={{
+              fontSize: 11, fontWeight: 700, color: "#2563EB",
+              background: "#EFF6FF", border: "1px solid #BFDBFE",
+              borderRadius: 7, padding: "5px 14px", textDecoration: "none",
+            }}>
+              Open Task Manager →
+            </Link>
           </div>
           {summary?.openTasks.length === 0 ? (
             <div style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "20px 0" }}>No open tasks</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {summary?.openTasks.map((task) => {
-                const overdue = task.dueDate && new Date(task.dueDate) < new Date();
+              {summary?.openTasks.slice(0, 5).map((task) => {
+                const overdue = task.dueDate && task.dueDate < new Date().toISOString().split("T")[0];
                 return (
                   <div key={task.id} style={{
                     display: "flex", alignItems: "center", gap: 10,
@@ -257,20 +266,16 @@ export default function CrmPage() {
                         {overdue ? "⚠ " : ""}{task.dueDate}
                       </span>
                     )}
-                    <Link href={`/crm/${task.propertyId}`} style={{
-                      fontSize: 10, fontWeight: 600, color: "#2563EB",
-                      background: "#EFF6FF", border: "1px solid #BFDBFE",
-                      borderRadius: 5, padding: "3px 8px", textDecoration: "none", flexShrink: 0,
-                    }}>
-                      Open →
-                    </Link>
                   </div>
                 );
               })}
-              {(summary?.tasksOpen ?? 0) > 10 && (
-                <div style={{ fontSize: 11, color: "#94A3B8", textAlign: "center", paddingTop: 4 }}>
-                  +{(summary?.tasksOpen ?? 0) - 10} more tasks across properties
-                </div>
+              {(summary?.tasksOpen ?? 0) > 5 && (
+                <Link href="/tasks" style={{
+                  fontSize: 11, color: "#2563EB", textAlign: "center", paddingTop: 6,
+                  display: "block", textDecoration: "none", fontWeight: 600,
+                }}>
+                  + {(summary?.tasksOpen ?? 0) - 5} more — view all in Task Manager →
+                </Link>
               )}
             </div>
           )}
