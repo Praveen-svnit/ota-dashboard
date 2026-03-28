@@ -7,14 +7,31 @@ export async function GET() {
 
   const db = getDb();
 
-  // Overall subStatus counts
+  // Overall subStatus counts (OtaListing + GMB), null/blank → 'New'
   const statusCounts = db.prepare(`
+    WITH combined AS (
+      SELECT COALESCE(NULLIF(TRIM(subStatus),''), 'New') AS subStatus FROM OtaListing
+      UNION ALL
+      SELECT COALESCE(NULLIF(TRIM(gmbSubStatus),''), 'New') AS subStatus FROM GmbTracker
+    )
     SELECT LOWER(subStatus) as subStatus, COUNT(*) as cnt
-    FROM OtaListing
-    WHERE subStatus IS NOT NULL AND subStatus != ''
+    FROM combined
     GROUP BY LOWER(subStatus)
     ORDER BY cnt DESC
   `).all() as { subStatus: string; cnt: number }[];
+
+  // Overall status counts (OtaListing + GMB), null/blank → 'New'
+  const statusTopCounts = db.prepare(`
+    WITH combined AS (
+      SELECT COALESCE(NULLIF(TRIM(status),''), 'New') AS status FROM OtaListing
+      UNION ALL
+      SELECT COALESCE(NULLIF(TRIM(gmbStatus),''), 'New') AS status FROM GmbTracker
+    )
+    SELECT LOWER(status) as status, COUNT(*) as cnt
+    FROM combined
+    GROUP BY LOWER(status)
+    ORDER BY cnt DESC
+  `).all() as { status: string; cnt: number }[];
 
   // Per-OTA breakdown: live vs total
   const otaBreakdown = db.prepare(`
@@ -27,6 +44,11 @@ export async function GET() {
     GROUP BY ota
     ORDER BY live DESC
   `).all() as { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
+
+  // FH pipeline: count of properties that went live on D (today) through D-7
+  const fhPipeline = Array.from({ length: 8 }, (_, i) =>
+    (db.prepare(`SELECT COUNT(*) as n FROM Property WHERE DATE(fhLiveDate) = DATE('now','localtime','-${i} days')`).get() as { n: number }).n
+  );
 
   // Task counts
   const tasksOpen = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open'`).get() as { n: number }).n;
@@ -59,5 +81,5 @@ export async function GET() {
     LIMIT 10
   `).all() as { id: number; propertyId: string; title: string; priority: string; dueDate: string; assignedTo: string; assignedName: string; propName: string }[];
 
-  return Response.json({ statusCounts, otaBreakdown, tasksOpen, tasksHigh, tasksOverdue, tasksDone, recentLogs, openTasks });
+  return Response.json({ statusCounts, statusTopCounts, otaBreakdown, tasksOpen, tasksHigh, tasksOverdue, tasksDone, recentLogs, openTasks, fhPipeline });
 }
