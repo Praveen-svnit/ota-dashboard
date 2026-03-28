@@ -26,6 +26,11 @@ function statusPill(status: string) {
   );
 }
 
+function priorityDot(p: string) {
+  const c = p === "high" ? "#EF4444" : p === "medium" ? "#F59E0B" : "#10B981";
+  return <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: c, marginRight: 5 }} />;
+}
+
 interface Row {
   id: string; name: string; city: string; fhStatus: string;
   ota: string; status: string; subStatus: string; liveDate: string;
@@ -35,21 +40,49 @@ interface Row {
   gmbRating: string; gmbReviewCount: string;
 }
 
+interface Summary {
+  statusCounts: { subStatus: string; cnt: number }[];
+  otaBreakdown: { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
+  tasksOpen: number;
+  tasksDue: number;
+  recentLogs: { action: string; field: string; oldValue: string; newValue: string; note: string; createdAt: string; userName: string; propName: string; propId: string }[];
+  openTasks: { id: number; propertyId: string; title: string; priority: string; dueDate: string; assignedName: string; propName: string }[];
+}
+
+function timeAgo(ts: string) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 export default function CrmPage() {
   const [rows,    setRows]    = useState<Row[]>([]);
   const [total,   setTotal]   = useState(0);
   const [page,    setPage]    = useState(1);
   const [loading, setLoading] = useState(true);
 
-  const [search,    setSearch]    = useState("");
-  const [otaFilter, setOtaFilter] = useState("all");
+  const [search,       setSearch]       = useState("");
+  const [otaFilter,    setOtaFilter]    = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const [summary,      setSummary]      = useState<Summary | null>(null);
+  const [showTasks,    setShowTasks]    = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Load summary
+  useEffect(() => {
+    fetch("/api/crm/summary").then(r => r.json()).then(setSummary);
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -67,13 +100,30 @@ export default function CrmPage() {
 
   const totalPages = Math.ceil(total / 50);
 
+  // Derived counts from summary
+  const liveCount      = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
+  const notLiveCount   = summary?.statusCounts.find(s => s.subStatus === "not live")?.cnt ?? 0;
+  const readyCount     = summary?.statusCounts.find(s => s.subStatus === "ready to go live")?.cnt ?? 0;
+  const cipCount       = (summary?.statusCounts.find(s => s.subStatus === "content in progress")?.cnt ?? 0)
+                       + (summary?.statusCounts.find(s => s.subStatus === "listing in progress")?.cnt ?? 0);
+  const totalListings  = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
+
+  const tiles = [
+    { label: "Total Listings", value: totalListings, bg: "#F8FAFC", color: "#0F172A", border: "#E2E8F0", sub: "across all OTAs" },
+    { label: "Live",           value: liveCount,     bg: "#F0FDF4", color: "#059669", border: "#BBF7D0", sub: `${totalListings ? Math.round(liveCount/totalListings*100) : 0}% of total` },
+    { label: "Not Live",       value: notLiveCount,  bg: "#FEF2F2", color: "#DC2626", border: "#FECACA", sub: "needs attention" },
+    { label: "Ready to GoLive",value: readyCount,    bg: "#FEFCE8", color: "#854D0E", border: "#FDE68A", sub: "awaiting push" },
+    { label: "In Progress",    value: cipCount,      bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE", sub: "content + listing" },
+    { label: "Open Tasks",     value: summary?.tasksOpen ?? 0, bg: summary?.tasksDue ? "#FFF7ED" : "#F0FDF4", color: summary?.tasksDue ? "#C2410C" : "#059669", border: summary?.tasksDue ? "#FED7AA" : "#BBF7D0", sub: summary?.tasksDue ? `${summary.tasksDue} overdue/due today` : "all on track" },
+  ];
+
   return (
     <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>CRM</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>CRM Dashboard</div>
           <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
             {total} listings • click a property to view details & logs
           </div>
@@ -86,6 +136,187 @@ export default function CrmPage() {
           Manage Users
         </Link>
       </div>
+
+      {/* Status Tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 16 }}>
+        {tiles.map((t) => (
+          <div key={t.label} style={{
+            background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12,
+            padding: "14px 16px", cursor: "default",
+          }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: t.color, lineHeight: 1 }}>
+              {t.value.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: t.color, marginTop: 4, opacity: 0.85 }}>{t.label}</div>
+            <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{t.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* OTA Breakdown + Toggles row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 16, alignItems: "start" }}>
+
+        {/* OTA Breakdown */}
+        <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", marginBottom: 10 }}>OTA-wise Breakdown</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {summary?.otaBreakdown.map((ota) => {
+              const color = OTA_COLORS[ota.ota] ?? "#64748B";
+              const pct = ota.total ? Math.round(ota.live / ota.total * 100) : 0;
+              return (
+                <div key={ota.ota} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 70, fontSize: 10, fontWeight: 600, color, flexShrink: 0,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {ota.ota === "Booking.com" ? "BDC" : ota.ota === "Akbar Travels" ? "AKT" : ota.ota === "EaseMyTrip" ? "EMT" : ota.ota}
+                  </div>
+                  <div style={{ flex: 1, height: 6, background: "#F1F5F9", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748B", width: 80, flexShrink: 0, textAlign: "right" }}>
+                    <span style={{ fontWeight: 700, color: "#059669" }}>{ota.live}</span>
+                    <span style={{ color: "#CBD5E1" }}> / </span>
+                    <span>{ota.total}</span>
+                    <span style={{ color: "#DC2626", marginLeft: 4 }}>{ota.notLive > 0 ? `·${ota.notLive}✗` : ""}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Toggle buttons */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button
+            onClick={() => { setShowTasks(t => !t); setShowActivity(false); }}
+            style={{
+              padding: "10px 20px", borderRadius: 10, border: "1px solid",
+              borderColor: showTasks ? "#2563EB" : "#E2E8F0",
+              background: showTasks ? "#EFF6FF" : "#FFF",
+              color: showTasks ? "#2563EB" : "#64748B",
+              fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", whiteSpace: "nowrap",
+            }}
+          >
+            ◎ Tasks
+            {(summary?.tasksOpen ?? 0) > 0 && (
+              <span style={{
+                marginLeft: 8, fontSize: 10, fontWeight: 800,
+                background: summary?.tasksDue ? "#EF4444" : "#2563EB",
+                color: "#FFF", borderRadius: 20, padding: "1px 7px",
+              }}>
+                {summary?.tasksOpen}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setShowActivity(a => !a); setShowTasks(false); }}
+            style={{
+              padding: "10px 20px", borderRadius: 10, border: "1px solid",
+              borderColor: showActivity ? "#7C3AED" : "#E2E8F0",
+              background: showActivity ? "#F5F3FF" : "#FFF",
+              color: showActivity ? "#7C3AED" : "#64748B",
+              fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left",
+            }}
+          >
+            ◷ Recent Activity
+          </button>
+        </div>
+      </div>
+
+      {/* Tasks Panel */}
+      {showTasks && (
+        <div style={{ background: "#FFF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF", marginBottom: 12 }}>
+            Open Tasks ({summary?.tasksOpen ?? 0})
+          </div>
+          {summary?.openTasks.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "20px 0" }}>No open tasks</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {summary?.openTasks.map((task) => {
+                const overdue = task.dueDate && new Date(task.dueDate) < new Date();
+                return (
+                  <div key={task.id} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 12px", borderRadius: 8,
+                    background: overdue ? "#FEF2F2" : "#F8FAFC",
+                    border: `1px solid ${overdue ? "#FECACA" : "#F1F5F9"}`,
+                  }}>
+                    {priorityDot(task.priority)}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#1E293B",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {task.title}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#94A3B8" }}>
+                        {task.propName} {task.assignedName ? `· ${task.assignedName}` : ""}
+                      </div>
+                    </div>
+                    {task.dueDate && (
+                      <span style={{ fontSize: 10, color: overdue ? "#DC2626" : "#64748B",
+                        fontWeight: overdue ? 700 : 400, whiteSpace: "nowrap" }}>
+                        {overdue ? "⚠ " : ""}{task.dueDate}
+                      </span>
+                    )}
+                    <Link href={`/crm/${task.propertyId}`} style={{
+                      fontSize: 10, fontWeight: 600, color: "#2563EB",
+                      background: "#EFF6FF", border: "1px solid #BFDBFE",
+                      borderRadius: 5, padding: "3px 8px", textDecoration: "none", flexShrink: 0,
+                    }}>
+                      Open →
+                    </Link>
+                  </div>
+                );
+              })}
+              {(summary?.tasksOpen ?? 0) > 10 && (
+                <div style={{ fontSize: 11, color: "#94A3B8", textAlign: "center", paddingTop: 4 }}>
+                  +{(summary?.tasksOpen ?? 0) - 10} more tasks across properties
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Activity Panel */}
+      {showActivity && (
+        <div style={{ background: "#FFF", border: "1px solid #DDD6FE", borderRadius: 12, padding: "16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#6D28D9", marginBottom: 12 }}>Recent Activity</div>
+          {summary?.recentLogs.length === 0 ? (
+            <div style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "20px 0" }}>No activity yet</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {summary?.recentLogs.map((log, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10,
+                  padding: "8px 12px", borderRadius: 8, background: "#FAFAFA", border: "1px solid #F1F5F9",
+                }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EDE9FE",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 800, color: "#7C3AED", flexShrink: 0 }}>
+                    {log.userName?.[0]?.toUpperCase() ?? "?"}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: "#1E293B" }}>
+                      <span style={{ fontWeight: 600 }}>{log.userName ?? "System"}</span>
+                      {" "}
+                      {log.action === "status_change"
+                        ? <>{log.field}: <span style={{ color: "#DC2626" }}>{log.oldValue}</span> → <span style={{ color: "#059669" }}>{log.newValue}</span></>
+                        : log.note
+                          ? <span style={{ color: "#64748B" }}>{log.note}</span>
+                          : <span style={{ color: "#64748B" }}>{log.action}</span>
+                      }
+                    </div>
+                    <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 1 }}>
+                      <Link href={`/crm/${log.propId}`} style={{ color: "#6366F1", textDecoration: "none" }}>{log.propName}</Link>
+                      {" · "}{timeAgo(log.createdAt)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
