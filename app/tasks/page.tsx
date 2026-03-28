@@ -3,16 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
-interface MyStats {
-  userName: string;
-  totalAssigned: number;
-  openTasks: number;
-  overdue: number;
-  doneThisMonth: number;
-  doneThisWeek: number;
-  recentDone: { id: number; title: string; completedAt: string; completionComment: string; propName: string }[];
-  myOpen: { id: number; title: string; priority: string; dueDate: string; propName: string; propId: string }[];
-}
 
 interface Task {
   id: number;
@@ -64,9 +54,6 @@ export default function TasksPage() {
   const [completing, setCompleting] = useState<number | null>(null);
   const [completionNote, setCompletionNote] = useState("");
 
-  const [showMyPerf, setShowMyPerf] = useState(false);
-  const [myStats, setMyStats] = useState<MyStats | null>(null);
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
@@ -89,12 +76,6 @@ export default function TasksPage() {
   }, [statusFilter, priorityFilter, assigneeFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (showMyPerf && !myStats) {
-      fetch("/api/tasks/my-stats").then(r => r.json()).then(setMyStats);
-    }
-  }, [showMyPerf, myStats]);
 
   async function markDone(id: number) {
     await fetch("/api/tasks", {
@@ -162,92 +143,6 @@ export default function TasksPage() {
             <div style={{ fontSize: 11, fontWeight: 600, color: t.color, opacity: 0.8, marginTop: 2 }}>{t.label}</div>
           </div>
         ))}
-      </div>
-
-      {/* My Performance Toggle */}
-      <div style={{ marginBottom: 14 }}>
-        <button
-          onClick={() => setShowMyPerf(p => !p)}
-          style={{
-            padding: "8px 18px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
-            border: "1px solid", borderColor: showMyPerf ? "#7C3AED" : "#E2E8F0",
-            background: showMyPerf ? "#F5F3FF" : "#FFF", color: showMyPerf ? "#7C3AED" : "#64748B",
-          }}
-        >
-          ◎ My Performance {showMyPerf ? "▲" : "▼"}
-        </button>
-
-        {showMyPerf && myStats && (
-          <div style={{ marginTop: 10, background: "#FFF", border: "1px solid #DDD6FE", borderRadius: 12, padding: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6D28D9", marginBottom: 12 }}>
-              {myStats.userName} — Performance Summary
-            </div>
-
-            {/* Stats row */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 16 }}>
-              {[
-                { label: "Total Assigned", value: myStats.totalAssigned, color: "#6366F1", bg: "#EEF2FF" },
-                { label: "Currently Open", value: myStats.openTasks,     color: "#2563EB", bg: "#EFF6FF" },
-                { label: "Overdue",         value: myStats.overdue,       color: myStats.overdue > 0 ? "#DC2626" : "#059669", bg: myStats.overdue > 0 ? "#FEF2F2" : "#F0FDF4" },
-                { label: "Done This Week",  value: myStats.doneThisWeek,  color: "#059669", bg: "#F0FDF4" },
-                { label: "Done This Month", value: myStats.doneThisMonth, color: "#059669", bg: "#F0FDF4" },
-              ].map(s => (
-                <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: "10px 14px" }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: 10, color: s.color, opacity: 0.8, marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* My open tasks + recent completions */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {/* My open tasks */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#1E293B", marginBottom: 8 }}>My Open Tasks</div>
-                {myStats.myOpen.length === 0 ? (
-                  <div style={{ fontSize: 11, color: "#94A3B8" }}>No open tasks 🎉</div>
-                ) : myStats.myOpen.map(t => {
-                  const overdue = t.dueDate && t.dueDate < new Date().toISOString().split("T")[0];
-                  return (
-                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8,
-                      padding: "6px 10px", borderRadius: 7, marginBottom: 4,
-                      background: overdue ? "#FEF2F2" : "#F8FAFC", border: `1px solid ${overdue ? "#FECACA" : "#F1F5F9"}` }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                        background: t.priority === "high" ? "#EF4444" : t.priority === "medium" ? "#F59E0B" : "#10B981" }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "#1E293B",
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
-                        <div style={{ fontSize: 10, color: "#94A3B8" }}>{t.propName}</div>
-                      </div>
-                      {t.dueDate && <span style={{ fontSize: 10, color: overdue ? "#DC2626" : "#64748B", flexShrink: 0 }}>{t.dueDate}</span>}
-                      <Link href={`/crm/${t.propId}`} style={{ fontSize: 10, color: "#2563EB", textDecoration: "none", flexShrink: 0 }}>→</Link>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Recent completions */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#1E293B", marginBottom: 8 }}>Recent Completions</div>
-                {myStats.recentDone.length === 0 ? (
-                  <div style={{ fontSize: 11, color: "#94A3B8" }}>No completions yet</div>
-                ) : myStats.recentDone.map(t => (
-                  <div key={t.id} style={{ padding: "6px 10px", borderRadius: 7, marginBottom: 4,
-                    background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#1E293B",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>✓ {t.title}</div>
-                    <div style={{ fontSize: 10, color: "#94A3B8" }}>
-                      {t.propName} · {t.completedAt ? timeAgo(t.completedAt) : ""}
-                    </div>
-                    {t.completionComment && (
-                      <div style={{ fontSize: 10, color: "#64748B", marginTop: 2, fontStyle: "italic" }}>"{t.completionComment}"</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Filters */}
