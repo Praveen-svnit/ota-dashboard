@@ -26,10 +26,6 @@ function statusPill(status: string) {
   );
 }
 
-function priorityDot(p: string) {
-  const c = p === "high" ? "#EF4444" : p === "medium" ? "#F59E0B" : "#10B981";
-  return <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: c, marginRight: 5 }} />;
-}
 
 interface Row {
   id: string; name: string; city: string; fhStatus: string;
@@ -43,10 +39,7 @@ interface Row {
 interface Summary {
   statusCounts: { subStatus: string; cnt: number }[];
   otaBreakdown: { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
-  tasksOpen: number;
-  tasksDue: number;
   recentLogs: { action: string; field: string; oldValue: string; newValue: string; note: string; createdAt: string; userName: string; propName: string; propId: string }[];
-  openTasks: { id: number; propertyId: string; title: string; priority: string; dueDate: string; assignedName: string; propName: string }[];
 }
 
 function timeAgo(ts: string) {
@@ -71,7 +64,6 @@ export default function CrmPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [summary,      setSummary]      = useState<Summary | null>(null);
-  const [showTasks,    setShowTasks]    = useState(false);
   const [showActivity, setShowActivity] = useState(false);
 
   useEffect(() => {
@@ -114,7 +106,6 @@ export default function CrmPage() {
     { label: "Not Live",       value: notLiveCount,  bg: "#FEF2F2", color: "#DC2626", border: "#FECACA", sub: "needs attention" },
     { label: "Ready to GoLive",value: readyCount,    bg: "#FEFCE8", color: "#854D0E", border: "#FDE68A", sub: "awaiting push" },
     { label: "In Progress",    value: cipCount,      bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE", sub: "content + listing" },
-    { label: "Open Tasks",     value: summary?.tasksOpen ?? 0, bg: summary?.tasksDue ? "#FFF7ED" : "#F0FDF4", color: summary?.tasksDue ? "#C2410C" : "#059669", border: summary?.tasksDue ? "#FED7AA" : "#BBF7D0", sub: summary?.tasksDue ? `${summary.tasksDue} overdue/due today` : "all on track" },
   ];
 
   return (
@@ -144,7 +135,7 @@ export default function CrmPage() {
       </div>
 
       {/* Status Tiles */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
         {tiles.map((t) => (
           <div key={t.label} style={{
             background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12,
@@ -162,28 +153,7 @@ export default function CrmPage() {
       {/* Toggles row */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <button
-            onClick={() => { setShowTasks(t => !t); setShowActivity(false); }}
-            style={{
-              padding: "10px 20px", borderRadius: 10, border: "1px solid",
-              borderColor: showTasks ? "#2563EB" : "#E2E8F0",
-              background: showTasks ? "#EFF6FF" : "#FFF",
-              color: showTasks ? "#2563EB" : "#64748B",
-              fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", whiteSpace: "nowrap",
-            }}
-          >
-            ◎ Tasks
-            {(summary?.tasksOpen ?? 0) > 0 && (
-              <span style={{
-                marginLeft: 8, fontSize: 10, fontWeight: 800,
-                background: summary?.tasksDue ? "#EF4444" : "#2563EB",
-                color: "#FFF", borderRadius: 20, padding: "1px 7px",
-              }}>
-                {summary?.tasksOpen}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setShowActivity(a => !a); setShowTasks(false); }}
+            onClick={() => setShowActivity(a => !a)}
             style={{
               padding: "10px 20px", borderRadius: 10, border: "1px solid",
               borderColor: showActivity ? "#7C3AED" : "#E2E8F0",
@@ -195,66 +165,6 @@ export default function CrmPage() {
             ◷ Recent Activity
           </button>
       </div>
-
-      {/* Tasks Preview Panel */}
-      {showTasks && (
-        <div style={{ background: "#FFF", border: "1px solid #BFDBFE", borderRadius: 12, padding: "16px", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#1E40AF" }}>
-              Open Tasks ({summary?.tasksOpen ?? 0})
-            </div>
-            <Link href="/tasks" style={{
-              fontSize: 11, fontWeight: 700, color: "#2563EB",
-              background: "#EFF6FF", border: "1px solid #BFDBFE",
-              borderRadius: 7, padding: "5px 14px", textDecoration: "none",
-            }}>
-              Open Task Manager →
-            </Link>
-          </div>
-          {summary?.openTasks.length === 0 ? (
-            <div style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "20px 0" }}>No open tasks</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {summary?.openTasks.slice(0, 5).map((task) => {
-                const overdue = task.dueDate && task.dueDate < new Date().toISOString().split("T")[0];
-                return (
-                  <div key={task.id} style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    padding: "8px 12px", borderRadius: 8,
-                    background: overdue ? "#FEF2F2" : "#F8FAFC",
-                    border: `1px solid ${overdue ? "#FECACA" : "#F1F5F9"}`,
-                  }}>
-                    {priorityDot(task.priority)}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#1E293B",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {task.title}
-                      </div>
-                      <div style={{ fontSize: 10, color: "#94A3B8" }}>
-                        {task.propName} {task.assignedName ? `· ${task.assignedName}` : ""}
-                      </div>
-                    </div>
-                    {task.dueDate && (
-                      <span style={{ fontSize: 10, color: overdue ? "#DC2626" : "#64748B",
-                        fontWeight: overdue ? 700 : 400, whiteSpace: "nowrap" }}>
-                        {overdue ? "⚠ " : ""}{task.dueDate}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {(summary?.tasksOpen ?? 0) > 5 && (
-                <Link href="/tasks" style={{
-                  fontSize: 11, color: "#2563EB", textAlign: "center", paddingTop: 6,
-                  display: "block", textDecoration: "none", fontWeight: 600,
-                }}>
-                  + {(summary?.tasksOpen ?? 0) - 5} more — view all in Task Manager →
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Activity Panel */}
       {showActivity && (
