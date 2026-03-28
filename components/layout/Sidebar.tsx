@@ -166,13 +166,15 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <NavLink icon="◎" label="Task Manager"    href="/tasks" />
 
         {/* Team */}
-        {sessionUser?.role === "admin" && (<>
+        {(sessionUser?.role === "admin" || sessionUser?.role === "head" || sessionUser?.role === "tl") && (<>
           <SectionHeader label="Team & Workflow" />
           <NavLink icon="◉" label="Team"             href="/team" />
           <NavLink icon="◧" label="Workflow"          href="/workflow" />
           <NavLink icon="◎" label="IC Performance"   href="/performance" />
           <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
-          <NavLink icon="👤" label="User Management" href="/crm/users" />
+          {sessionUser?.role === "admin" && (
+            <NavLink icon="👤" label="User Management" href="/crm/users" />
+          )}
         </>)}
 
         {/* Reports */}

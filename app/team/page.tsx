@@ -1,6 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { OTA_COLORS } from "@/lib/constants";
+
+interface DbUser { id: string; name: string; role: string; ota: string | null; teamLead: string | null }
+interface DbTeamData {
+  groups: Record<string, { tl: DbUser | null; members: DbUser[] }>;
+  admins: DbUser[];
+}
 
 /* ══════════════════════════════════════════════════════════════
    TEAM DATA
@@ -184,20 +191,107 @@ function TeamCard({ lead, isProposed = false }: { lead: TeamLead; isProposed?: b
 /* ══════════════════════════════════════════════════════════════
    PAGE
 ══════════════════════════════════════════════════════════════ */
+const TL_COLORS: Record<string, string> = {
+  "Gourav": "#F59E0B", "Abhijeet": "#6366F1", "Jyoti": "#E83F6F",
+  "Ajay": "#10B981", "Salim": "#8B5CF6",
+};
+
 export default function TeamPage() {
+  const [dbTeam, setDbTeam] = useState<DbTeamData | null>(null);
+  const [view, setView]     = useState<"live" | "structure">("live");
+
+  useEffect(() => {
+    fetch("/api/team").then(r => r.json()).then(setDbTeam);
+  }, []);
+
   const proposedTotal = PROPOSED_LEADS.reduce((n, t) => n + t.interns.length, 0);
+  const liveTotal = dbTeam ? Object.values(dbTeam.groups).reduce((n, g) => n + g.members.length, 0) : 0;
 
   return (
     <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Team Structure</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 9px" }}>
-          {proposedTotal} members
-        </span>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Team Structure</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 9px" }}>
+            {view === "live" ? `${liveTotal} active` : `${proposedTotal} members`}
+          </span>
+        </div>
+        {/* View toggle */}
+        <div style={{ display: "flex", background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+          {([["live","Live (DB)"],["structure","Structure"]] as const).map(([v, l]) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              padding: "6px 16px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
+              background: view === v ? "#2563EB" : "transparent",
+              color: view === v ? "#FFF" : "#64748B",
+            }}>{l}</button>
+          ))}
+        </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-        {PROPOSED_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} isProposed />)}
-      </div>
+
+      {/* Live DB view */}
+      {view === "live" && (
+        dbTeam === null ? (
+          <div style={{ color: "#94A3B8", fontSize: 12, padding: 20 }}>Loading…</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            {Object.entries(dbTeam.groups).map(([tlName, group]) => {
+              const color = TL_COLORS[tlName] ?? "#64748B";
+              return (
+                <div key={tlName} style={{ background: "#FFF", borderRadius: 14, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+                  {/* TL header */}
+                  <div style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `1px solid ${color}20`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: color, color: "#FFF", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {tlName[0]}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{tlName}</span>
+                        <span style={{ fontSize: 8, fontWeight: 700, color: "#FFF", background: color, borderRadius: 4, padding: "1px 5px" }}>
+                          {group.tl?.role?.toUpperCase() ?? "TL"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{group.members.length} members</div>
+                    </div>
+                  </div>
+                  {/* Members */}
+                  <div style={{ padding: "8px 14px 10px" }}>
+                    {group.members.length === 0 ? (
+                      <div style={{ fontSize: 11, color: "#CBD5E1", padding: "8px 0" }}>No members assigned yet</div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        {group.members.map((m) => (
+                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 8, background: "#F8FAFC" }}>
+                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: color + "99", color: "#FFF", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              {m.name[0]}
+                            </div>
+                            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#1E293B" }}>{m.name}</span>
+                            {m.ota && (
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
+                                background: (OTA_COLORS[m.ota] ?? "#64748B") + "18",
+                                color: OTA_COLORS[m.ota] ?? "#64748B",
+                                border: `1px solid ${(OTA_COLORS[m.ota] ?? "#64748B")}35` }}>
+                                {m.ota === "Booking.com" ? "BDC" : m.ota === "Akbar Travels" ? "AKT" : m.ota === "EaseMyTrip" ? "EMT" : m.ota}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* Static structure view */}
+      {view === "structure" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {PROPOSED_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} isProposed />)}
+        </div>
+      )}
     </div>
   );
 }

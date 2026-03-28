@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+interface SessionUser { id: string; name: string; role: string; ota: string | null; teamLead: string | null }
+
 
 /* ── OTAs not yet formally signed — excluded from portfolio live rate ─────── */
 const UNSIGNED_OTAS = new Set(["Ixigo", "Akbar Travels"]);
@@ -114,6 +116,7 @@ const TH_BASE: React.CSSProperties = {
 
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function TLPerformancePage() {
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [mtdData,  setMtdData]  = useState<MtdListing[]>([]);
   const [otaLive,         setOtaLive]         = useState<Record<string, number>>({});
   const [adjustedOtaLive, setAdjustedOtaLive] = useState<Record<string, number>>({});
@@ -122,6 +125,10 @@ export default function TLPerformancePage() {
   const [tatCounts, setTatCounts] = useState<Record<string, { inTat: number; afterTat: number; avgTat: number | null }>>({});
   const [loading,   setLoading]   = useState(true);
   const [showFormula, setShowFormula] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => d && setSessionUser(d.user));
+  }, []);
 
   useEffect(() => {
     let done = 0;
@@ -150,7 +157,12 @@ export default function TLPerformancePage() {
   const daysDone  = new Date().getDate();
 
   /* ── Build per-TL aggregates ─────────────────────────────────────────── */
-  const tlRows = TEAMS.filter((t) => t.type === "ota").map((team) => {
+  // TLs only see their own team; admins/heads see all
+  const visibleTeams = (sessionUser?.role === "tl")
+    ? TEAMS.filter(t => t.type === "ota" && t.name.toLowerCase() === sessionUser.name.toLowerCase())
+    : TEAMS.filter(t => t.type === "ota");
+
+  const tlRows = visibleTeams.map((team) => {
     const otaMembers = team.members.filter((m) => m.ota);
 
     const liveRates: number[] = [];
@@ -232,7 +244,7 @@ export default function TLPerformancePage() {
           background: "#F5F3FF", border: "1px solid #DDD6FE",
           borderRadius: 20, padding: "2px 10px",
         }}>
-          {TEAMS.filter((t) => t.type === "ota").length} Team Leads · Portfolio View
+          {visibleTeams.length} Team Lead{visibleTeams.length !== 1 ? "s" : ""} · Portfolio View
         </span>
         {loading && <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>Loading…</span>}
       </div>

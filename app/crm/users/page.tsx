@@ -6,9 +6,40 @@ import Link from "next/link";
 const OTA_LIST = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo"];
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
   admin:  { bg: "#FEE2E2", color: "#DC2626" },
+  head:   { bg: "#F5F3FF", color: "#7C3AED" },
   tl:     { bg: "#FEF3C7", color: "#D97706" },
   intern: { bg: "#D1FAE5", color: "#059669" },
 };
+
+// Predefined team members — selecting one auto-fills the form
+const TEAM_MEMBERS = [
+  { name: "Rudra",        ota: "GoMMT",        teamLead: "Abhijeet", role: "intern" },
+  { name: "Mohit",        ota: "Expedia",       teamLead: "Abhijeet", role: "intern" },
+  { name: "Karan",        ota: "Cleartrip",     teamLead: "Jyoti",    role: "intern" },
+  { name: "Abhishek",     ota: "Indigo",        teamLead: "Abhijeet", role: "intern" },
+  { name: "Umesh",        ota: "",              teamLead: "Abhijeet", role: "intern" },
+  { name: "Rahul",        ota: "",              teamLead: "Jyoti",    role: "intern" },
+  { name: "Aman",         ota: "Agoda",         teamLead: "Gourav",   role: "intern" },
+  { name: "Ajeet",        ota: "Yatra",         teamLead: "Gourav",   role: "intern" },
+  { name: "Shrishti",     ota: "Ixigo",         teamLead: "Gourav",   role: "intern" },
+  { name: "Joti",         ota: "Akbar Travels", teamLead: "Gourav",   role: "intern" },
+  { name: "Vipul",        ota: "EaseMyTrip",    teamLead: "Gourav",   role: "intern" },
+  { name: "Gaurav Pandey",ota: "Booking.com",   teamLead: "Ajay",     role: "intern" },
+  { name: "Sadik",        ota: "",              teamLead: "Ajay",     role: "intern" },
+  { name: "Sajjak",       ota: "",              teamLead: "Gourav",   role: "intern" },
+  { name: "Vishal",       ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Ajay Dhama",   ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Yash",         ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Gunjan",       ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Vanshika",     ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Jyoti",        ota: "",              teamLead: "",         role: "tl" },
+  { name: "Gourav",       ota: "",              teamLead: "",         role: "tl" },
+  { name: "Ajay",         ota: "",              teamLead: "",         role: "tl" },
+  { name: "Salim",        ota: "",              teamLead: "",         role: "tl" },
+  { name: "Abhijeet",     ota: "",              teamLead: "",         role: "tl" },
+];
+
+const TL_LIST = ["Jyoti","Gourav","Ajay","Salim","Abhijeet"];
 
 interface User {
   id: string; username: string; name: string; role: string;
@@ -16,6 +47,10 @@ interface User {
 }
 
 const EMPTY_FORM = { username: "", password: "", name: "", role: "intern", ota: "", teamLead: "" };
+
+function autoUsername(name: string) {
+  return name.toLowerCase().replace(/\s+/g, ".");
+}
 
 export default function UsersPage() {
   const [users,   setUsers]   = useState<User[]>([]);
@@ -112,7 +147,26 @@ export default function UsersPage() {
       {/* Add User form */}
       {showForm && (
         <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A", marginBottom: 16 }}>New User</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A", marginBottom: 12 }}>New User</div>
+
+          {/* Quick pick from team */}
+          <div style={{ marginBottom: 16, padding: "10px 14px", background: "#F8FAFC", borderRadius: 9, border: "1px solid #E2E8F0" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 6 }}>Quick Pick from Team</div>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const m = TEAM_MEMBERS.find(x => x.name === e.target.value);
+                if (m) setForm(p => ({ ...p, name: m.name, ota: m.ota, teamLead: m.teamLead, role: m.role, username: autoUsername(m.name) }));
+              }}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}
+            >
+              <option value="">— Select existing team member —</option>
+              {TEAM_MEMBERS.map(m => (
+                <option key={m.name} value={m.name}>{m.name} {m.ota ? `(${m.ota})` : ""} — {m.role === "tl" ? "Team Lead" : `TL: ${m.teamLead}`}</option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {[
               { label: "Username", key: "username", type: "text" },
@@ -134,10 +188,11 @@ export default function UsersPage() {
                   border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
                 <option value="intern">Intern</option>
                 <option value="tl">Team Lead</option>
+                <option value="head">Head</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
-            {form.role === "intern" && (
+            {(form.role === "intern" || form.role === "tl") && (
               <div style={{ flex: "1 1 150px" }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Assigned OTA</div>
                 <select value={form.ota} onChange={(e) => setForm((p) => ({ ...p, ota: e.target.value }))}
@@ -145,6 +200,17 @@ export default function UsersPage() {
                     border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
                   <option value="">— Select OTA —</option>
                   {OTA_LIST.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            )}
+            {form.role === "intern" && (
+              <div style={{ flex: "1 1 150px" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Team Lead</div>
+                <select value={form.teamLead} onChange={(e) => setForm((p) => ({ ...p, teamLead: e.target.value }))}
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 7,
+                    border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                  <option value="">— Select TL —</option>
+                  {TL_LIST.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             )}

@@ -124,8 +124,11 @@ export default function CrmPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>CRM Dashboard</div>
-          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
-            {total} listings • click a property to view details & logs
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+            <span style={{ fontSize: 12, color: "#64748B" }}>{total} listings</span>
+            <Link href="/crm" style={{ fontSize: 11, fontWeight: 600, color: "#2563EB", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>CRM</Link>
+            <Link href="/tasks" style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>Task Manager</Link>
+            <Link href="/performance" style={{ fontSize: 11, fontWeight: 600, color: "#059669", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>Performance</Link>
           </div>
         </div>
         <Link href="/crm/users" style={{
@@ -153,39 +156,8 @@ export default function CrmPage() {
         ))}
       </div>
 
-      {/* OTA Breakdown + Toggles row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 16, alignItems: "start" }}>
-
-        {/* OTA Breakdown */}
-        <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", marginBottom: 10 }}>OTA-wise Breakdown</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {summary?.otaBreakdown.map((ota) => {
-              const color = OTA_COLORS[ota.ota] ?? "#64748B";
-              const pct = ota.total ? Math.round(ota.live / ota.total * 100) : 0;
-              return (
-                <div key={ota.ota} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 70, fontSize: 10, fontWeight: 600, color, flexShrink: 0,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {ota.ota === "Booking.com" ? "BDC" : ota.ota === "Akbar Travels" ? "AKT" : ota.ota === "EaseMyTrip" ? "EMT" : ota.ota}
-                  </div>
-                  <div style={{ flex: 1, height: 6, background: "#F1F5F9", borderRadius: 4, overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.4s" }} />
-                  </div>
-                  <div style={{ fontSize: 10, color: "#64748B", width: 80, flexShrink: 0, textAlign: "right" }}>
-                    <span style={{ fontWeight: 700, color: "#059669" }}>{ota.live}</span>
-                    <span style={{ color: "#CBD5E1" }}> / </span>
-                    <span>{ota.total}</span>
-                    <span style={{ color: "#DC2626", marginLeft: 4 }}>{ota.notLive > 0 ? `·${ota.notLive}✗` : ""}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Toggle buttons */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* Toggles row */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <button
             onClick={() => { setShowTasks(t => !t); setShowActivity(false); }}
             style={{
@@ -219,7 +191,6 @@ export default function CrmPage() {
           >
             ◷ Recent Activity
           </button>
-        </div>
       </div>
 
       {/* Tasks Preview Panel */}
