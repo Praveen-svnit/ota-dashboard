@@ -167,7 +167,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           <SectionHeader label="Team & Workflow" />
           <NavLink icon="◉" label="Team"             href="/team" />
           <NavLink icon="◧" label="Workflow"          href="/workflow" />
-          <NavLink icon="◎" label="IC Performance"   href="/performance" />
+          <NavLink icon="◎" label="Team Performance"  href="/performance" />
           <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
         </>)}
 
