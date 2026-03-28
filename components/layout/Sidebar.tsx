@@ -155,7 +155,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {/* Dashboards */}
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
-        <NavLink icon="◉" label="Production Dashboard 2" href="/production-dashboard-2" />
+        <NavLink icon="◉" label="OTA Analytics" href="/ota-analytics" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
         <NavLink icon="✦" label="Today's Assigned Tasks" href="/todays-assigned-tasks" />
 

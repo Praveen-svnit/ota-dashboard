@@ -221,7 +221,7 @@ export default function ProductionDashboard2View() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/production-dashboard-2")
+    fetch("/api/ota-analytics")
       .then((response) => response.json())
       .then((json) => {
         if (json.error) throw new Error(json.error);
@@ -286,7 +286,7 @@ export default function ProductionDashboard2View() {
     window.dispatchEvent(
       new CustomEvent("dashboard-tasks:open", {
         detail: {
-          sourceRoute: "/production-dashboard-2",
+          sourceRoute: "/ota-analytics",
           taskType: "dashboard",
           ...prefill,
         },
@@ -319,7 +319,7 @@ export default function ProductionDashboard2View() {
     setCopilotLoading(true);
 
     try {
-      const response = await fetch("/api/production-dashboard-2-ai", {
+      const response = await fetch("/api/ota-analytics-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -347,14 +347,14 @@ export default function ProductionDashboard2View() {
   }
 
   if (loading) {
-    return <div style={{ padding: "28px 24px", color: "#64748B", fontSize: 13 }}>Loading Production Dashboard 2...</div>;
+    return <div style={{ padding: "28px 24px", color: "#64748B", fontSize: 13 }}>Loading OTA Analytics...</div>;
   }
 
   if (error || !snapshot) {
     return (
       <div style={{ padding: "28px 24px" }}>
         <div style={{ color: "#B91C1C", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12, padding: 16 }}>
-          Unable to load Production Dashboard 2: {error ?? "Unknown error"}
+          Unable to load OTA Analytics: {error ?? "Unknown error"}
         </div>
       </div>
     );
@@ -382,7 +382,7 @@ export default function ProductionDashboard2View() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ maxWidth: 780 }}>
             <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.72)" }}>
-              Production Dashboard 2
+              OTA Analytics
             </div>
             <h1 style={{ margin: "10px 0 8px", fontSize: 34, lineHeight: 1.05, fontWeight: 900 }}>
               Executive analytics, risk intelligence, and AI diagnosis in one view

@@ -39,7 +39,7 @@ export default function TodaysAssignedTasksView({ initialSourceAnchor = null }: 
   function openTaskSource(task: DashboardTaskRecord) {
     const href = task.sourceRoute
       ? `${task.sourceRoute}${task.sourceAnchor ? `#${task.sourceAnchor}` : ""}`
-      : "/production-dashboard-2";
+      : "/ota-analytics";
     window.location.href = href;
   }
 
@@ -83,7 +83,7 @@ export default function TodaysAssignedTasksView({ initialSourceAnchor = null }: 
           One execution board for every task raised across the dashboard
         </h1>
         <p style={{ margin: 0, maxWidth: 860, fontSize: 13, lineHeight: 1.7, color: "rgba(255,255,255,0.84)" }}>
-          This board consolidates assignments from Production Dashboard 2, listing pages, property CRM, and the global task launcher. Owners can move work to in progress without a comment, but pending, supervisor attention, and completion still require a comment trail.
+          This board consolidates assignments from OTA Analytics, listing pages, property CRM, and the global task launcher. Owners can move work to in progress without a comment, but pending, supervisor attention, and completion still require a comment trail.
         </p>
       </div>
 

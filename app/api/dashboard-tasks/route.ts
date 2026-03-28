@@ -19,7 +19,7 @@ function localToday() {
 
 function deriveSourcePageLabel(route: string | null | undefined) {
   if (!route) return "General";
-  if (route === "/production-dashboard-2") return "Production Dashboard 2";
+  if (route === "/production-dashboard-2" || route === "/ota-analytics") return "OTA Analytics";
   if (route === "/todays-assigned-tasks") return "Today's Assigned Tasks";
   if (route === "/") return "Production Dashboard";
   if (route.startsWith("/crm")) return "Property CRM";
@@ -174,7 +174,7 @@ export async function POST(req: Request) {
   const explicitAssignedName = typeof body.assignedName === "string" && body.assignedName.trim() ? body.assignedName.trim() : null;
   const member = findTeamMemberByName(explicitAssignedName);
   const assignedName = explicitAssignedName ?? member?.name ?? null;
-  const sourceRoute = typeof body.sourceRoute === "string" && body.sourceRoute.trim() ? body.sourceRoute.trim() : "/production-dashboard-2";
+  const sourceRoute = typeof body.sourceRoute === "string" && body.sourceRoute.trim() ? body.sourceRoute.trim() : "/ota-analytics";
   const sourceLabel = typeof body.sourceLabel === "string" && body.sourceLabel.trim() ? body.sourceLabel.trim() : "Dashboard task";
   const sourceAnchor = typeof body.sourceAnchor === "string" && body.sourceAnchor.trim() ? body.sourceAnchor.trim() : null;
   const sourceSection = typeof body.sourceSection === "string" && body.sourceSection.trim() ? body.sourceSection.trim() : null;
