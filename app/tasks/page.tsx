@@ -132,13 +132,21 @@ export default function TasksPage() {
           <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Task Manager</div>
           <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>All tasks across properties</div>
         </div>
-        <Link href="/crm" style={{
-          fontSize: 12, fontWeight: 600, color: "#64748B",
-          background: "#F1F5F9", border: "1px solid #E2E8F0",
-          borderRadius: 8, padding: "7px 14px", textDecoration: "none",
-        }}>
-          ← Back to CRM
-        </Link>
+        {/* Tab strip */}
+        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+          {([
+            ["CRM",          "/crm",         false],
+            ["Task Manager", "/tasks",        true ],
+            ["Performance",  "/performance",  false],
+          ] as [string, string, boolean][]).map(([label, href, active]) => (
+            <Link key={label} href={href} style={{
+              padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap",
+              background: active ? "#0F172A" : "transparent",
+              color: active ? "#FFFFFF" : "#64748B",
+            }}>{label}</Link>
+          ))}
+        </div>
       </div>
 
       {/* Summary tiles */}

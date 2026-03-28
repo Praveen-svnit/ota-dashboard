@@ -16,6 +16,28 @@ export async function GET(req: Request) {
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
+  // ── Role-based access control ──────────────────────────────
+  if (session.role === "intern") {
+    // Intern: only their own tasks
+    conditions.push("t.assignedTo = ?");
+    params.push(session.id);
+
+  } else if (session.role === "tl") {
+    // TL: tasks assigned to their interns
+    const internRows = db.prepare(
+      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
+    ).all(session.name) as { id: string }[];
+
+    if (internRows.length === 0) {
+      return Response.json({ tasks: [], counts: [], assignees: [] });
+    }
+    const placeholders = internRows.map(() => "?").join(",");
+    conditions.push(`t.assignedTo IN (${placeholders})`);
+    internRows.forEach(r => params.push(r.id));
+  }
+  // head / admin: no role restriction
+
+  // ── User-driven filters ────────────────────────────────────
   if (status !== "all") {
     conditions.push("t.status = ?");
     params.push(status);
@@ -35,6 +57,24 @@ export async function GET(req: Request) {
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
+  // Build a role-scoped base filter for counts/assignees (without status/priority/assignee/search)
+  const roleConditions: string[] = [];
+  const roleParams: (string | number)[] = [];
+  if (session.role === "intern") {
+    roleConditions.push("t.assignedTo = ?");
+    roleParams.push(session.id);
+  } else if (session.role === "tl") {
+    const internRows = db.prepare(
+      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
+    ).all(session.name) as { id: string }[];
+    if (internRows.length > 0) {
+      const placeholders = internRows.map(() => "?").join(",");
+      roleConditions.push(`t.assignedTo IN (${placeholders})`);
+      internRows.forEach(r => roleParams.push(r.id));
+    }
+  }
+  const roleWhere = roleConditions.length ? "WHERE " + roleConditions.join(" AND ") : "";
+
   const tasks = db.prepare(`
     SELECT t.id, t.propertyId, t.title, t.description, t.status, t.priority,
            t.assignedTo, t.assignedName, t.dueDate, t.createdAt, t.completedAt,
@@ -53,17 +93,16 @@ export async function GET(req: Request) {
     LIMIT 200
   `).all(...params);
 
-  // Counts for summary
   const counts = db.prepare(`
-    SELECT status, priority, COUNT(*) as cnt FROM Tasks GROUP BY status, priority
-  `).all() as { status: string; priority: string; cnt: number }[];
+    SELECT status, priority, COUNT(*) as cnt FROM Tasks t ${roleWhere} GROUP BY status, priority
+  `).all(...roleParams) as { status: string; priority: string; cnt: number }[];
 
   const assignees = db.prepare(`
     SELECT DISTINCT COALESCE(NULLIF(t.assignedName,''), u.name) as name
     FROM Tasks t LEFT JOIN Users u ON u.id = t.assignedTo
-    WHERE name IS NOT NULL AND name != ''
+    ${roleWhere ? roleWhere + " AND" : "WHERE"} name IS NOT NULL AND name != ''
     ORDER BY name
-  `).all() as { name: string }[];
+  `).all(...roleParams) as { name: string }[];
 
   return Response.json({ tasks, counts, assignees });
 }

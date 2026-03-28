@@ -173,7 +173,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
         setLogs(d.logs ?? []);
         if (d.listings?.length) {
           const preferred = d.listings.find((l: { ota: string }) => l.ota === defaultOta);
-          setActiveOta(preferred ? preferred.ota : d.listings[0].ota);
+          setActiveOta(preferred ? preferred.ota : "__property__");
         }
       })
       .finally(() => setLoading(false));
@@ -299,8 +299,11 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     <div style={{ padding: 40, textAlign: "center", color: "#DC2626" }}>Property not found</div>
   );
 
-  const activeListing = listings.find((l) => l.ota === activeOta) ?? null;
-  const otaLogs = activeListing
+  const isPropertyView = activeOta === "__property__";
+  const activeListing = isPropertyView ? null : (listings.find((l) => l.ota === activeOta) ?? null);
+  const otaLogs = isPropertyView
+    ? logs
+    : activeListing
     ? logs.filter((l) => Number(l.otaListingId) === Number(activeListing.id))
     : [];
 
@@ -332,8 +335,20 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
         {/* LEFT: OTA tabs + detail + activity log */}
         <div style={{ flex: 1, minWidth: 0 }}>
 
-          {/* OTA + GMB Tab bar */}
+          {/* Tab bar: Property + OTA tabs */}
           <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+            {/* Property tab */}
+            <button onClick={() => setActiveOta("__property__")}
+              style={{
+                padding: "6px 14px", borderRadius: 20,
+                border: isPropertyView ? "2px solid #0F172A" : "1px solid #E2E8F0",
+                background: isPropertyView ? "#0F172A" : "#FFF",
+                color: isPropertyView ? "#FFFFFF" : "#64748B",
+                fontSize: 12, fontWeight: isPropertyView ? 700 : 500, cursor: "pointer",
+              }}>
+              Property
+            </button>
+            {/* OTA tabs */}
             {listings.map((l) => {
               const color = OTA_COLORS[l.ota] ?? "#64748B";
               const active = activeOta === l.ota;
@@ -350,6 +365,38 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
               );
             })}
           </div>
+
+          {/* Property overview (shown when Property tab is active) */}
+          {isPropertyView && (
+            <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", marginBottom: 14, overflow: "hidden" }}>
+              <div style={{ padding: "12px 18px", borderBottom: "1px solid #F1F5F9", background: "linear-gradient(135deg, #0F172A08, #0F172A03)" }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#0F172A" }}>All OTA Overview</span>
+                <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 10 }}>{listings.length} listings</span>
+              </div>
+              <div style={{ padding: "14px 18px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {listings.map((l) => {
+                  const color = OTA_COLORS[l.ota] ?? "#64748B";
+                  const sc = STATUS_COLORS[l.status?.toLowerCase()] ?? { bg: "#F1F5F9", color: "#64748B" };
+                  return (
+                    <button key={l.ota} onClick={() => setActiveOta(l.ota)}
+                      style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px",
+                        borderRadius: 10, border: `1px solid ${color}30`, background: color + "06",
+                        cursor: "pointer", minWidth: 130, alignItems: "flex-start", textAlign: "left" }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color }}>{l.ota}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                        background: sc.bg, color: sc.color }}>{l.status || "—"}</span>
+                      {l.subStatus && (
+                        <span style={{ fontSize: 9, color: "#94A3B8", lineHeight: 1.3 }}>{l.subStatus}</span>
+                      )}
+                      {l.liveDate && (
+                        <span style={{ fontSize: 9, color: "#94A3B8" }}>Live: {l.liveDate}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Active OTA detail card */}
           {activeListing && (() => {
@@ -856,7 +903,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
               display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Activity Log</span>
               <span style={{ fontSize: 10, color: "#94A3B8" }}>
-                {activeListing ? activeListing.ota : "All"} · {otaLogs.length} entries
+                {isPropertyView ? "All OTAs" : (activeListing ? activeListing.ota : "—")} · {otaLogs.length} entries
               </span>
             </div>
             <div style={{ padding: "8px 0" }}>
@@ -877,9 +924,22 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>
-                          {log.userName || "System"}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>
+                            {log.userName || "System"}
+                          </span>
+                          {isPropertyView && log.otaListingId && (() => {
+                            const l = listings.find(x => Number(x.id) === Number(log.otaListingId));
+                            if (!l) return null;
+                            const c = OTA_COLORS[l.ota] ?? "#64748B";
+                            return (
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
+                                background: c + "18", color: c }}>
+                                {l.ota}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
                       </div>
                       {log.action === "note_added" ? (

@@ -60,6 +60,9 @@ function initSchema(db: Database.Database) {
   try { db.exec("ALTER TABLE Property ADD COLUMN bdc_id TEXT"); } catch {}
   try { db.exec("ALTER TABLE Property ADD COLUMN genius_status TEXT"); } catch {}
   try { db.exec("ALTER TABLE Property ADD COLUMN genius_last_checked TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Users ADD COLUMN email TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Users ADD COLUMN phone TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Users ADD COLUMN empId TEXT"); } catch {}
 
   // RnsStay / RnsSold — created by ota-inv-db sync scripts; ensure they exist
   db.exec(`

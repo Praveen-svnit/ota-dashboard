@@ -153,11 +153,16 @@ export default function PerformancePage() {
   const [dod,          setDod]          = useState<{ labels: string[]; byOta: Record<string, number[]> }>({ labels: [], byOta: {} });
   const [loading,      setLoading]      = useState(true);
   const [activeTeam,   setActiveTeam]   = useState("all");
+  const [sessionUser,  setSessionUser]  = useState<{ name: string; role: string; ota: string | null } | null>(null);
   const [showL3mDetail,  setShowL3mDetail]  = useState(false);
   const [formulaHover,   setFormulaHover]   = useState(false);
   const [listingView,    setListingView]    = useState<"mom" | "dod">("mom");
   const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | "reports1" | "reports2">("summary");
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setSessionUser(d.user ?? null));
+  }, []);
 
   useEffect(() => {
     let done = 0;
@@ -209,13 +214,30 @@ export default function PerformancePage() {
   };
   const last3Labels = l12m.months.slice(-4, -1); // [LM-2, LM-1, LM]
 
-  const visibleTeams = TEAMS.filter((t) => activeTeam === "all" || t.name === activeTeam);
+  // Role-based team filtering
+  const roleFilteredTeams = (() => {
+    if (!sessionUser) return TEAMS;
+    if (sessionUser.role === "tl") {
+      return TEAMS.filter(t => t.name.toLowerCase() === sessionUser.name.toLowerCase());
+    }
+    if (sessionUser.role === "intern") {
+      // Show only the team that contains this intern (matched by OTA or name)
+      return TEAMS.filter(t => t.members.some(m =>
+        m.name.toLowerCase() === sessionUser.name.toLowerCase() ||
+        (m.ota && sessionUser.ota && m.ota === sessionUser.ota)
+      ));
+    }
+    return TEAMS; // head / admin: all
+  })();
+
+  const visibleTeams = roleFilteredTeams.filter((t) => activeTeam === "all" || t.name === activeTeam);
 
   return (
     <div style={{ padding: "24px 28px", background: "#F8FAFC", minHeight: "100vh" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>IC Performance</span>
         {/* Tab toggle */}
         <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
@@ -242,12 +264,28 @@ export default function PerformancePage() {
         </div>
         {loading && <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>Loading…</span>}
       </div>
+        {/* Nav tab strip */}
+        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+          {([
+            ["CRM",          "/crm",         false],
+            ["Task Manager", "/tasks",        false],
+            ["Performance",  "/performance",  true ],
+          ] as [string, string, boolean][]).map(([label, href, active]) => (
+            <a key={label} href={href} style={{
+              padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap", display: "inline-block",
+              background: active ? "#0F172A" : "transparent",
+              color: active ? "#FFFFFF" : "#64748B",
+            }}>{label}</a>
+          ))}
+        </div>
+      </div>
 
       {perfTab === "summary" && (<>
 
       {/* Team filter */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-        {["all", ...TEAMS.map((t) => t.name)].map((t) => {
+        {(sessionUser?.role === "tl" || sessionUser?.role === "intern" ? [] : ["all"]).concat(roleFilteredTeams.map((t) => t.name)).map((t) => {
           const team  = TEAMS.find((x) => x.name === t);
           const color = team?.color ?? "#6366F1";
           const active = activeTeam === t;

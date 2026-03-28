@@ -163,7 +163,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Property Manager" />
         <NavLink icon="≡" label="Property Status" href="/listings" />
         <NavLink icon="◈" label="Property CRM"    href="/crm" />
-        <NavLink icon="◎" label="Task Manager"    href="/tasks" />
 
         {/* Team */}
         {(sessionUser?.role === "admin" || sessionUser?.role === "head" || sessionUser?.role === "tl") && (<>

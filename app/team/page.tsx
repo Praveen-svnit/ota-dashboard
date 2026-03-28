@@ -1,309 +1,584 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useState, Fragment } from "react";
 import { OTA_COLORS } from "@/lib/constants";
 
-interface DbUser { id: string; name: string; role: string; ota: string | null; teamLead: string | null }
-interface DbTeamData {
-  groups: Record<string, { tl: DbUser | null; members: DbUser[] }>;
-  admins: DbUser[];
-}
-
-/* ══════════════════════════════════════════════════════════════
-   TEAM DATA
-══════════════════════════════════════════════════════════════ */
+/* ── Constants ──────────────────────────────────────────────── */
 const OTA_SHORT: Record<string, string> = {
   "GoMMT": "GoMMT", "Booking.com": "BDC", "Agoda": "Agoda",
   "Expedia": "Exp", "Cleartrip": "CT", "Yatra": "Yatra",
   "Ixigo": "Ixigo", "Akbar Travels": "AKT", "EaseMyTrip": "EMT", "Indigo": "Indigo",
 };
 
-interface Intern { name: string; otas: string[]; pip?: boolean; new?: boolean; adhoc?: boolean; role?: string; priority?: "P1" | "P2" | "P3" }
-interface TeamLead { name: string; otas: string[]; color: string; interns: Intern[] }
-
-const CURRENT_LEADS: TeamLead[] = [
-  {
-    name: "Jyoti", color: "#E83F6F", otas: ["GoMMT", "Cleartrip", "Expedia", "Indigo"],
-    interns: [
-      { name: "Rudra",    otas: ["GoMMT"],      priority: "P1" },
-      { name: "Mohit",    otas: ["Expedia"],    priority: "P1" },
-      { name: "Karan",    otas: ["Cleartrip"],  priority: "P3" },
-      { name: "Abhishek", otas: ["Indigo"],     priority: "P2" },
-      { name: "Umesh",    otas: [], role: "Ria Travels", priority: "P2" },
-      { name: "Rahul",    otas: [],             priority: "P3", pip: true },
-    ],
-  },
-  {
-    name: "Gourav", color: "#F59E0B", otas: ["Agoda", "Yatra", "Ixigo", "Akbar Travels", "EaseMyTrip"],
-    interns: [
-      { name: "Aman",     otas: ["Agoda"],          priority: "P1" },
-      { name: "Ajeet",    otas: ["Yatra"],           priority: "P1" },
-      { name: "Shrishti", otas: ["Ixigo"],           priority: "P3", pip: true },
-      { name: "Joti",     otas: ["Akbar Travels"],   priority: "P1" },
-      { name: "Vipul",    otas: ["EaseMyTrip"],      priority: "P1" },
-    ],
-  },
-  {
-    name: "Ajay", color: "#10B981", otas: ["Booking.com"],
-    interns: [
-      { name: "Gaurav Pandey", otas: ["Booking.com"], priority: "P1" },
-      { name: "Sadik",         otas: [], pip: true, role: "BDC Content", priority: "P3" },
-      { name: "Sajjak",        otas: [], role: "BDC Content",             priority: "P2" },
-    ],
-  },
-  {
-    name: "Salim", color: "#8B5CF6", otas: [],
-    interns: [
-      { name: "Karan",      otas: [], role: "FH Onboarding" },
-      { name: "Vishal",     otas: [], role: "FH Listing",              priority: "P1" },
-      { name: "Ajay Dhama", otas: [], role: "FH Images and GMB Images", priority: "P1" },
-      { name: "Yash",       otas: [], role: "OTA RLD",    priority: "P1" },
-      { name: "Gunjan",     otas: [], role: "OTA Images",  priority: "P2" },
-      { name: "Vanshika",   otas: [], role: "OTA Images",  priority: "P1" },
-    ],
-  },
+const OTA_LIST = [
+  "GoMMT","Booking.com","Agoda","Expedia","Cleartrip",
+  "Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo",
 ];
 
-const PROPOSED_LEADS: TeamLead[] = [
-  {
-    name: "Gourav", color: "#F59E0B",
-    otas: ["Agoda", "Yatra", "Akbar Travels", "EaseMyTrip", "Booking.com"],
-    interns: [
-      { name: "Aman",          otas: ["Agoda"],          priority: "P1" },
-      { name: "Ajeet",         otas: ["Yatra"],           priority: "P1" },
-      { name: "Joti",          otas: ["Akbar Travels"],   priority: "P1" },
-      { name: "Vipul",         otas: ["EaseMyTrip"],      priority: "P1" },
-      { name: "Gaurav Pandey", otas: ["Booking.com"],     priority: "P1" },
-      { name: "Sajjak",        otas: [], role: "BDC Content", priority: "P2" },
-    ],
-  },
-  {
-    name: "Abhijeet", color: "#6366F1",
-    otas: ["GoMMT", "Expedia", "Indigo", "Cleartrip", "Ixigo"],
-    interns: [
-      { name: "Rudra",    otas: ["GoMMT"],      priority: "P1" },
-      { name: "Mohit",    otas: ["Expedia"],    priority: "P1" },
-      { name: "Abhishek", otas: ["Indigo"],     priority: "P2" },
-      { name: "Umesh",    otas: [], role: "Ria Travels", priority: "P2" },
-      { name: "Jyoti",    otas: ["Cleartrip", "Ixigo"], role: "Sub-TL", priority: "P1" },
-      { name: "Karan",    otas: ["Cleartrip"], priority: "P3" },
-      { name: "Shrishti", otas: ["Ixigo"],     priority: "P3", pip: true },
-      { name: "Vishal",     otas: [], role: "FH Listing",              priority: "P1" },
-      { name: "Ajay Dhama", otas: [], role: "FH Images and GMB Images", priority: "P1" },
-      { name: "Yash",       otas: [], role: "OTA RLD",    priority: "P1" },
-      { name: "Gunjan",     otas: [], role: "OTA Images",  priority: "P2" },
-      { name: "Vanshika",   otas: [], role: "OTA Images",  priority: "P1" },
-    ],
-  },
-];
-
-/* ══════════════════════════════════════════════════════════════
-   MINI COMPONENTS
-══════════════════════════════════════════════════════════════ */
-function Avatar({ name, color, size = 28, fontSize = 10 }: { name: string; color: string; size?: number; fontSize?: number }) {
-  return (
-    <span style={{ width: size, height: size, borderRadius: "50%", background: color, color: "#FFF", fontSize, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, letterSpacing: 0 }}>
-      {name[0].toUpperCase()}
-    </span>
-  );
-}
-
-function OtaPill({ ota }: { ota: string }) {
-  const color = OTA_COLORS[ota] ?? "#64748B";
-  return (
-    <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: color + "18", color, border: `1px solid ${color}35` }}>
-      {OTA_SHORT[ota] ?? ota}
-    </span>
-  );
-}
-
-function Badge({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
-  return <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 10, color, background: bg, border: `1px solid ${border}` }}>{label}</span>;
-}
-
-function TeamCard({ lead, isProposed = false }: { lead: TeamLead; isProposed?: boolean }) {
-  return (
-    <div style={{ background: "#FFF", borderRadius: 14, overflow: "hidden", border: isProposed ? `1.5px dashed ${lead.color}60` : "1px solid #E2E8F0", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-      {/* TL header strip */}
-      <div style={{ background: `linear-gradient(135deg, ${lead.color}18 0%, ${lead.color}08 100%)`, borderBottom: `1px solid ${lead.color}20`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: "50%", background: isProposed && lead.name === "New TL" ? "transparent" : lead.color, color: isProposed && lead.name === "New TL" ? lead.color : "#FFF", border: isProposed && lead.name === "New TL" ? `2px dashed ${lead.color}` : "none", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: lead.name === "New TL" ? "none" : `0 3px 8px ${lead.color}50`, flexShrink: 0 }}>
-          {lead.name[0]}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{lead.name}</span>
-            <span style={{ fontSize: 8, fontWeight: 700, color: "#FFF", background: lead.color, borderRadius: 4, padding: "1px 5px", letterSpacing: "0.05em" }}>TL</span>
-            {isProposed && lead.name === "New TL" && (
-              <span style={{ fontSize: 8, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 4, padding: "1px 5px" }}>TBD</span>
-            )}
-          </div>
-          {lead.otas.length > 0 ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 4 }}>
-              {lead.otas.map((ota) => <OtaPill key={ota} ota={ota} />)}
-            </div>
-          ) : (
-            <span style={{ fontSize: 10, color: "#94A3B8", fontStyle: "italic" }}>GMB / Ops</span>
-          )}
-        </div>
-        <span style={{ fontSize: 10, fontWeight: 700, color: lead.color, background: lead.color + "18", border: `1px solid ${lead.color}30`, borderRadius: 20, padding: "2px 8px", flexShrink: 0 }}>
-          {lead.interns.length}
-        </span>
-      </div>
-
-      {/* Intern list */}
-      <div style={{ padding: "8px 14px 10px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {lead.interns.map((intern, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 8, background: "#F8FAFC" }}>
-              <Avatar name={intern.name} color={lead.color + "99"} size={24} fontSize={9} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#1E293B" }}>{intern.name}</span>
-                  {intern.priority === "P1" && <Badge label="P1" color="#16A34A" bg="#DCFCE7" border="#86EFAC" />}
-                  {intern.priority === "P2" && <Badge label="P2" color="#D97706" bg="#FEF3C7" border="#FCD34D" />}
-                  {intern.priority === "P3" && <Badge label="P3" color="#DC2626" bg="#FEE2E2" border="#FCA5A5" />}
-                  {intern.pip   && <Badge label="PIP"     color="#EF4444" bg="#FEF2F2" border="#FECACA" />}
-                  {intern.adhoc && <Badge label="Ad-Hoc"  color="#6366F1" bg="#EEF2FF" border="#C7D2FE" />}
-                  {intern.new   && <Badge label="New"     color="#10B981" bg="#D1FAE5" border="#A7F3D0" />}
-                </div>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                {intern.role ? (
-                  <span style={{ fontSize: 9, fontWeight: 600, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 6, padding: "2px 7px" }}>
-                    {intern.role}
-                  </span>
-                ) : intern.otas.length > 0 ? (
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                    {intern.otas.map((ota) => <OtaPill key={ota} ota={ota} />)}
-                  </div>
-                ) : (
-                  <span style={{ fontSize: 9, color: "#94A3B8" }}>All OTAs</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PAGE
-══════════════════════════════════════════════════════════════ */
-const TL_COLORS: Record<string, string> = {
-  "Gourav": "#F59E0B", "Abhijeet": "#6366F1", "Jyoti": "#E83F6F",
-  "Ajay": "#10B981", "Salim": "#8B5CF6",
+const ROLE_ORDER: Record<string, number> = { admin: 0, head: 1, tl: 2, intern: 3 };
+const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
+  admin:  { bg: "#FEE2E2", color: "#DC2626" },
+  head:   { bg: "#F5F3FF", color: "#7C3AED" },
+  tl:     { bg: "#FEF3C7", color: "#D97706" },
+  intern: { bg: "#D1FAE5", color: "#059669" },
 };
 
-export default function TeamPage() {
-  const [dbTeam, setDbTeam] = useState<DbTeamData | null>(null);
-  const [view, setView]     = useState<"live" | "structure">("live");
+const TL_COLORS: Record<string, string> = {
+  Jyoti: "#E83F6F", Gourav: "#F59E0B", Ajay: "#10B981",
+  Salim: "#8B5CF6", Abhijeet: "#6366F1",
+};
 
+const TEAM_MEMBERS = [
+  { name: "Rudra",        ota: "GoMMT",        teamLead: "Abhijeet", role: "intern" },
+  { name: "Mohit",        ota: "Expedia",       teamLead: "Abhijeet", role: "intern" },
+  { name: "Karan",        ota: "Cleartrip",     teamLead: "Jyoti",    role: "intern" },
+  { name: "Abhishek",     ota: "Indigo",        teamLead: "Abhijeet", role: "intern" },
+  { name: "Umesh",        ota: "",              teamLead: "Abhijeet", role: "intern" },
+  { name: "Rahul",        ota: "",              teamLead: "Jyoti",    role: "intern" },
+  { name: "Aman",         ota: "Agoda",         teamLead: "Gourav",   role: "intern" },
+  { name: "Ajeet",        ota: "Yatra",         teamLead: "Gourav",   role: "intern" },
+  { name: "Shrishti",     ota: "Ixigo",         teamLead: "Gourav",   role: "intern" },
+  { name: "Joti",         ota: "Akbar Travels", teamLead: "Gourav",   role: "intern" },
+  { name: "Vipul",        ota: "EaseMyTrip",    teamLead: "Gourav",   role: "intern" },
+  { name: "Gaurav Pandey",ota: "Booking.com",   teamLead: "Ajay",     role: "intern" },
+  { name: "Sadik",        ota: "",              teamLead: "Ajay",     role: "intern" },
+  { name: "Sajjak",       ota: "",              teamLead: "Gourav",   role: "intern" },
+  { name: "Vishal",       ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Ajay Dhama",   ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Yash",         ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Gunjan",       ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Vanshika",     ota: "",              teamLead: "Salim",    role: "intern" },
+  { name: "Jyoti",        ota: "",              teamLead: "",         role: "tl" },
+  { name: "Gourav",       ota: "",              teamLead: "",         role: "tl" },
+  { name: "Ajay",         ota: "",              teamLead: "",         role: "tl" },
+  { name: "Salim",        ota: "",              teamLead: "",         role: "tl" },
+  { name: "Abhijeet",     ota: "",              teamLead: "",         role: "tl" },
+];
+
+/* ── Types ──────────────────────────────────────────────────── */
+interface DbUser { id: string; name: string; role: string; ota: string | null; teamLead: string | null }
+interface DbTeamData {
+  groups: Record<string, { tl: DbUser | null; members: DbUser[] }>;
+  admins: DbUser[];
+}
+interface UserRow {
+  id: string; username: string; name: string; role: string;
+  ota: string | null; teamLead: string | null; active: number; createdAt: string;
+  email: string | null; phone: string | null; empId: string | null;
+}
+
+const EMPTY_FORM = {
+  username: "", password: "", name: "", role: "intern",
+  ota: "", teamLead: "", email: "", phone: "", empId: "",
+};
+function autoUsername(n: string) { return n.toLowerCase().replace(/\s+/g, "."); }
+
+/* ── Page ───────────────────────────────────────────────────── */
+export default function TeamPage() {
+  const [view, setView] = useState<"manage" | "structure">("manage");
+
+  /* ── Team Structure state ── */
+  const [dbTeam, setDbTeam] = useState<DbTeamData | null>(null);
+
+  /* ── Manage Users state ── */
+  const [users,    setUsers]    = useState<UserRow[]>([]);
+  const [uLoading, setULoading] = useState(false);
+  const [uError,   setUError]   = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [form,     setForm]     = useState(EMPTY_FORM);
+  const [saving,   setSaving]   = useState(false);
+  const [formErr,  setFormErr]  = useState("");
+  const [resetId,  setResetId]  = useState<string | null>(null);
+  const [resetPw,  setResetPw]  = useState("");
+  // Edit user
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", empId: "", role: "", ota: "", teamLead: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  // Change TL inline
+  const [changingTL, setChangingTL] = useState<string | null>(null); // user id
+
+  /* ── Load data ── */
   useEffect(() => {
     fetch("/api/team").then(r => r.json()).then(setDbTeam);
   }, []);
 
-  const proposedTotal = PROPOSED_LEADS.reduce((n, t) => n + t.interns.length, 0);
+  function loadUsers() {
+    setULoading(true);
+    setUError("");
+    fetch("/api/crm/users")
+      .then(async r => {
+        if (r.status === 403) throw new Error("Admin access required");
+        if (!r.ok) throw new Error(`Server error (${r.status})`);
+        return r.json();
+      })
+      .then(d => setUsers(d.users ?? []))
+      .catch(e => setUError(e.message))
+      .finally(() => setULoading(false));
+  }
+
+  useEffect(() => { loadUsers(); }, []);
+
+  /* ── Active TLs derived from users ── */
+  const activeTLs = users.filter(u => (u.role === "tl" || u.role === "head") && u.active);
+
+  /* ── Actions ── */
+  async function createUser() {
+    setFormErr("");
+    if (!form.username || !form.password || !form.name || !form.email || !form.phone) {
+      setFormErr("Username, password, name, email, and phone are required");
+      return;
+    }
+    setSaving(true);
+    const res  = await fetch("/api/crm/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { setFormErr(json.error ?? "Error"); return; }
+    setShowForm(false); setForm(EMPTY_FORM); loadUsers();
+  }
+
+  async function toggleActive(u: UserRow) {
+    await fetch("/api/crm/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, active: u.active ? 0 : 1 }) });
+    loadUsers();
+  }
+
+  async function resetPassword() {
+    if (!resetPw.trim() || !resetId) return;
+    await fetch("/api/crm/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: resetId, password: resetPw }) });
+    setResetId(null); setResetPw("");
+  }
+
+  async function saveEdit() {
+    if (!editUser) return;
+    setEditSaving(true);
+    await fetch("/api/crm/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editUser.id, ...editForm }),
+    });
+    setEditSaving(false);
+    setEditUser(null);
+    loadUsers();
+  }
+
+  async function changeTL(userId: string, newTL: string) {
+    await fetch("/api/crm/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: userId, teamLead: newTL || null }) });
+    setChangingTL(null);
+    loadUsers();
+  }
+
+  /* ── Sorted users: admin → head → tl → intern ── */
+  const sortedUsers = [...users].sort((a, b) => {
+    const ro = (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9);
+    if (ro !== 0) return ro;
+    return a.name.localeCompare(b.name);
+  });
+
+  const TH = { padding: "9px 12px", fontSize: 10, fontWeight: 700, color: "#64748B", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", textAlign: "left" as const, whiteSpace: "nowrap" as const };
+  const TD = { padding: "9px 12px", fontSize: 12, borderBottom: "1px solid #F1F5F9", verticalAlign: "middle" as const };
+
   const liveTotal = dbTeam ? Object.values(dbTeam.groups).reduce((n, g) => n + g.members.length, 0) : 0;
 
   return (
     <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Team</div>
           <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
-            {view === "live" ? `${liveTotal} active members` : `${proposedTotal} members in structure`}
+            {view === "manage" ? `${users.length} users` : `${liveTotal} active members`}
           </div>
         </div>
-        <Link href="/crm/users" style={{
-          fontSize: 12, fontWeight: 600, color: "#6366F1",
-          background: "#EEF2FF", border: "1px solid #C7D2FE",
-          borderRadius: 8, padding: "7px 14px", textDecoration: "none",
-        }}>
-          👤 Manage Users
-        </Link>
+
+        {/* Tab strip */}
+        <div style={{ display: "flex", gap: 2, background: "#F1F5F9", borderRadius: 10, padding: 4 }}>
+          {([["manage", "Manage Users"], ["structure", "Team Structure"]] as [string, string][]).map(([v, l]) => (
+            <button key={v} onClick={() => setView(v as "manage" | "structure")} style={{
+              padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+              border: "none", cursor: "pointer",
+              background: view === v ? "#0F172A" : "transparent",
+              color: view === v ? "#FFFFFF" : "#64748B",
+            }}>{l}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Tab strip */}
-      <div style={{
-        display: "flex", gap: 2, marginBottom: 20,
-        background: "#F1F5F9", borderRadius: 10, padding: 4, width: "fit-content",
-      }}>
-        {([["live","Live (DB)"],["structure","Structure"]] as [string,string][]).map(([v, l]) => (
-          <button key={v} onClick={() => setView(v as "live" | "structure")} style={{
-            padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
-            border: "none", cursor: "pointer",
-            background: view === v ? "#0F172A" : "transparent",
-            color: view === v ? "#FFFFFF" : "#64748B",
-            transition: "background 0.15s, color 0.15s",
-          }}>{l}</button>
-        ))}
-      </div>
+      {/* ══ MANAGE USERS ══ */}
+      {view === "manage" && (
+        <div>
+          {uError && (
+            <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#DC2626", borderRadius: 8, padding: "10px 14px", fontSize: 12, marginBottom: 16 }}>{uError}</div>
+          )}
 
-      {/* Live DB view */}
-      {view === "live" && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+            <button onClick={() => setShowForm(s => !s)} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#2563EB,#1D4ED8)", color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              {showForm ? "Cancel" : "+ Add User"}
+            </button>
+          </div>
+
+          {/* Add user form */}
+          {showForm && (
+            <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: 20, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", marginBottom: 12 }}>New User</div>
+
+              {/* Quick pick */}
+              <div style={{ marginBottom: 14, padding: "10px 14px", background: "#F8FAFC", borderRadius: 9, border: "1px solid #E2E8F0" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 6 }}>Quick Pick from Team</div>
+                <select defaultValue="" onChange={e => {
+                  const m = TEAM_MEMBERS.find(x => x.name === e.target.value);
+                  if (m) setForm(p => ({ ...p, name: m.name, ota: m.ota, teamLead: m.teamLead, role: m.role, username: autoUsername(m.name) }));
+                }} style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>
+                  <option value="">— Select existing team member —</option>
+                  {TEAM_MEMBERS.map(m => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} {m.ota ? `(${m.ota})` : ""} — {m.role === "tl" ? "Team Lead" : `TL: ${m.teamLead}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Row 1: Username, Password, Full Name */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                {[
+                  { label: "Username *",  key: "username", type: "text"     },
+                  { label: "Password *",  key: "password", type: "password" },
+                  { label: "Full Name *", key: "name",     type: "text"     },
+                ].map(({ label, key, type }) => (
+                  <div key={key} style={{ flex: "1 1 150px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>{label}</div>
+                    <input type={type} value={(form as Record<string, string>)[key]}
+                      onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Row 2: Email, Phone, Emp ID */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                {[
+                  { label: "Email *",  key: "email", type: "email" },
+                  { label: "Phone *",  key: "phone", type: "tel"   },
+                  { label: "Emp ID",   key: "empId", type: "text"  },
+                ].map(({ label, key, type }) => (
+                  <div key={key} style={{ flex: "1 1 150px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>{label}</div>
+                    <input type={type} value={(form as Record<string, string>)[key]}
+                      onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                      placeholder={key === "empId" ? "optional" : ""}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Row 3: Role, OTA, Team Lead */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 120px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Role *</div>
+                  <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                    <option value="intern">Intern</option>
+                    <option value="tl">Team Lead (TL)</option>
+                    <option value="head">Head</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                {(form.role === "intern" || form.role === "tl") && (
+                  <div style={{ flex: "1 1 150px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Assigned OTA</div>
+                    <select value={form.ota} onChange={e => setForm(p => ({ ...p, ota: e.target.value }))}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                      <option value="">— Select OTA —</option>
+                      {OTA_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
+                {form.role === "intern" && (
+                  <div style={{ flex: "1 1 150px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Team Lead</div>
+                    <select value={form.teamLead} onChange={e => setForm(p => ({ ...p, teamLead: e.target.value }))}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                      <option value="">— Select TL —</option>
+                      {activeTLs.map(t => <option key={t.id} value={t.name}>{t.name} ({t.role})</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {formErr && <div style={{ color: "#DC2626", fontSize: 12, marginTop: 10 }}>{formErr}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button onClick={createUser} disabled={saving} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#2563EB", color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {saving ? "Saving…" : "Create User"}
+                </button>
+                <button onClick={() => { setShowForm(false); setFormErr(""); setForm(EMPTY_FORM); }} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#FFF", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Users table */}
+          <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            {uLoading ? (
+              <div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {["Name / Contact", "Username", "Emp ID", "Role", "OTA", "Team Lead", "Status", "Joined", "Actions"].map(h => (
+                        <th key={h} style={TH}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedUsers.map((u, i) => {
+                      const rc = ROLE_COLORS[u.role] ?? { bg: "#F1F5F9", color: "#64748B" };
+                      const prevRole = i > 0 ? sortedUsers[i - 1].role : null;
+                      const isNewGroup = prevRole !== u.role;
+                      return (
+                        <Fragment key={u.id}>
+                          {isNewGroup && (
+                            <tr>
+                              <td colSpan={9} style={{ padding: "6px 12px 4px", fontSize: 9, fontWeight: 800, color: rc.color, background: rc.bg + "80", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                                {u.role === "admin" ? "Admins" : u.role === "head" ? "Heads" : u.role === "tl" ? "Team Leads" : "Interns"}
+                              </td>
+                            </tr>
+                          )}
+                          <tr style={{ opacity: u.active ? 1 : 0.5 }}>
+                            <td style={TD}>
+                              <div style={{ fontWeight: 600, color: "#1E293B" }}>{u.name}</div>
+                              {(u.email || u.phone) && (
+                                <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>
+                                  {u.email && <span>{u.email}</span>}
+                                  {u.email && u.phone && <span> · </span>}
+                                  {u.phone && <span>{u.phone}</span>}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ ...TD, color: "#64748B" }}>{u.username}</td>
+                            <td style={{ ...TD, color: "#64748B", fontSize: 11 }}>{u.empId || "—"}</td>
+                            <td style={TD}>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 9px", borderRadius: 20, background: rc.bg, color: rc.color }}>
+                                {u.role === "tl" ? "TL" : u.role.toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ ...TD, color: "#64748B" }}>{u.ota || "—"}</td>
+                            <td style={TD}>
+                              {u.role === "intern" ? (
+                                changingTL === u.id ? (
+                                  <select
+                                    defaultValue={u.teamLead ?? ""}
+                                    autoFocus
+                                    onBlur={() => setChangingTL(null)}
+                                    onChange={e => changeTL(u.id, e.target.value)}
+                                    style={{ fontSize: 11, padding: "4px 8px", borderRadius: 6, border: "1px solid #CBD5E1", background: "#FFF", cursor: "pointer" }}
+                                  >
+                                    <option value="">— None —</option>
+                                    {activeTLs.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                  </select>
+                                ) : (
+                                  <button onClick={() => setChangingTL(u.id)} title="Click to change TL" style={{
+                                    fontSize: 11, color: u.teamLead ? "#1E293B" : "#94A3B8",
+                                    background: "transparent", border: "1px dashed #CBD5E1",
+                                    borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontWeight: u.teamLead ? 600 : 400,
+                                  }}>
+                                    {u.teamLead || "Assign TL"} ✎
+                                  </button>
+                                )
+                              ) : (
+                                <span style={{ fontSize: 11, color: "#94A3B8" }}>—</span>
+                              )}
+                            </td>
+                            <td style={TD}>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: u.active ? "#D1FAE5" : "#F1F5F9", color: u.active ? "#059669" : "#94A3B8" }}>
+                                {u.active ? "Active" : "Inactive"}
+                              </span>
+                            </td>
+                            <td style={{ ...TD, color: "#94A3B8", fontSize: 11 }}>
+                              {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
+                            </td>
+                            <td style={TD}>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button onClick={() => { setEditUser(u); setEditForm({ name: u.name, email: u.email ?? "", phone: u.phone ?? "", empId: u.empId ?? "", role: u.role, ota: u.ota ?? "", teamLead: u.teamLead ?? "" }); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#0F172A", cursor: "pointer", fontWeight: 600 }}>Edit</button>
+                                <button onClick={() => { setResetId(u.id); setResetPw(""); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#6366F1", cursor: "pointer", fontWeight: 600 }}>Reset PW</button>
+                                <button onClick={() => toggleActive(u)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", color: u.active ? "#DC2626" : "#059669", cursor: "pointer", fontWeight: 600 }}>
+                                  {u.active ? "Deactivate" : "Activate"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ TEAM STRUCTURE ══ */}
+      {view === "structure" && (
         dbTeam === null ? (
           <div style={{ color: "#94A3B8", fontSize: 12, padding: 20 }}>Loading…</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-            {Object.entries(dbTeam.groups).map(([tlName, group]) => {
-              const color = TL_COLORS[tlName] ?? "#64748B";
-              return (
-                <div key={tlName} style={{ background: "#FFF", borderRadius: 14, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-                  {/* TL header */}
-                  <div style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `1px solid ${color}20`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: color, color: "#FFF", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {tlName[0]}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{tlName}</span>
-                        <span style={{ fontSize: 8, fontWeight: 700, color: "#FFF", background: color, borderRadius: 4, padding: "1px 5px" }}>
-                          {group.tl?.role?.toUpperCase() ?? "TL"}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{group.members.length} members</div>
-                    </div>
-                  </div>
-                  {/* Members */}
-                  <div style={{ padding: "8px 14px 10px" }}>
-                    {group.members.length === 0 ? (
-                      <div style={{ fontSize: 11, color: "#CBD5E1", padding: "8px 0" }}>No members assigned yet</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                        {group.members.map((m) => (
-                          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 8, background: "#F8FAFC" }}>
-                            <div style={{ width: 24, height: 24, borderRadius: "50%", background: color + "99", color: "#FFF", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                              {m.name[0]}
-                            </div>
-                            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#1E293B" }}>{m.name}</span>
-                            {m.ota && (
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
-                                background: (OTA_COLORS[m.ota] ?? "#64748B") + "18",
-                                color: OTA_COLORS[m.ota] ?? "#64748B",
-                                border: `1px solid ${(OTA_COLORS[m.ota] ?? "#64748B")}35` }}>
-                                {m.ota === "Booking.com" ? "BDC" : m.ota === "Akbar Travels" ? "AKT" : m.ota === "EaseMyTrip" ? "EMT" : m.ota}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+          <div>
+            {/* Heads + Admins */}
+            {dbTeam.admins.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                  Admins &amp; Heads
                 </div>
-              );
-            })}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {dbTeam.admins.map(u => {
+                    const rc = ROLE_COLORS[u.role] ?? { bg: "#F1F5F9", color: "#64748B" };
+                    return (
+                      <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#FFF", borderRadius: 10, border: "1px solid #E2E8F0", padding: "10px 14px" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: rc.color, color: "#FFF", fontSize: 13, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{u.name[0]}</div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>{u.name}</div>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: rc.bg, color: rc.color }}>{u.role.toUpperCase()}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TL Groups */}
+            <div style={{ fontSize: 10, fontWeight: 800, color: "#D97706", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+              Teams
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+              {Object.entries(dbTeam.groups).map(([tlName, group]) => {
+                const color = TL_COLORS[tlName] ?? "#64748B";
+                return (
+                  <div key={tlName} style={{ background: "#FFF", borderRadius: 14, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+                    <div style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, borderBottom: `1px solid ${color}20`, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: color, color: "#FFF", fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{tlName[0]}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{tlName}</span>
+                          <span style={{ fontSize: 8, fontWeight: 700, color: "#FFF", background: color, borderRadius: 4, padding: "1px 5px" }}>{(group.tl?.role ?? "TL").toUpperCase()}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{group.members.length} members</div>
+                      </div>
+                    </div>
+                    <div style={{ padding: "8px 14px 10px" }}>
+                      {group.members.length === 0 ? (
+                        <div style={{ fontSize: 11, color: "#CBD5E1", padding: "8px 0" }}>No members assigned yet</div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                          {group.members.map((m) => (
+                            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 8, background: "#F8FAFC" }}>
+                              <div style={{ width: 24, height: 24, borderRadius: "50%", background: color + "99", color: "#FFF", fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{m.name[0]}</div>
+                              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: "#1E293B" }}>{m.name}</span>
+                              {m.ota && (
+                                <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: (OTA_COLORS[m.ota] ?? "#64748B") + "18", color: OTA_COLORS[m.ota] ?? "#64748B", border: `1px solid ${(OTA_COLORS[m.ota] ?? "#64748B")}35` }}>
+                                  {OTA_SHORT[m.ota] ?? m.ota}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )
       )}
 
-      {/* Static structure view */}
-      {view === "structure" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-          {PROPOSED_LEADS.map((lead) => <TeamCard key={lead.name} lead={lead} isProposed />)}
+      {/* Edit user modal */}
+      {editUser && (
+        <div onClick={() => setEditUser(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#FFF", borderRadius: 14, padding: 24, width: 480, boxShadow: "0 8px 32px rgba(0,0,0,0.14)", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A", marginBottom: 16 }}>Edit — {editUser.name}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* Row 1 */}
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Full Name</div>
+                  <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Role</div>
+                  <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                    <option value="intern">Intern</option>
+                    <option value="tl">Team Lead (TL)</option>
+                    <option value="head">Head</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              {/* Row 2 */}
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Email</div>
+                  <input type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Phone</div>
+                  <input type="tel" value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                </div>
+              </div>
+              {/* Row 3 */}
+              <div style={{ display: "flex", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Emp ID</div>
+                  <input value={editForm.empId} onChange={e => setEditForm(p => ({ ...p, empId: e.target.value }))}
+                    placeholder="optional"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Assigned OTA</div>
+                  <select value={editForm.ota} onChange={e => setEditForm(p => ({ ...p, ota: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                    <option value="">— None —</option>
+                    {OTA_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Team Lead */}
+              {editForm.role === "intern" && (
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 4 }}>Team Lead</div>
+                  <select value={editForm.teamLead} onChange={e => setEditForm(p => ({ ...p, teamLead: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF", boxSizing: "border-box" as const }}>
+                    <option value="">— None —</option>
+                    {activeTLs.map(t => <option key={t.id} value={t.name}>{t.name} ({t.role})</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+              <button onClick={saveEdit} disabled={editSaving} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: editSaving ? 0.6 : 1 }}>
+                {editSaving ? "Saving…" : "Save Changes"}
+              </button>
+              <button onClick={() => setEditUser(null)} style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#FFF", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset password modal */}
+      {resetId && (
+        <div onClick={() => setResetId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#FFF", borderRadius: 12, padding: 24, width: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0F172A", marginBottom: 14 }}>Reset Password</div>
+            <input type="password" value={resetPw} onChange={e => setResetPw(e.target.value)} placeholder="New password"
+              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 13, boxSizing: "border-box", marginBottom: 14 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={resetPassword} disabled={!resetPw.trim()} style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: "pointer", opacity: !resetPw.trim() ? 0.5 : 1 }}>Update</button>
+              <button onClick={() => setResetId(null)} style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#FFF", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

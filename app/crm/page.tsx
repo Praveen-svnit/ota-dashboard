@@ -124,12 +124,22 @@ export default function CrmPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>CRM Dashboard</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-            <span style={{ fontSize: 12, color: "#64748B" }}>{total} listings</span>
-            <Link href="/crm" style={{ fontSize: 11, fontWeight: 600, color: "#2563EB", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>CRM</Link>
-            <Link href="/tasks" style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>Task Manager</Link>
-            <Link href="/performance" style={{ fontSize: 11, fontWeight: 600, color: "#059669", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>Performance</Link>
-          </div>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{total} listings</div>
+        </div>
+        {/* Tab strip */}
+        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+          {([
+            ["CRM",          "/crm",         true ],
+            ["Task Manager", "/tasks",        false],
+            ["Performance",  "/performance",  false],
+          ] as [string, string, boolean][]).map(([label, href, active]) => (
+            <Link key={label} href={href} style={{
+              padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+              textDecoration: "none", whiteSpace: "nowrap",
+              background: active ? "#0F172A" : "transparent",
+              color: active ? "#FFFFFF" : "#64748B",
+            }}>{label}</Link>
+          ))}
         </div>
       </div>
 

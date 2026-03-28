@@ -6,24 +6,42 @@ export async function GET(req: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const search    = searchParams.get("search") ?? "";
-  const otaFilter = searchParams.get("ota")    ?? "all";
+  const search       = searchParams.get("search") ?? "";
+  const otaFilter    = searchParams.get("ota")    ?? "all";
   const statusFilter = searchParams.get("status") ?? "all";
-  const page      = parseInt(searchParams.get("page") ?? "1", 10);
-  const limit     = 50;
-  const offset    = (page - 1) * limit;
+  const page         = parseInt(searchParams.get("page") ?? "1", 10);
+  const limit        = 50;
+  const offset       = (page - 1) * limit;
 
   const db = getDb();
 
-  // Build WHERE conditions
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
-  // Role-based filtering
-  if (session.role === "intern" && session.ota) {
-    conditions.push("ol.ota = ?");
-    params.push(session.ota);
-  } else if (otaFilter !== "all") {
+  // ── Role-based access control ──────────────────────────────
+  if (session.role === "intern") {
+    // Intern: only their own assigned properties
+    conditions.push("ol.assignedTo = ?");
+    params.push(session.id);
+
+  } else if (session.role === "tl") {
+    // TL: only properties assigned to their interns
+    const internRows = db.prepare(
+      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
+    ).all(session.name) as { id: string }[];
+
+    if (internRows.length === 0) {
+      // TL has no interns yet — return empty
+      return Response.json({ rows: [], total: 0, page, limit });
+    }
+    const placeholders = internRows.map(() => "?").join(",");
+    conditions.push(`ol.assignedTo IN (${placeholders})`);
+    internRows.forEach(r => params.push(r.id));
+  }
+  // head / admin: no role restriction
+
+  // ── User-driven filters ────────────────────────────────────
+  if (otaFilter !== "all") {
     conditions.push("ol.ota = ?");
     params.push(otaFilter);
   }
