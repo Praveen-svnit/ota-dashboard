@@ -155,9 +155,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {/* Dashboards */}
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
-        <NavLink icon="◉" label="OTA Analytics" href="/ota-analytics" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-        <NavLink icon="✦" label="Today's Assigned Tasks" href="/todays-assigned-tasks" />
 
         {/* Property Manager */}
         <SectionHeader label="Property Manager" />
@@ -171,17 +169,15 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           <NavLink icon="◧" label="Workflow"          href="/workflow" />
           <NavLink icon="◎" label="IC Performance"   href="/performance" />
           <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
-          {sessionUser?.role === "admin" && (
-            <NavLink icon="👤" label="User Management" href="/crm/users" />
-          )}
         </>)}
 
         {/* Reports */}
         <SectionHeader label="Reports" />
-        <NavLink icon="◔" label="Monthly TAT" href="/reports/monthly-tat" />
-        <NavLink icon="⚠" label="Incomplete Data" href="/incomplete" />
-        <NavLink icon="★" label="BDC Genius"       href="/reports/genius" />
-        <NavLink icon="✦" label="BDC Hygiene"     href="/reports/hygiene" />
+        <NavLink icon="◉" label="OTA Analytics"         href="/ota-analytics" />
+        <NavLink icon="✦" label="Today's Assigned Tasks" href="/todays-assigned-tasks" />
+        <NavLink icon="⚠" label="Incomplete Data"        href="/incomplete" />
+        <NavLink icon="★" label="BDC Genius"             href="/reports/genius" />
+        <NavLink icon="✦" label="BDC Hygiene"            href="/reports/hygiene" />
       </nav>
 
       {/* Footer */}
