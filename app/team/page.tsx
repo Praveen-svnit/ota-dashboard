@@ -212,13 +212,12 @@ export default function TeamPage() {
     <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Team Structure</span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 20, padding: "2px 9px" }}>
-            {view === "live" ? `${liveTotal} active` : `${proposedTotal} members`}
-          </span>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Team</div>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+            {view === "live" ? `${liveTotal} active members` : `${proposedTotal} members in structure`}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <Link href="/crm/users" style={{
           fontSize: 12, fontWeight: 600, color: "#6366F1",
           background: "#EEF2FF", border: "1px solid #C7D2FE",
@@ -226,17 +225,22 @@ export default function TeamPage() {
         }}>
           👤 Manage Users
         </Link>
-        {/* View toggle */}
-        <div style={{ display: "flex", background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
-          {([["live","Live (DB)"],["structure","Structure"]] as const).map(([v, l]) => (
-            <button key={v} onClick={() => setView(v)} style={{
-              padding: "6px 16px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
-              background: view === v ? "#2563EB" : "transparent",
-              color: view === v ? "#FFF" : "#64748B",
-            }}>{l}</button>
-          ))}
-        </div>
-        </div>
+      </div>
+
+      {/* Tab strip */}
+      <div style={{
+        display: "flex", gap: 2, marginBottom: 20,
+        background: "#F1F5F9", borderRadius: 10, padding: 4, width: "fit-content",
+      }}>
+        {([["live","Live (DB)"],["structure","Structure"]] as [string,string][]).map(([v, l]) => (
+          <button key={v} onClick={() => setView(v as "live" | "structure")} style={{
+            padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+            border: "none", cursor: "pointer",
+            background: view === v ? "#0F172A" : "transparent",
+            color: view === v ? "#FFFFFF" : "#64748B",
+            transition: "background 0.15s, color 0.15s",
+          }}>{l}</button>
+        ))}
       </div>
 
       {/* Live DB view */}
