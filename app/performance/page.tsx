@@ -235,56 +235,58 @@ export default function PerformancePage() {
   return (
     <div style={{ padding: "24px 28px", background: "#F8FAFC", minHeight: "100vh" }}>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>IC Performance</span>
-        {/* Tab toggle */}
-        <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-          {([
-            { key: "summary",    label: "Team Summary"          },
-            { key: "individual", label: "Individual Performance" },
-            { key: "reports1",   label: "Reports 1"             },
-            { key: "reports2",   label: "Reports 2"             },
-          ] as const).map(({ key, label }) => {
-            const active = perfTab === key;
-            return (
-              <button key={key} onClick={() => setPerfTab(key)} style={{
-                padding: "6px 14px", fontSize: 11, fontWeight: 700, borderRadius: 8,
-                border: "none", cursor: "pointer",
-                background: active ? "#FFFFFF" : "transparent",
-                color: active ? "#0F172A" : "#94A3B8",
-                boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
-                transition: "all 0.12s", whiteSpace: "nowrap",
-              }}>
-                {label}
-              </button>
-            );
-          })}
+      {/* Header — fixed two-row layout to prevent shifting */}
+      <div style={{ marginBottom: 16 }}>
+        {/* Row 1: title + nav */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A", paddingTop: 6 }}>IC Performance</span>
+          {/* Nav tab strip */}
+          <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+            {([
+              ["CRM",          "/crm",         false],
+              ["Task Manager", "/tasks",        false],
+              ["Performance",  "/performance",  true ],
+            ] as [string, string, boolean][]).map(([label, href, active]) => (
+              <a key={label} href={href} style={{
+                padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                textDecoration: "none", whiteSpace: "nowrap", display: "inline-block",
+                background: active ? "#0F172A" : "transparent",
+                color: active ? "#FFFFFF" : "#64748B",
+              }}>{label}</a>
+            ))}
+          </div>
         </div>
-        {loading && <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>Loading…</span>}
-      </div>
-        {/* Nav tab strip */}
-        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
-          {([
-            ["CRM",          "/crm",         false],
-            ["Task Manager", "/tasks",        false],
-            ["Performance",  "/performance",  true ],
-          ] as [string, string, boolean][]).map(([label, href, active]) => (
-            <a key={label} href={href} style={{
-              padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
-              textDecoration: "none", whiteSpace: "nowrap", display: "inline-block",
-              background: active ? "#0F172A" : "transparent",
-              color: active ? "#FFFFFF" : "#64748B",
-            }}>{label}</a>
-          ))}
-        </div>
-      </div>
-
-      {perfTab === "summary" && (<>
-
-      {/* Team filter */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Row 2: inner tab strip + team filter (always rendered, same height) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {/* Tab toggle */}
+          <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
+            {([
+              { key: "summary",    label: "Team Summary"          },
+              { key: "individual", label: "Individual Performance" },
+              { key: "reports1",   label: "Reports 1"             },
+              { key: "reports2",   label: "Reports 2"             },
+            ] as const).map(({ key, label }) => {
+              const active = perfTab === key;
+              return (
+                <button key={key} onClick={() => setPerfTab(key)} style={{
+                  padding: "6px 14px", fontSize: 11, fontWeight: 700, borderRadius: 8,
+                  border: "none", cursor: "pointer",
+                  background: active ? "#FFFFFF" : "transparent",
+                  color: active ? "#0F172A" : "#94A3B8",
+                  boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
+                  transition: "all 0.12s", whiteSpace: "nowrap",
+                }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {loading && <span style={{ fontSize: 10, color: "#94A3B8" }}>Loading…</span>}
+          {/* Team filter — always rendered to prevent layout shift */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
+            opacity: perfTab === "summary" ? 1 : 0.3, pointerEvents: perfTab === "summary" ? "auto" : "none",
+            transition: "opacity 0.15s",
+          }}>
         {(sessionUser?.role === "tl" || sessionUser?.role === "intern" ? [] : ["all"]).concat(roleFilteredTeams.map((t) => t.name)).map((t) => {
           const team  = TEAMS.find((x) => x.name === t);
           const color = team?.color ?? "#6366F1";
@@ -431,8 +433,11 @@ export default function PerformancePage() {
             </button>
           );
         })}
-      </div>
+          </div>{/* end team filter */}
+        </div>{/* end row 2 */}
+      </div>{/* end header */}
 
+      {perfTab === "summary" && (<>
       {/* ── Member Table ───────────────────────────────────────────────── */}
       <div style={{
         background: "#FFF", border: "1px solid #E2E8F0",
