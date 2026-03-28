@@ -131,13 +131,6 @@ export default function CrmPage() {
             <Link href="/performance" style={{ fontSize: 11, fontWeight: 600, color: "#059669", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 6, padding: "3px 10px", textDecoration: "none" }}>Performance</Link>
           </div>
         </div>
-        <Link href="/crm/users" style={{
-          fontSize: 12, fontWeight: 600, color: "#6366F1",
-          background: "#EEF2FF", border: "1px solid #C7D2FE",
-          borderRadius: 8, padding: "7px 14px", textDecoration: "none",
-        }}>
-          Manage Users
-        </Link>
       </div>
 
       {/* Status Tiles */}

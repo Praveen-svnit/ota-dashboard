@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { OTA_COLORS } from "@/lib/constants";
 
 interface DbUser { id: string; name: string; role: string; ota: string | null; teamLead: string | null }
@@ -217,6 +218,14 @@ export default function TeamPage() {
             {view === "live" ? `${liveTotal} active` : `${proposedTotal} members`}
           </span>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Link href="/crm/users" style={{
+          fontSize: 12, fontWeight: 600, color: "#6366F1",
+          background: "#EEF2FF", border: "1px solid #C7D2FE",
+          borderRadius: 8, padding: "7px 14px", textDecoration: "none",
+        }}>
+          👤 Manage Users
+        </Link>
         {/* View toggle */}
         <div style={{ display: "flex", background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
           {([["live","Live (DB)"],["structure","Structure"]] as const).map(([v, l]) => (
@@ -226,6 +235,7 @@ export default function TeamPage() {
               color: view === v ? "#FFF" : "#64748B",
             }}>{l}</button>
           ))}
+        </div>
         </div>
       </div>
 
