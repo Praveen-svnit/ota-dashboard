@@ -6,10 +6,15 @@ export async function GET(req: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const status   = searchParams.get("status") ?? "open";
-  const priority = searchParams.get("priority") ?? "all";
-  const assignee = searchParams.get("assignee") ?? "all";
-  const search   = searchParams.get("search") ?? "";
+  const status      = searchParams.get("status")      ?? "open";
+  const priority    = searchParams.get("priority")    ?? "all";
+  const assignee    = searchParams.get("assignee")    ?? "all";
+  const ota         = searchParams.get("ota")         ?? "all";
+  const search      = searchParams.get("search")      ?? "";
+  const dueDateFrom = searchParams.get("dueDateFrom") ?? "";
+  const dueDateTo   = searchParams.get("dueDateTo")   ?? "";
+  const createdFrom = searchParams.get("createdFrom") ?? "";
+  const createdTo   = searchParams.get("createdTo")   ?? "";
 
   const db = getDb();
 
@@ -58,6 +63,14 @@ export async function GET(req: Request) {
     conditions.push("(t.title LIKE ? OR p.name LIKE ? OR p.city LIKE ?)");
     params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
+  if (ota !== "all") {
+    conditions.push("t.relatedOta = ?");
+    params.push(ota);
+  }
+  if (dueDateFrom) { conditions.push("DATE(t.dueDate) >= ?"); params.push(dueDateFrom); }
+  if (dueDateTo)   { conditions.push("DATE(t.dueDate) <= ?"); params.push(dueDateTo); }
+  if (createdFrom) { conditions.push("DATE(t.createdAt) >= ?"); params.push(createdFrom); }
+  if (createdTo)   { conditions.push("DATE(t.createdAt) <= ?"); params.push(createdTo); }
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 

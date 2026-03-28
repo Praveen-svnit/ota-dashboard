@@ -48,8 +48,13 @@ export default function TasksPage() {
   const [statusFilter,   setStatusFilter]   = useState("open");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("all");
+  const [otaFilter,      setOtaFilter]      = useState("all");
   const [search,         setSearch]         = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [dueDateFrom,    setDueDateFrom]    = useState("");
+  const [dueDateTo,      setDueDateTo]      = useState("");
+  const [createdFrom,    setCreatedFrom]    = useState("");
+  const [createdTo,      setCreatedTo]      = useState("");
 
   const [completing, setCompleting] = useState<number | null>(null);
   const [completionNote, setCompletionNote] = useState("");
@@ -63,8 +68,12 @@ export default function TasksPage() {
     setLoading(true);
     const q = new URLSearchParams({
       status: statusFilter, priority: priorityFilter,
-      assignee: assigneeFilter, search: debouncedSearch,
+      assignee: assigneeFilter, search: debouncedSearch, ota: otaFilter,
     });
+    if (dueDateFrom)  q.set("dueDateFrom",  dueDateFrom);
+    if (dueDateTo)    q.set("dueDateTo",    dueDateTo);
+    if (createdFrom)  q.set("createdFrom",  createdFrom);
+    if (createdTo)    q.set("createdTo",    createdTo);
     fetch(`/api/tasks?${q}`)
       .then(r => r.json())
       .then(d => {
@@ -73,7 +82,7 @@ export default function TasksPage() {
         setAssignees(d.assignees ?? []);
       })
       .finally(() => setLoading(false));
-  }, [statusFilter, priorityFilter, assigneeFilter, debouncedSearch]);
+  }, [statusFilter, priorityFilter, assigneeFilter, debouncedSearch, otaFilter, dueDateFrom, dueDateTo, createdFrom, createdTo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -182,12 +191,48 @@ export default function TasksPage() {
           {assignees.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
         </select>
 
+        <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
+          style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 11, background: "#FFF" }}>
+          <option value="all">All OTAs</option>
+          {["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo","GMB"].map(o =>
+            <option key={o} value={o}>{o}</option>
+          )}
+        </select>
+
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search task, property, city…"
           style={{ flex: 1, minWidth: 200, padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 11, outline: "none" }}
         />
+
+        {/* Due Date range */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid", borderColor: dueDateFrom || dueDateTo ? "#FDE68A" : "#E2E8F0", borderRadius: 8, padding: "4px 8px", background: dueDateFrom || dueDateTo ? "#FEFCE8" : "#FFF" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#854D0E", whiteSpace: "nowrap" }}>Due</span>
+          <input type="date" value={dueDateFrom} onChange={e => setDueDateFrom(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 11, background: "transparent", color: "#374151", width: 110 }} />
+          <span style={{ fontSize: 10, color: "#94A3B8" }}>–</span>
+          <input type="date" value={dueDateTo} onChange={e => setDueDateTo(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 11, background: "transparent", color: "#374151", width: 110 }} />
+          {(dueDateFrom || dueDateTo) && (
+            <button onClick={() => { setDueDateFrom(""); setDueDateTo(""); }}
+              style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, color: "#94A3B8", padding: "0 2px", lineHeight: 1 }}>✕</button>
+          )}
+        </div>
+
+        {/* Created Date range */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, border: "1px solid", borderColor: createdFrom || createdTo ? "#BFDBFE" : "#E2E8F0", borderRadius: 8, padding: "4px 8px", background: createdFrom || createdTo ? "#EFF6FF" : "#FFF" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#1D4ED8", whiteSpace: "nowrap" }}>Created</span>
+          <input type="date" value={createdFrom} onChange={e => setCreatedFrom(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 11, background: "transparent", color: "#374151", width: 110 }} />
+          <span style={{ fontSize: 10, color: "#94A3B8" }}>–</span>
+          <input type="date" value={createdTo} onChange={e => setCreatedTo(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 11, background: "transparent", color: "#374151", width: 110 }} />
+          {(createdFrom || createdTo) && (
+            <button onClick={() => { setCreatedFrom(""); setCreatedTo(""); }}
+              style={{ border: "none", background: "none", cursor: "pointer", fontSize: 12, color: "#94A3B8", padding: "0 2px", lineHeight: 1 }}>✕</button>
+          )}
+        </div>
       </div>
 
       {/* Tasks list */}
