@@ -130,15 +130,22 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Summary tiles */}
+      {/* Summary tiles — clickable to filter */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
         {[
-          { label: "Open Tasks",    value: openCount,    bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
-          { label: "High Priority", value: highOpen,     bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
-          { label: "Overdue",       value: overdueCount, bg: overdueCount > 0 ? "#FFF7ED" : "#F0FDF4", color: overdueCount > 0 ? "#C2410C" : "#059669", border: overdueCount > 0 ? "#FED7AA" : "#BBF7D0" },
-          { label: "Completed",     value: doneCount,    bg: "#F0FDF4", color: "#059669", border: "#BBF7D0" },
+          { label: "Open Tasks",    value: openCount,    bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE",  filter: "open"    },
+          { label: "High Priority", value: highOpen,     bg: "#FEF2F2", color: "#DC2626", border: "#FECACA",  filter: null      },
+          { label: "Overdue",       value: overdueCount, bg: overdueCount > 0 ? "#FFF7ED" : "#F0FDF4", color: overdueCount > 0 ? "#C2410C" : "#059669", border: overdueCount > 0 ? "#FED7AA" : "#BBF7D0", filter: "overdue" },
+          { label: "Completed",     value: doneCount,    bg: "#F0FDF4", color: "#059669", border: "#BBF7D0",  filter: "done"    },
         ].map(t => (
-          <div key={t.label} style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, padding: "14px 16px" }}>
+          <div key={t.label}
+            onClick={() => t.filter && setStatusFilter(t.filter)}
+            style={{
+              background: t.bg, border: `2px solid ${statusFilter === t.filter ? t.color : t.border}`,
+              borderRadius: 12, padding: "14px 16px",
+              cursor: t.filter ? "pointer" : "default",
+              transition: "border-color 0.15s",
+            }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: t.color }}>{t.value}</div>
             <div style={{ fontSize: 11, fontWeight: 600, color: t.color, opacity: 0.8, marginTop: 2 }}>{t.label}</div>
           </div>
@@ -149,11 +156,11 @@ export default function TasksPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         {/* Status tabs */}
         <div style={{ display: "flex", background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
-          {[["open","Open"],["done","Done"],["all","All"]].map(([v, l]) => (
+          {([["open","Open","#2563EB"],["overdue","Overdue","#C2410C"],["done","Completed","#059669"],["all","All","#475569"]] as [string,string,string][]).map(([v, l, c]) => (
             <button key={v} onClick={() => setStatusFilter(v)}
               style={{
                 padding: "7px 16px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
-                background: statusFilter === v ? "#2563EB" : "transparent",
+                background: statusFilter === v ? c : "transparent",
                 color: statusFilter === v ? "#FFF" : "#64748B",
               }}>
               {l}

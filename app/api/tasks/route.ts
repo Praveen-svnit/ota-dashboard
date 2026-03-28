@@ -38,7 +38,11 @@ export async function GET(req: Request) {
   // head / admin: no role restriction
 
   // ── User-driven filters ────────────────────────────────────
-  if (status !== "all") {
+  if (status === "overdue") {
+    conditions.push("t.status = 'open'");
+    conditions.push("t.dueDate IS NOT NULL");
+    conditions.push("t.dueDate < date('now','localtime')");
+  } else if (status !== "all") {
     conditions.push("t.status = ?");
     params.push(status);
   }
