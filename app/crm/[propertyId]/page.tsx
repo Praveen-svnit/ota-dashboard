@@ -199,11 +199,20 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   }
 
   async function updateTaskStatus(taskId: number, status: string) {
-    await fetch(`/api/crm/tasks/${taskId}`, {
+    const isCompleting = status === "done";
+    const comment = isCompleting ? window.prompt("Add a completion comment before closing this task:")?.trim() ?? "" : "";
+    if (isCompleting && !comment) return;
+
+    const response = await fetch(`/api/crm/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, comment }),
     });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      alert(json?.error ?? "Unable to update task");
+      return;
+    }
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status } : t));
   }
 

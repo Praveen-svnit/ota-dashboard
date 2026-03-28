@@ -209,18 +209,100 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS Tasks (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       propertyId  TEXT NOT NULL,
+      taskType    TEXT NOT NULL DEFAULT 'property',
       title       TEXT NOT NULL,
       description TEXT,
       status      TEXT NOT NULL DEFAULT 'open',
       priority    TEXT NOT NULL DEFAULT 'medium',
       assignedTo  TEXT,
+      assignedName TEXT,
+      assignedRole TEXT,
+      assignedTeamLead TEXT,
       createdBy   TEXT,
       dueDate     TEXT,
+      followUpAt  TEXT,
+      taskDate    TEXT NOT NULL DEFAULT (date('now','localtime')),
+      sourceRoute TEXT,
+      sourceLabel TEXT,
+      sourceAnchor TEXT,
+      sourcePage  TEXT,
+      sourceSection TEXT,
+      relatedOta  TEXT,
+      relatedCity TEXT,
+      completionComment TEXT,
+      completedAt TEXT,
+      bucket      TEXT,
+      aiSummary   TEXT,
+      aiInsight   TEXT,
+      tags        TEXT,
       createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
       updatedAt   TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_propertyId ON Tasks(propertyId);
     CREATE INDEX IF NOT EXISTS idx_tasks_status     ON Tasks(status);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS TaskComments (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskId         INTEGER NOT NULL,
+      comment        TEXT NOT NULL,
+      commentType    TEXT NOT NULL DEFAULT 'update',
+      createdBy      TEXT,
+      createdByName  TEXT,
+      createdAt      TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_comments_taskId ON TaskComments(taskId);
+    CREATE INDEX IF NOT EXISTS idx_task_comments_createdAt ON TaskComments(createdAt);
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS TaskNotifications (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      taskId           INTEGER,
+      type             TEXT NOT NULL,
+      title            TEXT NOT NULL,
+      message          TEXT NOT NULL,
+      recipientUserId  TEXT,
+      recipientName    TEXT,
+      status           TEXT NOT NULL DEFAULT 'unread',
+      metadata         TEXT,
+      createdAt        TEXT NOT NULL DEFAULT (datetime('now')),
+      readAt           TEXT,
+      FOREIGN KEY (taskId) REFERENCES Tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_notifications_status ON TaskNotifications(status);
+    CREATE INDEX IF NOT EXISTS idx_task_notifications_recipientUserId ON TaskNotifications(recipientUserId);
+    CREATE INDEX IF NOT EXISTS idx_task_notifications_recipientName ON TaskNotifications(recipientName);
+  `);
+
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN taskType TEXT NOT NULL DEFAULT 'property'"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN assignedName TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN assignedRole TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN assignedTeamLead TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN followUpAt TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN taskDate TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN sourceRoute TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN sourceLabel TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN sourceAnchor TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN sourcePage TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN sourceSection TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN relatedOta TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN relatedCity TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN completionComment TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN completedAt TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN bucket TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN aiSummary TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN aiInsight TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Tasks ADD COLUMN tags TEXT"); } catch {}
+  try { db.exec("UPDATE Tasks SET taskDate = COALESCE(taskDate, substr(createdAt, 1, 10), date('now','localtime'))"); } catch {}
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_taskDate ON Tasks(taskDate);
+    CREATE INDEX IF NOT EXISTS idx_tasks_sourceRoute ON Tasks(sourceRoute);
+    CREATE INDEX IF NOT EXISTS idx_tasks_sourceAnchor ON Tasks(sourceAnchor);
+    CREATE INDEX IF NOT EXISTS idx_tasks_relatedOta ON Tasks(relatedOta);
+    CREATE INDEX IF NOT EXISTS idx_tasks_assignedName ON Tasks(assignedName);
   `);
 
   // Migrate GeniusData to append-only (drop UNIQUE on bdc_id for history tracking)
