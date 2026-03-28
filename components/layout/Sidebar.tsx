@@ -178,7 +178,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* Reports */}
         <SectionHeader label="Reports" />
-        <NavLink icon="•" label="Summary" href="/reports/summary" />
         <NavLink icon="◔" label="Monthly TAT" href="/reports/monthly-tat" />
         <NavLink icon="⚠" label="Incomplete Data" href="/incomplete" />
         <NavLink icon="★" label="BDC Genius"       href="/reports/genius" />
