@@ -28,16 +28,11 @@ export async function GET() {
     ORDER BY live DESC
   `).all() as { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
 
-  // Open tasks count
-  const tasksOpen = (db.prepare(`
-    SELECT COUNT(*) as n FROM Tasks WHERE status = 'open'
-  `).get() as { n: number }).n;
-
-  // Tasks due today or overdue
-  const tasksDue = (db.prepare(`
-    SELECT COUNT(*) as n FROM Tasks
-    WHERE status = 'open' AND dueDate IS NOT NULL AND dueDate <= date('now','localtime')
-  `).get() as { n: number }).n;
+  // Task counts
+  const tasksOpen = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open'`).get() as { n: number }).n;
+  const tasksHigh = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open' AND priority = 'high'`).get() as { n: number }).n;
+  const tasksOverdue = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open' AND dueDate IS NOT NULL AND dueDate < date('now','localtime')`).get() as { n: number }).n;
+  const tasksDone = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'done'`).get() as { n: number }).n;
 
   // Recent activity (last 5 logs)
   const recentLogs = db.prepare(`
@@ -64,5 +59,5 @@ export async function GET() {
     LIMIT 10
   `).all() as { id: number; propertyId: string; title: string; priority: string; dueDate: string; assignedTo: string; assignedName: string; propName: string }[];
 
-  return Response.json({ statusCounts, otaBreakdown, tasksOpen, tasksDue, recentLogs, openTasks });
+  return Response.json({ statusCounts, otaBreakdown, tasksOpen, tasksHigh, tasksOverdue, tasksDone, recentLogs, openTasks });
 }

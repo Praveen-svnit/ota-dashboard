@@ -39,6 +39,7 @@ interface Row {
 interface Summary {
   statusCounts: { subStatus: string; cnt: number }[];
   otaBreakdown: { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
+  tasksOpen: number; tasksHigh: number; tasksOverdue: number; tasksDone: number;
   recentLogs: { action: string; field: string; oldValue: string; newValue: string; note: string; createdAt: string; userName: string; propName: string; propId: string }[];
 }
 
@@ -100,12 +101,18 @@ export default function CrmPage() {
                        + (summary?.statusCounts.find(s => s.subStatus === "listing in progress")?.cnt ?? 0);
   const totalListings  = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
 
-  const tiles = [
-    { label: "Total Listings", value: totalListings, bg: "#F8FAFC", color: "#0F172A", border: "#E2E8F0", sub: "across all OTAs" },
-    { label: "Live",           value: liveCount,     bg: "#F0FDF4", color: "#059669", border: "#BBF7D0", sub: `${totalListings ? Math.round(liveCount/totalListings*100) : 0}% of total` },
-    { label: "Not Live",       value: notLiveCount,  bg: "#FEF2F2", color: "#DC2626", border: "#FECACA", sub: "needs attention" },
-    { label: "Ready to GoLive",value: readyCount,    bg: "#FEFCE8", color: "#854D0E", border: "#FDE68A", sub: "awaiting push" },
-    { label: "In Progress",    value: cipCount,      bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE", sub: "content + listing" },
+  const crmTiles = [
+    { label: "Total Listings",  value: totalListings,              bg: "#F8FAFC", color: "#0F172A", border: "#E2E8F0" },
+    { label: "Live",            value: liveCount,                  bg: "#F0FDF4", color: "#059669", border: "#BBF7D0" },
+    { label: "Not Live",        value: notLiveCount,               bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+    { label: "Ready to GoLive", value: readyCount,                 bg: "#FEFCE8", color: "#854D0E", border: "#FDE68A" },
+    { label: "In Progress",     value: cipCount,                   bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE" },
+  ];
+  const taskTiles = [
+    { label: "Open Tasks",    value: summary?.tasksOpen    ?? 0, bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+    { label: "High Priority", value: summary?.tasksHigh    ?? 0, bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+    { label: "Overdue",       value: summary?.tasksOverdue ?? 0, bg: (summary?.tasksOverdue ?? 0) > 0 ? "#FFF7ED" : "#F0FDF4", color: (summary?.tasksOverdue ?? 0) > 0 ? "#C2410C" : "#059669", border: (summary?.tasksOverdue ?? 0) > 0 ? "#FED7AA" : "#BBF7D0" },
+    { label: "Completed",     value: summary?.tasksDone    ?? 0, bg: "#F0FDF4", color: "#059669", border: "#BBF7D0" },
   ];
 
   return (
@@ -134,18 +141,18 @@ export default function CrmPage() {
         </div>
       </div>
 
-      {/* Status Tiles */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
-        {tiles.map((t) => (
+      {/* KPI Tiles — CRM + Task */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(9, 1fr)", gap: 8, marginBottom: 16 }}>
+        {[...crmTiles, ...taskTiles].map((t, i) => (
           <div key={t.label} style={{
-            background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12,
-            padding: "14px 16px", cursor: "default",
+            background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10,
+            padding: "10px 12px",
+            borderLeft: i === 5 ? "3px solid #CBD5E1" : undefined,
           }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: t.color, lineHeight: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: t.color, lineHeight: 1 }}>
               {t.value.toLocaleString()}
             </div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: t.color, marginTop: 4, opacity: 0.85 }}>{t.label}</div>
-            <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>{t.sub}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: t.color, marginTop: 3, opacity: 0.85, lineHeight: 1.3 }}>{t.label}</div>
           </div>
         ))}
       </div>

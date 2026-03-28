@@ -131,7 +131,7 @@ export default function TasksPage() {
       </div>
 
       {/* Summary tiles — clickable to filter */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 18 }}>
         {[
           { label: "Open Tasks",    value: openCount,    bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE",  filter: "open"    },
           { label: "High Priority", value: highOpen,     bg: "#FEF2F2", color: "#DC2626", border: "#FECACA",  filter: null      },
@@ -142,12 +142,12 @@ export default function TasksPage() {
             onClick={() => t.filter && setStatusFilter(t.filter)}
             style={{
               background: t.bg, border: `2px solid ${statusFilter === t.filter ? t.color : t.border}`,
-              borderRadius: 12, padding: "14px 16px",
+              borderRadius: 10, padding: "10px 12px",
               cursor: t.filter ? "pointer" : "default",
               transition: "border-color 0.15s",
             }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color: t.color }}>{t.value}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: t.color, opacity: 0.8, marginTop: 2 }}>{t.label}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: t.color, lineHeight: 1 }}>{t.value}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: t.color, opacity: 0.85, marginTop: 3, lineHeight: 1.3 }}>{t.label}</div>
           </div>
         ))}
       </div>
