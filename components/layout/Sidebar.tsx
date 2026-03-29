@@ -166,7 +166,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {(sessionUser?.role === "admin" || sessionUser?.role === "head" || sessionUser?.role === "tl") && (<>
           <SectionHeader label="Team & Workflow" />
           <NavLink icon="◉" label="Team"             href="/team" />
-          <NavLink icon="◧" label="Workflow"          href="/workflow" />
           <NavLink icon="◎" label="Team Performance"  href="/performance" />
         </>)}
 
