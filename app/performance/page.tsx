@@ -187,9 +187,8 @@ export default function PerformancePage() {
   const [showL3mDetail,  setShowL3mDetail]  = useState(false);
   const [formulaHover,   setFormulaHover]   = useState(false);
   const [listingView,    setListingView]    = useState<"mom" | "dod">("mom");
-  const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | "reports1" | "reports2">("summary");
+  const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | "reports1" | "reports2" | "tl">("summary");
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
-  const [mainTab,        setMainTab]        = useState<"team" | "tl">("team");
   const [showTlFormula,  setShowTlFormula]  = useState(false);
 
   useEffect(() => {
@@ -305,38 +304,20 @@ export default function PerformancePage() {
   return (
     <div style={{ padding: "24px 28px", background: "#F8FAFC", minHeight: "100vh" }}>
 
-      {/* ── Main Tab Strip ─────────────────────────────────────────────── */}
-      <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3, marginBottom: 20, width: "fit-content" }}>
-        {(["team", "tl"] as const).map((key) => {
-          const active = mainTab === key;
-          return (
-            <button key={key} onClick={() => setMainTab(key)} style={{
-              padding: "7px 20px", fontSize: 12, fontWeight: 700, borderRadius: 8,
-              border: "none", cursor: "pointer",
-              background: active ? "#0F172A" : "transparent",
-              color: active ? "#FFFFFF" : "#64748B",
-              transition: "all 0.12s",
-            }}>
-              {key === "team" ? "Team Performance" : "TL Performance"}
-            </button>
-          );
-        })}
-      </div>
-
-      {mainTab === "team" && (<>
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
-        {/* Row 1: title + inner tabs + nav strip — all on one line */}
+        {/* Row 1: title + unified tab strip + nav strip */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>Team Performance</span>
-            {/* Inner tab strip */}
+            {/* Unified tab strip */}
             <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
               {([
                 { key: "summary",    label: "Team Summary"          },
                 { key: "individual", label: "Individual Performance" },
                 { key: "reports1",   label: "Reports 1"             },
                 { key: "reports2",   label: "Reports 2"             },
+                { key: "tl",         label: "TL Performance"        },
               ] as const).map(({ key, label }) => {
                 const active = perfTab === key;
                 return (
@@ -373,8 +354,9 @@ export default function PerformancePage() {
         </div>
         {/* Row 2: team filter — always rendered to keep height stable */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
-          opacity: perfTab === "summary" ? 1 : 0.3,
+          opacity: perfTab === "summary" ? 1 : 0,
           pointerEvents: perfTab === "summary" ? "auto" : "none",
+          height: perfTab === "summary" ? undefined : 0, overflow: "hidden",
           transition: "opacity 0.15s",
         }}>
         {(sessionUser?.role === "tl" || sessionUser?.role === "intern" ? [] : ["all"]).concat(roleFilteredTeams.map((t) => t.name)).map((t) => {
@@ -1302,18 +1284,14 @@ export default function PerformancePage() {
         );
       })()}
 
-      </>)}
-
       {/* ── TL Performance Tab ─────────────────────────────────────────── */}
-      {mainTab === "tl" && (
+      {perfTab === "tl" && (
         <div>
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>TL Performance</span>
+          {/* Sub-header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: "#8B5CF6", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 20, padding: "2px 10px" }}>
               {tlVisibleTeams.length} Team Lead{tlVisibleTeams.length !== 1 ? "s" : ""} · Portfolio View
             </span>
-            {loading && <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>Loading…</span>}
           </div>
 
           {/* Scoring Formula */}
