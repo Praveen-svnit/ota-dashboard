@@ -306,34 +306,10 @@ export default function PerformancePage() {
 
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
-        {/* Row 1: title + unified tab strip + nav strip */}
+        {/* Row 1: title + nav strip */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>Team Performance</span>
-            {/* Unified tab strip */}
-            <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-              {([
-                { key: "summary",    label: "Team Summary"          },
-                { key: "individual", label: "Individual Performance" },
-                { key: "reports1",   label: "Reports 1"             },
-                { key: "reports2",   label: "Reports 2"             },
-                { key: "tl",         label: "TL Performance"        },
-              ] as const).map(({ key, label }) => {
-                const active = perfTab === key;
-                return (
-                  <button key={key} onClick={() => setPerfTab(key)} style={{
-                    padding: "6px 14px", fontSize: 11, fontWeight: 700, borderRadius: 8,
-                    border: "none", cursor: "pointer",
-                    background: active ? "#FFFFFF" : "transparent",
-                    color: active ? "#0F172A" : "#94A3B8",
-                    boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
-                    transition: "all 0.12s", whiteSpace: "nowrap",
-                  }}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
             {loading && <span style={{ fontSize: 10, color: "#94A3B8" }}>Loading…</span>}
           </div>
           {/* Nav tab strip — right side */}
@@ -351,6 +327,30 @@ export default function PerformancePage() {
               }}>{label}</a>
             ))}
           </div>
+        </div>
+        {/* Row 2: unified tab strip */}
+        <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3, width: "fit-content", marginBottom: 10 }}>
+          {([
+            { key: "summary",    label: "Team Summary"          },
+            { key: "individual", label: "Individual Performance" },
+            { key: "reports1",   label: "Reports 1"             },
+            { key: "reports2",   label: "Reports 2"             },
+            { key: "tl",         label: "TL Performance"        },
+          ] as const).map(({ key, label }) => {
+            const active = perfTab === key;
+            return (
+              <button key={key} onClick={() => setPerfTab(key)} style={{
+                padding: "6px 14px", fontSize: 11, fontWeight: 700, borderRadius: 8,
+                border: "none", cursor: "pointer",
+                background: active ? "#FFFFFF" : "transparent",
+                color: active ? "#0F172A" : "#94A3B8",
+                boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
+                transition: "all 0.12s", whiteSpace: "nowrap",
+              }}>
+                {label}
+              </button>
+            );
+          })}
         </div>
         {/* Row 2: team filter — always rendered to keep height stable */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
