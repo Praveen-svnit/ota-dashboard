@@ -44,6 +44,9 @@ export const TEAM_COLORS = ["#6366F1", "#E83F6F", "#F59E0B", "#10B981", "#8B5CF6
 export const SHEET_ID     = "1VkFA4keBAT3tG5NkZwmSNRbLZJgx2neOhZ7Zuj2z_98";
 export const GMB_SHEET_ID = "16awDYKs1jdR0x5VDJTo8CokB_fqqjr7JRpmRY0tv4Fk";
 export const RNS_SHEET_ID = "1xI0TjmZkmKwD27nNIhah7iaQtbpAmX5tfJYckbw2Jio";
+// TODO: replace with your Inv sheet ID and tab name
+export const INV_SHEET_ID  = "YOUR_INV_SHEET_ID_HERE";
+export const INV_SHEET_TAB = "Inv"; // tab name inside the sheet
 
 export const SHEET_TABS = ["Listing Tracker", "Listing Summary", "RN Tracker"] as const;
 export type SheetTab = typeof SHEET_TABS[number];

@@ -2,6 +2,14 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
+// ── Dual-driver exports ───────────────────────────────────────────────────────
+// When DATABASE_URL is set → use Neon Postgres (getSql)
+// When DATABASE_URL is not set → use SQLite (getDb)
+// New routes use getSql(). Existing routes use getDb() until migrated.
+export { getSql } from "./db-postgres";
+export const isPg = () => !!process.env.DATABASE_URL;
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DB_PATH = process.env.OTA_DB_PATH ?? path.join(process.cwd(), "ota.db");
 
 // Ensure the directory exists (needed for Railway volume mounts)
