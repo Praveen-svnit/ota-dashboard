@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -14,14 +14,23 @@ export async function GET() {
   if (!session || session.role !== "admin") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
-  const db = getDb();
-  let rows: UserRow[];
-  try {
-    rows = db.prepare("SELECT id,username,name,role,ota,teamLead,active,createdAt,email,phone,empId FROM Users ORDER BY role,name").all() as UserRow[];
-  } catch {
-    // Fallback if new columns don't exist yet
-    rows = (db.prepare("SELECT id,username,name,role,ota,teamLead,active,createdAt FROM Users ORDER BY role,name").all() as UserRow[]).map(r => ({ ...r, email: null, phone: null, empId: null }));
-  }
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      id,
+      username,
+      name,
+      role,
+      ota,
+      team_lead AS "teamLead",
+      active,
+      created_at AS "createdAt",
+      email,
+      phone,
+      emp_id AS "empId"
+    FROM users
+    ORDER BY role, name
+  ` as UserRow[];
   return Response.json({ users: rows });
 }
 
@@ -36,17 +45,33 @@ export async function POST(req: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const db   = getDb();
+  const sql  = getSql();
   const hash = bcrypt.hashSync(password, 10);
   const id   = "user_" + crypto.randomBytes(8).toString("hex");
 
   try {
-    db.prepare(`
-      INSERT INTO Users (id, username, passwordHash, name, role, ota, teamLead, active, createdAt, email, phone, empId)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-    `).run(id, username, hash, name, role, ota ?? null, teamLead ?? null, new Date().toISOString(), email ?? null, phone ?? null, empId ?? null);
-  } catch {
-    return Response.json({ error: "Username already exists" }, { status: 409 });
+    await sql`
+      INSERT INTO users (id, username, password_hash, name, role, ota, team_lead, active, created_at, email, phone, emp_id)
+      VALUES (
+        ${id},
+        ${username},
+        ${hash},
+        ${name},
+        ${role},
+        ${ota ?? null},
+        ${teamLead ?? null},
+        1,
+        ${new Date().toISOString()},
+        ${email ?? null},
+        ${phone ?? null},
+        ${empId ?? null}
+      )
+    `;
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") {
+      return Response.json({ error: "Username already exists" }, { status: 409 });
+    }
+    throw err;
   }
 
   return Response.json({ ok: true, id });
@@ -61,17 +86,20 @@ export async function PATCH(req: Request) {
   const { id, password, name, role, ota, teamLead, active, email, phone, empId } = await req.json();
   if (!id) return Response.json({ error: "User id required" }, { status: 400 });
 
-  const db = getDb();
+  const sql = getSql();
 
-  if (password)          { const hash = bcrypt.hashSync(password, 10); db.prepare("UPDATE Users SET passwordHash = ? WHERE id = ?").run(hash, id); }
-  if (name     !== undefined) db.prepare("UPDATE Users SET name = ? WHERE id = ?").run(name, id);
-  if (role     !== undefined) db.prepare("UPDATE Users SET role = ? WHERE id = ?").run(role, id);
-  if (ota      !== undefined) db.prepare("UPDATE Users SET ota = ? WHERE id = ?").run(ota ?? null, id);
-  if (teamLead !== undefined) db.prepare("UPDATE Users SET teamLead = ? WHERE id = ?").run(teamLead ?? null, id);
-  if (active   !== undefined) db.prepare("UPDATE Users SET active = ? WHERE id = ?").run(active ? 1 : 0, id);
-  if (email    !== undefined) db.prepare("UPDATE Users SET email = ? WHERE id = ?").run(email ?? null, id);
-  if (phone    !== undefined) db.prepare("UPDATE Users SET phone = ? WHERE id = ?").run(phone ?? null, id);
-  if (empId    !== undefined) db.prepare("UPDATE Users SET empId = ? WHERE id = ?").run(empId ?? null, id);
+  if (password) {
+    const hash = bcrypt.hashSync(password, 10);
+    await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${id}`;
+  }
+  if (name      !== undefined) await sql`UPDATE users SET name = ${name} WHERE id = ${id}`;
+  if (role      !== undefined) await sql`UPDATE users SET role = ${role} WHERE id = ${id}`;
+  if (ota       !== undefined) await sql`UPDATE users SET ota = ${ota ?? null} WHERE id = ${id}`;
+  if (teamLead  !== undefined) await sql`UPDATE users SET team_lead = ${teamLead ?? null} WHERE id = ${id}`;
+  if (active    !== undefined) await sql`UPDATE users SET active = ${active ? 1 : 0} WHERE id = ${id}`;
+  if (email     !== undefined) await sql`UPDATE users SET email = ${email ?? null} WHERE id = ${id}`;
+  if (phone     !== undefined) await sql`UPDATE users SET phone = ${phone ?? null} WHERE id = ${id}`;
+  if (empId     !== undefined) await sql`UPDATE users SET emp_id = ${empId ?? null} WHERE id = ${id}`;
 
   return Response.json({ ok: true });
 }

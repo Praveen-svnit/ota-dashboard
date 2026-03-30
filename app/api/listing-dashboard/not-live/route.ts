@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { NextRequest } from "next/server";
 
 // Map normalized sub-status labels → lowercase raw DB values for LOWER() comparison
@@ -17,7 +17,7 @@ function expandToRaw(labels: string[]): string[] {
 
 export async function GET(req: NextRequest) {
   try {
-    const db     = getDb();
+    const sql    = getSql();
     const sp     = req.nextUrl.searchParams;
     const page   = Math.max(1, parseInt(sp.get("page") ?? "1",  10));
     const size   = Math.min(100, parseInt(sp.get("size") ?? "50", 10));
@@ -25,71 +25,90 @@ export async function GET(req: NextRequest) {
     const category = (sp.get("category") ?? "").trim(); // "inProcess" | "tatExhausted" | ""
     const otaList  = (sp.get("otas") ?? "").split(",").map(s => s.trim()).filter(Boolean);
     const sssList  = (sp.get("sss")  ?? "").split(",").map(s => s.trim()).filter(Boolean);
-    const fhMonth  = (sp.get("fhMonth") ?? "").trim(); // "Mar 2025" → filter p.fhLiveDate LIKE '2025-03-%'
+    const fhMonth  = (sp.get("fhMonth") ?? "").trim(); // "Mar 2025" → filter by p.fh_live_date month
     const offset   = (page - 1) * size;
 
     // When fhMonth is set (click-through from Month-wise table) and no explicit category chosen,
-    // use the same conditions as overdue-listings API: fhStatus=Live + subStatus!='live' (includes exception).
+    // use the same conditions as overdue-listings API: fh_status=Live + sub_status!='live' (includes exception).
     // This ensures the property count matches exactly what the month table shows.
     const monthMode = !!fhMonth && !category;
 
     let conditions: string[];
     if (monthMode) {
-      conditions = ["LOWER(COALESCE(o.subStatus,'')) != 'live'", "p.fhStatus = 'Live'"];
+      conditions = ["LOWER(COALESCE(o.sub_status,'')) != 'live'", "p.fh_status = 'Live'"];
     } else if (category === "live") {
-      conditions = ["LOWER(COALESCE(o.subStatus,'')) = 'live'"];
+      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'live'"];
     } else if (category === "exception") {
-      conditions = ["LOWER(COALESCE(o.subStatus,'')) = 'exception'"];
+      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'exception'"];
     } else if (category === "all") {
       conditions = [];
     } else {
-      conditions = ["(LOWER(o.subStatus) != 'live' OR o.subStatus IS NULL)", "LOWER(COALESCE(o.subStatus,'')) != 'exception'"];
+      conditions = ["(LOWER(o.sub_status) != 'live' OR o.sub_status IS NULL)", "LOWER(COALESCE(o.sub_status,'')) != 'exception'"];
       if (category === "inProcess")    conditions.push("o.tat <= 15");
       if (category === "tatExhausted") conditions.push("o.tat > 15");
     }
 
-    const params: (string | number)[] = [];
+    const params: unknown[] = [];
 
     if (search) {
-      conditions.push("(p.name LIKE ? OR o.propertyId LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
+      conditions.push(`(p.property_name ILIKE $${params.length - 1} OR o.property_id ILIKE $${params.length})`);
     }
     if (otaList.length > 0) {
-      conditions.push(`o.ota IN (${otaList.map(() => "?").join(",")})`);
       params.push(...otaList);
+      const placeholders = otaList.map((_, i) => `$${params.length - otaList.length + i + 1}`).join(",");
+      conditions.push(`o.ota IN (${placeholders})`);
     }
     if (sssList.length > 0) {
       const rawVals = expandToRaw(sssList);
-      conditions.push(`LOWER(COALESCE(o.subStatus,'')) IN (${rawVals.map(() => "?").join(",")})`);
       params.push(...rawVals);
+      const placeholders = rawVals.map((_, i) => `$${params.length - rawVals.length + i + 1}`).join(",");
+      conditions.push(`LOWER(COALESCE(o.sub_status,'')) IN (${placeholders})`);
     }
     if (fhMonth) {
       const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       const [mon, yr] = fhMonth.split(" ");
       const mi = MONTH_NAMES.indexOf(mon ?? "");
       if (mi >= 0 && yr) {
-        conditions.push(`p.fhLiveDate LIKE ?`);
-        params.push(`${yr}-${String(mi + 1).padStart(2, "0")}-%`);
+        const padded = String(mi + 1).padStart(2, "0");
+        params.push(`${yr}-${padded}`);
+        conditions.push(`TO_CHAR(p.fh_live_date::date, 'YYYY-MM') = $${params.length}`);
       }
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const total = (db.prepare(`
-      SELECT COUNT(*) as n FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
+    const countQuery = `
+      SELECT COUNT(*) AS n
+      FROM ota_listing o
+      JOIN inventory p ON p.property_id = o.property_id
       ${where}
-    `).get(...params) as { n: number }).n;
+    `;
 
-    const rows = db.prepare(`
-      SELECT o.propertyId, p.name, p.city, p.fhLiveDate,
-             o.ota, o.status, o.subStatus, o.liveDate, o.tat, o.tatError
-      FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
+    const rowsQuery = `
+      SELECT o.property_id AS "propertyId",
+             p.property_name AS name,
+             p.city,
+             p.fh_live_date AS "fhLiveDate",
+             o.ota,
+             o.status,
+             o.sub_status AS "subStatus",
+             o.live_date AS "liveDate",
+             o.tat,
+             o.tat_error AS "tatError"
+      FROM ota_listing o
+      JOIN inventory p ON p.property_id = o.property_id
       ${where}
-      ORDER BY o.tat DESC, p.name, o.ota
-      LIMIT ? OFFSET ?
-    `).all(...params, size, offset);
+      ORDER BY o.tat DESC, p.property_name, o.ota
+      LIMIT ${size} OFFSET ${offset}
+    `;
+
+    const [countRows, rows] = await Promise.all([
+      sql.unsafe(countQuery, params),
+      sql.unsafe(rowsQuery, params),
+    ]);
+
+    const total = Number((countRows as { n: string | number }[])[0]?.n ?? 0);
 
     return Response.json({ rows, total, page, size, pages: Math.ceil(total / size) });
   } catch (err) {

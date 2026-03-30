@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
 
@@ -20,7 +20,7 @@ const DB_TO_OTA: Record<string, string> = {
 
 export async function GET() {
   try {
-    const db = getDb();
+    const sql = getSql();
 
     const end   = new Date();
     const start = new Date();
@@ -44,25 +44,25 @@ export async function GET() {
       }
     };
 
-    const soldRows = db.prepare(`
-      SELECT sold_date, ota, SUM(rns) as rns
-      FROM RnsSold
-      WHERE sold_date >= ? AND sold_date <= ?
-      GROUP BY sold_date, ota
-      ORDER BY sold_date ASC
-    `).all(fmt(start), fmt(end)) as { sold_date: string; ota: string; rns: number }[];
+    const soldRows = await sql`
+      SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
+      FROM sold_rns
+      WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
+      GROUP BY date, channel
+      ORDER BY date ASC
+    ` as { sold_date: string; ota: string; rns: number }[];
 
     if (soldRows.length > 0) {
       populate(soldRows);
     } else {
-      // fallback to RnsStay
-      const stayRows = db.prepare(`
-        SELECT stay_date as sold_date, ota, SUM(rns) as rns
-        FROM RnsStay
-        WHERE stay_date >= ? AND stay_date <= ?
-        GROUP BY stay_date, ota
-        ORDER BY stay_date ASC
-      `).all(fmt(start), fmt(end)) as { sold_date: string; ota: string; rns: number }[];
+      // fallback to stay_rns
+      const stayRows = await sql`
+        SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
+        FROM stay_rns
+        WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
+        GROUP BY date, channel
+        ORDER BY date ASC
+      ` as { sold_date: string; ota: string; rns: number }[];
       populate(stayRows);
     }
 

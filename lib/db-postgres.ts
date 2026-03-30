@@ -39,6 +39,7 @@ export async function initPostgresSchema() {
       revenue          NUMERIC(12,2) NOT NULL DEFAULT 0,
       initial_prop_id  TEXT NOT NULL DEFAULT '',
       final_prop_id    TEXT NOT NULL DEFAULT '',
+      status           TEXT,
       synced_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (date, channel, initial_prop_id, final_prop_id)
     )

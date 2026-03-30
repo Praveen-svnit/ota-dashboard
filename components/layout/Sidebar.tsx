@@ -169,6 +169,12 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           <NavLink icon="◎" label="Team Performance"  href="/performance" />
         </>)}
 
+        {/* Admin */}
+        {(sessionUser?.role === "admin" || sessionUser?.role === "head") && (<>
+          <SectionHeader label="Admin" />
+          <NavLink icon="⇡" label="Upload RNS Data" href="/admin/upload-rns" />
+        </>)}
+
         {/* Reports */}
         <SectionHeader label="Reports" />
         <NavLink icon="◉" label="OTA Analytics"         href="/ota-analytics" />

@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import {
   buildDashboardTaskInsights,
   enrichTaskRecord,
@@ -29,34 +29,104 @@ function deriveSourcePageLabel(route: string | null | undefined) {
   return route.replace(/^\//, "").replace(/-/g, " ") || "General";
 }
 
-function fetchDashboardTasks(filters: { route?: string | null; sourceAnchor?: string | null; includeCompleted?: boolean; onlyRouteSummary?: boolean }) {
-  const db = getDb();
+function mapRow(row: Record<string, unknown>, comments: DashboardTaskComment[]) {
+  return withDerivedTaskFields({
+    id: Number(row.id),
+    propertyId: String(row.propertyId ?? "dashboard-global"),
+    taskType: String(row.taskType ?? "dashboard") as DashboardTaskRecord["taskType"],
+    title: String(row.title ?? ""),
+    description: (row.description as string | null) ?? null,
+    status: String(row.status ?? "open") as DashboardTaskStatus,
+    priority: String(row.priority ?? "medium") as DashboardTaskPriority,
+    assignedTo: (row.assignedTo as string | null) ?? null,
+    assignedName: (row.assignedNameResolved as string | null) ?? null,
+    assignedRole: (row.assignedRole as string | null) ?? null,
+    assignedTeamLead: (row.assignedTeamLead as string | null) ?? null,
+    createdBy: (row.createdBy as string | null) ?? null,
+    createdByName: (row.createdByName as string | null) ?? null,
+    dueDate: (row.dueDate as string | null) ?? null,
+    followUpAt: (row.followUpAt as string | null) ?? null,
+    taskDate: (row.taskDate as string | null) ?? null,
+    sourceRoute: (row.sourceRoute as string | null) ?? null,
+    sourceLabel: (row.sourceLabel as string | null) ?? null,
+    sourceAnchor: (row.sourceAnchor as string | null) ?? null,
+    sourcePage: (row.sourcePage as string | null) ?? null,
+    sourceSection: (row.sourceSection as string | null) ?? null,
+    relatedOta: (row.relatedOta as string | null) ?? null,
+    relatedCity: (row.relatedCity as string | null) ?? null,
+    completionComment: (row.completionComment as string | null) ?? null,
+    completedAt: (row.completedAt as string | null) ?? null,
+    bucket: (row.bucket as DashboardTaskRecord["bucket"]) ?? null,
+    aiSummary: (row.aiSummary as string | null) ?? null,
+    aiInsight: (row.aiInsight as string | null) ?? null,
+    tags: (row.tags as string | null) ?? null,
+    createdAt: String(row.createdAt ?? ""),
+    updatedAt: String(row.updatedAt ?? ""),
+    comments,
+  });
+}
+
+async function fetchDashboardTasks(filters: {
+  route?: string | null;
+  sourceAnchor?: string | null;
+  includeCompleted?: boolean;
+}) {
+  const sql = getSql();
   const clauses: string[] = [];
   const params: Array<string | number> = [];
+  let p = 0;
 
   if (!filters.includeCompleted) {
     clauses.push("t.status != 'done'");
   }
-
   if (filters.route) {
-    clauses.push("t.sourceRoute = ?");
+    clauses.push(`t.source_route = $${++p}`);
     params.push(filters.route);
   }
-
   if (filters.sourceAnchor) {
-    clauses.push("t.sourceAnchor = ?");
+    clauses.push(`t.source_anchor = $${++p}`);
     params.push(filters.sourceAnchor);
   }
 
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  const rows = db.prepare(`
+
+  const rows = await sql.unsafe(`
     SELECT
-      t.*,
-      COALESCE(NULLIF(t.assignedName, ''), u.name) AS assignedNameResolved,
-      c.name AS createdByName
-    FROM Tasks t
-    LEFT JOIN Users u ON u.id = t.assignedTo
-    LEFT JOIN Users c ON c.id = t.createdBy
+      t.id,
+      t.property_id        AS "propertyId",
+      t.task_type          AS "taskType",
+      t.title,
+      t.description,
+      t.status,
+      t.priority,
+      t.assigned_to        AS "assignedTo",
+      t.assigned_name      AS "assignedName",
+      t.assigned_role      AS "assignedRole",
+      t.assigned_team_lead AS "assignedTeamLead",
+      t.created_by         AS "createdBy",
+      t.due_date           AS "dueDate",
+      t.follow_up_at       AS "followUpAt",
+      t.task_date          AS "taskDate",
+      t.source_route       AS "sourceRoute",
+      t.source_label       AS "sourceLabel",
+      t.source_anchor      AS "sourceAnchor",
+      t.source_page        AS "sourcePage",
+      t.source_section     AS "sourceSection",
+      t.related_ota        AS "relatedOta",
+      t.related_city       AS "relatedCity",
+      t.completion_comment AS "completionComment",
+      t.completed_at       AS "completedAt",
+      t.bucket,
+      t.ai_summary         AS "aiSummary",
+      t.ai_insight         AS "aiInsight",
+      t.tags,
+      t.created_at         AS "createdAt",
+      t.updated_at         AS "updatedAt",
+      COALESCE(NULLIF(t.assigned_name, ''), u.name) AS "assignedNameResolved",
+      c.name AS "createdByName"
+    FROM tasks t
+    LEFT JOIN users u ON u.id = t.assigned_to
+    LEFT JOIN users c ON c.id = t.created_by
     ${whereClause}
     ORDER BY
       CASE t.priority
@@ -72,18 +142,19 @@ function fetchDashboardTasks(filters: { route?: string | null; sourceAnchor?: st
         WHEN 'in_progress' THEN 3
         ELSE 4
       END,
-      t.updatedAt DESC,
-      t.createdAt DESC
-  `).all(...params) as Array<Record<string, unknown>>;
+      t.updated_at DESC,
+      t.created_at DESC
+  `, params) as Array<Record<string, unknown>>;
 
   const taskIds = rows.map((row) => Number(row.id)).filter(Boolean);
-  const comments = taskIds.length > 0
-    ? db.prepare(`
-        SELECT id, taskId, comment, commentType, createdBy, createdByName, createdAt
-        FROM TaskComments
-        WHERE taskId IN (${taskIds.map(() => "?").join(",")})
-        ORDER BY createdAt ASC, id ASC
-      `).all(...taskIds) as DashboardTaskComment[]
+  const comments: DashboardTaskComment[] = taskIds.length > 0
+    ? (await sql`
+        SELECT id, task_id AS "taskId", comment, comment_type AS "commentType",
+               created_by AS "createdBy", created_by_name AS "createdByName", created_at AS "createdAt"
+        FROM task_comments
+        WHERE task_id = ANY(${taskIds})
+        ORDER BY created_at ASC, id ASC
+      `) as unknown as DashboardTaskComment[]
     : [];
 
   const commentsByTask = new Map<number, DashboardTaskComment[]>();
@@ -93,42 +164,7 @@ function fetchDashboardTasks(filters: { route?: string | null; sourceAnchor?: st
     commentsByTask.set(comment.taskId, list);
   }
 
-  return rows.map((row) =>
-    withDerivedTaskFields({
-      id: Number(row.id),
-      propertyId: String(row.propertyId ?? "dashboard-global"),
-      taskType: String(row.taskType ?? "dashboard") as DashboardTaskRecord["taskType"],
-      title: String(row.title ?? ""),
-      description: (row.description as string | null) ?? null,
-      status: String(row.status ?? "open") as DashboardTaskStatus,
-      priority: String(row.priority ?? "medium") as DashboardTaskPriority,
-      assignedTo: (row.assignedTo as string | null) ?? null,
-      assignedName: (row.assignedNameResolved as string | null) ?? null,
-      assignedRole: (row.assignedRole as string | null) ?? null,
-      assignedTeamLead: (row.assignedTeamLead as string | null) ?? null,
-      createdBy: (row.createdBy as string | null) ?? null,
-      createdByName: (row.createdByName as string | null) ?? null,
-      dueDate: (row.dueDate as string | null) ?? null,
-      followUpAt: (row.followUpAt as string | null) ?? null,
-      taskDate: (row.taskDate as string | null) ?? null,
-      sourceRoute: (row.sourceRoute as string | null) ?? null,
-      sourceLabel: (row.sourceLabel as string | null) ?? null,
-      sourceAnchor: (row.sourceAnchor as string | null) ?? null,
-      sourcePage: (row.sourcePage as string | null) ?? null,
-      sourceSection: (row.sourceSection as string | null) ?? null,
-      relatedOta: (row.relatedOta as string | null) ?? null,
-      relatedCity: (row.relatedCity as string | null) ?? null,
-      completionComment: (row.completionComment as string | null) ?? null,
-      completedAt: (row.completedAt as string | null) ?? null,
-      bucket: (row.bucket as DashboardTaskRecord["bucket"]) ?? null,
-      aiSummary: (row.aiSummary as string | null) ?? null,
-      aiInsight: (row.aiInsight as string | null) ?? null,
-      tags: (row.tags as string | null) ?? null,
-      createdAt: String(row.createdAt ?? ""),
-      updatedAt: String(row.updatedAt ?? ""),
-      comments: commentsByTask.get(Number(row.id)) ?? [],
-    })
-  );
+  return rows.map((row) => mapRow(row, commentsByTask.get(Number(row.id)) ?? []));
 }
 
 export async function GET(req: Request) {
@@ -139,7 +175,7 @@ export async function GET(req: Request) {
   const route = searchParams.get("route");
   const sourceAnchor = searchParams.get("sourceAnchor");
   const includeCompleted = searchParams.get("includeCompleted") === "1";
-  const tasks = fetchDashboardTasks({ route, sourceAnchor, includeCompleted });
+  const tasks = await fetchDashboardTasks({ route, sourceAnchor, includeCompleted });
   const insights = buildDashboardTaskInsights(tasks);
   const routeActiveTasks = route ? tasks.filter((task) => task.sourceRoute === route && task.status !== "done") : [];
 
@@ -201,73 +237,51 @@ export async function POST(req: Request) {
     sourcePage: deriveSourcePageLabel(sourceRoute),
   });
 
-  const db = getDb();
-  const result = db.prepare(`
-    INSERT INTO Tasks (
-      propertyId, taskType, title, description, status, priority,
-      assignedTo, assignedName, assignedRole, assignedTeamLead, createdBy,
-      dueDate, followUpAt, taskDate, sourceRoute, sourceLabel, sourceAnchor,
-      sourcePage, sourceSection, relatedOta, relatedCity, bucket, aiSummary,
-      aiInsight, tags, createdAt, updatedAt
+  const sql = getSql();
+  const [insertedRow] = await sql`
+    INSERT INTO tasks (
+      property_id, task_type, title, description, status, priority,
+      assigned_to, assigned_name, assigned_role, assigned_team_lead, created_by,
+      due_date, follow_up_at, task_date, source_route, source_label, source_anchor,
+      source_page, source_section, related_ota, related_city, bucket, ai_summary,
+      ai_insight, tags, created_at, updated_at
     )
     VALUES (
-      ?, ?, ?, ?, 'open', ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, date('now','localtime'), ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
-      ?, ?, datetime('now'), datetime('now')
+      ${propertyId}, ${taskType}, ${title}, ${description || null}, 'open', ${priority},
+      ${assignedTo}, ${assignedName}, ${member?.role ?? null}, ${member?.teamLead ?? null}, ${session.id},
+      ${dueDate}, ${followUpAt}, CURRENT_DATE, ${sourceRoute}, ${sourceLabel}, ${sourceAnchor},
+      ${deriveSourcePageLabel(sourceRoute)}, ${sourceSection}, ${relatedOta}, ${relatedCity}, ${enriched.bucket}, ${enriched.aiSummary},
+      ${enriched.aiInsight}, ${tags}, NOW(), NOW()
     )
-  `).run(
-    propertyId,
-    taskType,
-    title,
-    description || null,
-    priority,
-    assignedTo,
-    assignedName,
-    member?.role ?? null,
-    member?.teamLead ?? null,
-    session.id,
-    dueDate,
-    followUpAt,
-    sourceRoute,
-    sourceLabel,
-    sourceAnchor,
-    deriveSourcePageLabel(sourceRoute),
-    sourceSection,
-    relatedOta,
-    relatedCity,
-    enriched.bucket,
-    enriched.aiSummary,
-    enriched.aiInsight,
-    tags,
-  );
+    RETURNING id
+  `;
+  const newTaskId = Number(insertedRow.id);
 
   if (description) {
-    db.prepare(`
-      INSERT INTO TaskComments (taskId, comment, commentType, createdBy, createdByName, createdAt)
-      VALUES (?, ?, 'update', ?, ?, datetime('now'))
-    `).run(result.lastInsertRowid, description, session.id, session.name);
+    await sql`
+      INSERT INTO task_comments (task_id, comment, comment_type, created_by, created_by_name, created_at)
+      VALUES (${newTaskId}, ${description}, 'update', ${session.id}, ${session.name}, NOW())
+    `;
   }
 
   if (assignedName || assignedTo) {
-    createTaskNotification(db, {
-      taskId: Number(result.lastInsertRowid),
+    await createTaskNotification({
+      taskId: newTaskId,
       type: "assignment",
       title: `New task assigned: ${title}`,
       message: `${session.name} assigned you a ${priority} priority task from ${sourceLabel}.`,
       recipientUserId: assignedTo,
       recipientName: assignedName,
       metadata: {
-        taskId: Number(result.lastInsertRowid),
+        taskId: newTaskId,
         sourceRoute,
         sourceAnchor,
       },
     });
   }
 
-  const tasks = fetchDashboardTasks({ includeCompleted: false });
-  const createdTask = tasks.find((task) => task.id === Number(result.lastInsertRowid)) ?? null;
+  const tasks = await fetchDashboardTasks({ includeCompleted: false });
+  const createdTask = tasks.find((task) => task.id === newTaskId) ?? null;
 
   return Response.json({
     task: createdTask,

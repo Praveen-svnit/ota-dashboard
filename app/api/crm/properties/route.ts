@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function GET(req: Request) {
@@ -6,9 +6,10 @@ export async function GET(req: Request) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const search       = searchParams.get("search") ?? "";
-  const otaFilter    = searchParams.get("ota")    ?? "all";
-  const statusFilter = searchParams.get("status") ?? "all";
+  const search          = searchParams.get("search")    ?? "";
+  const otaFilter       = searchParams.get("ota")       ?? "all";
+  const statusFilter    = searchParams.get("status")    ?? "all";
+  const subStatusFilter = searchParams.get("subStatus") ?? "all";
   const fhFrom       = searchParams.get("fhFrom")  ?? "";
   const fhTo         = searchParams.get("fhTo")    ?? "";
   const otaFrom      = searchParams.get("otaFrom") ?? "";
@@ -18,95 +19,122 @@ export async function GET(req: Request) {
   const limit        = exportAll ? 99999 : 50;
   const offset       = exportAll ? 0 : (page - 1) * limit;
 
-  const db = getDb();
+  const sql = getSql();
 
+  // params and conditions are built up together; each push returns the new $N index
   const conditions: string[] = [];
-  const params: (string | number)[] = [];
+  const params: unknown[] = [];
+  const p = () => params.length; // current placeholder index after a push
 
   // ── Role-based access control ──────────────────────────────
   if (session.role === "intern") {
-    conditions.push("c.assignedTo = ?");
     params.push(session.id);
+    conditions.push(`c.assigned_to = $${p()}`);
   } else if (session.role === "tl") {
-    const internRows = db.prepare(
-      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
-    ).all(session.name) as { id: string }[];
+    // Fetch intern IDs under this TL (tagged template handles its own binding)
+    const internRows = await sql`
+      SELECT id FROM users
+      WHERE team_lead = ${session.name} AND role = 'intern' AND active = 1
+    ` as { id: string }[];
 
     if (internRows.length === 0) {
       return Response.json({ rows: [], total: 0, page, limit });
     }
-    const placeholders = internRows.map(() => "?").join(",");
-    conditions.push(`c.assignedTo IN (${placeholders})`);
-    internRows.forEach(r => params.push(r.id));
+
+    const inPlaceholders = internRows.map(r => {
+      params.push(r.id);
+      return `$${p()}`;
+    }).join(", ");
+    conditions.push(`c.assigned_to IN (${inPlaceholders})`);
   }
 
   // ── User-driven filters ────────────────────────────────────
   if (otaFilter !== "all") {
-    conditions.push("c.ota = ?");
     params.push(otaFilter);
+    conditions.push(`c.ota = $${p()}`);
   }
 
   if (statusFilter !== "all") {
-    conditions.push("LOWER(c.status) = LOWER(?)");
-    params.push(statusFilter);
+    params.push(statusFilter.toLowerCase());
+    conditions.push(`LOWER(c.status) = $${p()}`);
+  }
+
+  if (subStatusFilter !== "all") {
+    params.push(subStatusFilter.toLowerCase());
+    conditions.push(`LOWER(c.sub_status) = $${p()}`);
   }
 
   if (search) {
-    conditions.push("(c.name LIKE ? OR c.id LIKE ? OR c.city LIKE ?)");
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    params.push(`%${search}%`);
+    const idx = p();
+    conditions.push(`(c.property_name ILIKE $${idx} OR c.property_id ILIKE $${idx} OR c.city ILIKE $${idx})`);
   }
-  if (fhFrom) { conditions.push("DATE(c.fhLiveDate) >= ?"); params.push(fhFrom); }
-  if (fhTo)   { conditions.push("DATE(c.fhLiveDate) <= ?"); params.push(fhTo); }
-  if (otaFrom) { conditions.push("DATE(c.liveDate) >= ?"); params.push(otaFrom); }
-  if (otaTo)   { conditions.push("DATE(c.liveDate) <= ?"); params.push(otaTo); }
+
+  if (fhFrom)  { params.push(fhFrom);  conditions.push(`c.fh_live_date::date >= $${p()}`); }
+  if (fhTo)    { params.push(fhTo);    conditions.push(`c.fh_live_date::date <= $${p()}`); }
+  if (otaFrom) { params.push(otaFrom); conditions.push(`c.live_date::date >= $${p()}`); }
+  if (otaTo)   { params.push(otaTo);   conditions.push(`c.live_date::date <= $${p()}`); }
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
-  const rows = db.prepare(`
-    WITH combined AS (
-      SELECT p.id, p.name, p.city, p.fhStatus, p.fhLiveDate,
-             ol.ota, ol.status, ol.subStatus, ol.liveDate,
-             ol.tat, ol.tatError, ol.assignedTo, ol.crmNote, ol.crmUpdatedAt
-      FROM Property p JOIN OtaListing ol ON ol.propertyId = p.id
-      UNION ALL
-      SELECT p.id, p.name, p.city, p.fhStatus, p.fhLiveDate,
-             'GMB' AS ota, g.gmbStatus AS status, g.gmbSubStatus AS subStatus, NULL AS liveDate,
-             0 AS tat, 0 AS tatError, NULL AS assignedTo, NULL AS crmNote, NULL AS crmUpdatedAt
-      FROM Property p JOIN GmbTracker g ON g.propertyId = p.id
-    )
-    SELECT c.id, c.name, c.city, c.fhStatus, c.fhLiveDate,
-           c.ota,
-           COALESCE(NULLIF(TRIM(c.status),''), 'New')    AS status,
-           COALESCE(NULLIF(TRIM(c.subStatus),''), 'New') AS subStatus,
-           c.liveDate,
-           c.tat, c.tatError, c.assignedTo, c.crmNote, c.crmUpdatedAt,
-           u.name AS assignedName,
-           (SELECT MIN(t.dueDate) FROM Tasks t WHERE t.propertyId = c.id AND t.status = 'open' AND t.dueDate IS NOT NULL) AS taskDueDate
-    FROM combined c
-    LEFT JOIN Users u ON u.id = c.assignedTo
-    ${where}
-    ORDER BY c.name ASC
-    LIMIT ? OFFSET ?
-  `).all(...params, limit, offset) as Array<{
-    id: string; name: string; city: string; fhStatus: string; fhLiveDate: string;
-    ota: string; status: string; subStatus: string; liveDate: string;
-    tat: number; tatError: number; assignedTo: string; crmNote: string;
-    crmUpdatedAt: string; assignedName: string; taskDueDate: string | null;
-  }>;
+  // Snapshot params for the count query (no LIMIT/OFFSET needed there)
+  const countParams = [...params];
 
-  const totalRow = db.prepare(`
-    WITH combined AS (
-      SELECT p.id, p.name, p.city, p.fhStatus, p.fhLiveDate,
-             ol.ota, ol.status, ol.subStatus, ol.assignedTo
-      FROM Property p JOIN OtaListing ol ON ol.propertyId = p.id
-      UNION ALL
-      SELECT p.id, p.name, p.city, p.fhStatus, p.fhLiveDate,
-             'GMB' AS ota, g.gmbStatus AS status, g.gmbSubStatus AS subStatus, NULL AS assignedTo
-      FROM Property p JOIN GmbTracker g ON g.propertyId = p.id
-    )
-    SELECT COUNT(*) as n FROM combined c
-    ${where}
-  `).get(...params) as { n: number };
+  // Add LIMIT / OFFSET for the rows query
+  params.push(limit);
+  const limitIdx = p();
+  params.push(offset);
+  const offsetIdx = p();
 
-  return Response.json({ rows, total: totalRow.n, page, limit });
+  const innerCte = `
+    SELECT
+      inv.property_id, inv.property_name, inv.city, inv.fh_status, inv.fh_live_date,
+      ol.ota, ol.status, ol.sub_status, ol.live_date,
+      ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
+    FROM inventory inv
+    JOIN ota_listing ol ON ol.property_id = inv.property_id
+  `;
+
+  const rowsQuery = `
+    SELECT
+      c.property_id                                          AS id,
+      c.property_name                                        AS name,
+      c.city,
+      c.fh_status                                            AS "fhStatus",
+      c.fh_live_date                                         AS "fhLiveDate",
+      c.ota,
+      COALESCE(NULLIF(TRIM(c.status),     ''), 'New')        AS status,
+      COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New')        AS "subStatus",
+      c.live_date                                            AS "liveDate",
+      c.tat,
+      c.tat_error                                            AS "tatError",
+      c.assigned_to                                          AS "assignedTo",
+      c.crm_note                                             AS "crmNote",
+      c.crm_updated_at                                       AS "crmUpdatedAt",
+      u.name                                                 AS "assignedName",
+      (SELECT MIN(t.due_date) FROM tasks t
+       WHERE t.property_id = c.property_id
+         AND t.status = 'open'
+         AND t.due_date IS NOT NULL)                         AS "taskDueDate"
+    FROM (${innerCte}) c
+    LEFT JOIN users u ON u.id = c.assigned_to
+    ${where}
+    ORDER BY c.property_name ASC
+    LIMIT $${limitIdx} OFFSET $${offsetIdx}
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*) AS n
+    FROM (${innerCte}) c
+    ${where}
+  `;
+
+  const [rows, countRows] = await Promise.all([
+    sql.unsafe(rowsQuery, params as unknown[]),
+    sql.unsafe(countQuery, countParams as unknown[]),
+  ]);
+
+  const total = Number((countRows[0] as { n: string | number }).n);
+
+  return Response.json({ rows, total, page, limit });
 }

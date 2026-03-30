@@ -1,9 +1,10 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 export async function GET() {
-  const db = getDb();
+  const sql = getSql();
 
-  const propCount = (db.prepare("SELECT COUNT(*) as n FROM Property").get() as { n: number }).n;
+  const countRows = await sql`SELECT COUNT(*) as n FROM inventory`;
+  const propCount = Number((countRows[0] as { n: number }).n);
   if (propCount === 0) {
     return Response.json({
       error: "No data — click Sync to DB first",
@@ -13,16 +14,31 @@ export async function GET() {
     });
   }
 
-  const props = db.prepare(
-    "SELECT id, name, city, fhLiveDate, fhStatus FROM Property WHERE fhStatus IN ('Live', 'SoldOut') ORDER BY id ASC"
-  ).all() as Array<{
+  const props = await sql`
+    SELECT
+      property_id AS id,
+      property_name AS name,
+      city,
+      fh_live_date AS "fhLiveDate",
+      fh_status AS "fhStatus"
+    FROM inventory
+    WHERE fh_status IN ('Live', 'SoldOut')
+    ORDER BY property_id ASC
+  ` as Array<{
     id: string; name: string; city: string | null;
     fhLiveDate: string | null; fhStatus: string | null;
   }>;
 
-  const otaRows = db.prepare(
-    "SELECT propertyId, ota, status, subStatus, liveDate, otaId FROM OtaListing"
-  ).all() as Array<{
+  const otaRows = await sql`
+    SELECT
+      property_id AS "propertyId",
+      ota,
+      status,
+      sub_status AS "subStatus",
+      live_date AS "liveDate",
+      ota_id AS "otaId"
+    FROM ota_listing
+  ` as Array<{
     propertyId: string; ota: string;
     status: string | null; subStatus: string | null;
     liveDate: string | null; otaId: string | null;

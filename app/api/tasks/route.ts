@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function GET(req: Request) {
@@ -16,110 +16,155 @@ export async function GET(req: Request) {
   const createdFrom = searchParams.get("createdFrom") ?? "";
   const createdTo   = searchParams.get("createdTo")   ?? "";
 
-  const db = getDb();
+  const sql = getSql();
 
   const conditions: string[] = [];
-  const params: (string | number)[] = [];
+  const params: unknown[] = [];
 
   // ── Role-based access control ──────────────────────────────
   if (session.role === "intern") {
     // Intern: only their own tasks
-    conditions.push("t.assignedTo = ?");
     params.push(session.id);
+    conditions.push(`t.assigned_to = $${params.length}`);
 
   } else if (session.role === "tl") {
     // TL: tasks assigned to their interns
-    const internRows = db.prepare(
-      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
-    ).all(session.name) as { id: string }[];
+    const internRows = await sql`
+      SELECT id FROM users WHERE team_lead = ${session.name} AND role = 'intern' AND active = true
+    ` as { id: string }[];
 
     if (internRows.length === 0) {
       return Response.json({ tasks: [], counts: [], assignees: [] });
     }
-    const placeholders = internRows.map(() => "?").join(",");
-    conditions.push(`t.assignedTo IN (${placeholders})`);
-    internRows.forEach(r => params.push(r.id));
+    const ids = internRows.map(r => r.id);
+    params.push(...ids);
+    const placeholders = ids.map((_, i) => `$${params.length - ids.length + i + 1}`).join(",");
+    conditions.push(`t.assigned_to IN (${placeholders})`);
   }
   // head / admin: no role restriction
 
   // ── User-driven filters ────────────────────────────────────
   if (status === "overdue") {
     conditions.push("t.status = 'open'");
-    conditions.push("t.dueDate IS NOT NULL");
-    conditions.push("t.dueDate < date('now','localtime')");
+    conditions.push("t.due_date IS NOT NULL");
+    conditions.push("t.due_date < CURRENT_DATE");
   } else if (status !== "all") {
-    conditions.push("t.status = ?");
     params.push(status);
+    conditions.push(`t.status = $${params.length}`);
   }
   if (priority !== "all") {
-    conditions.push("t.priority = ?");
     params.push(priority);
+    conditions.push(`t.priority = $${params.length}`);
   }
   if (assignee !== "all") {
-    conditions.push("(t.assignedTo = ? OR t.assignedName = ?)");
     params.push(assignee, assignee);
+    conditions.push(`(t.assigned_to = $${params.length - 1} OR t.assigned_name = $${params.length})`);
   }
   if (search) {
-    conditions.push("(t.title LIKE ? OR p.name LIKE ? OR p.city LIKE ?)");
     params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    conditions.push(`(t.title ILIKE $${params.length - 2} OR p.property_name ILIKE $${params.length - 1} OR p.city ILIKE $${params.length})`);
   }
   if (ota !== "all") {
-    conditions.push("t.relatedOta = ?");
     params.push(ota);
+    conditions.push(`t.related_ota = $${params.length}`);
   }
-  if (dueDateFrom) { conditions.push("DATE(t.dueDate) >= ?"); params.push(dueDateFrom); }
-  if (dueDateTo)   { conditions.push("DATE(t.dueDate) <= ?"); params.push(dueDateTo); }
-  if (createdFrom) { conditions.push("DATE(t.createdAt) >= ?"); params.push(createdFrom); }
-  if (createdTo)   { conditions.push("DATE(t.createdAt) <= ?"); params.push(createdTo); }
+  if (dueDateFrom) {
+    params.push(dueDateFrom);
+    conditions.push(`t.due_date::date >= $${params.length}`);
+  }
+  if (dueDateTo) {
+    params.push(dueDateTo);
+    conditions.push(`t.due_date::date <= $${params.length}`);
+  }
+  if (createdFrom) {
+    params.push(createdFrom);
+    conditions.push(`t.created_at::date >= $${params.length}`);
+  }
+  if (createdTo) {
+    params.push(createdTo);
+    conditions.push(`t.created_at::date <= $${params.length}`);
+  }
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
   // Build a role-scoped base filter for counts/assignees (without status/priority/assignee/search)
   const roleConditions: string[] = [];
-  const roleParams: (string | number)[] = [];
+  const roleParams: unknown[] = [];
+
   if (session.role === "intern") {
-    roleConditions.push("t.assignedTo = ?");
     roleParams.push(session.id);
+    roleConditions.push(`t.assigned_to = $${roleParams.length}`);
   } else if (session.role === "tl") {
-    const internRows = db.prepare(
-      "SELECT id FROM Users WHERE teamLead = ? AND role = 'intern' AND active = 1"
-    ).all(session.name) as { id: string }[];
+    const internRows = await sql`
+      SELECT id FROM users WHERE team_lead = ${session.name} AND role = 'intern' AND active = true
+    ` as { id: string }[];
     if (internRows.length > 0) {
-      const placeholders = internRows.map(() => "?").join(",");
-      roleConditions.push(`t.assignedTo IN (${placeholders})`);
-      internRows.forEach(r => roleParams.push(r.id));
+      const ids = internRows.map(r => r.id);
+      roleParams.push(...ids);
+      const placeholders = ids.map((_, i) => `$${roleParams.length - ids.length + i + 1}`).join(",");
+      roleConditions.push(`t.assigned_to IN (${placeholders})`);
     }
   }
   const roleWhere = roleConditions.length ? "WHERE " + roleConditions.join(" AND ") : "";
 
-  const tasks = db.prepare(`
-    SELECT t.id, t.propertyId, t.title, t.description, t.status, t.priority,
-           t.assignedTo, t.assignedName, t.dueDate, t.createdAt, t.completedAt,
-           t.relatedOta, t.completionComment,
-           p.name as propName, p.city as propCity,
-           COALESCE(NULLIF(t.assignedName,''), u.name) as displayAssignee
-    FROM Tasks t
-    LEFT JOIN Property p ON p.id = t.propertyId
-    LEFT JOIN Users u ON u.id = t.assignedTo
+  const tasksQuery = `
+    SELECT t.id,
+           t.property_id AS "propertyId",
+           t.title,
+           t.description,
+           t.status,
+           t.priority,
+           t.assigned_to AS "assignedTo",
+           t.assigned_name AS "assignedName",
+           t.due_date AS "dueDate",
+           t.created_at AS "createdAt",
+           t.completed_at AS "completedAt",
+           t.related_ota AS "relatedOta",
+           t.completion_comment AS "completionComment",
+           p.property_name AS "propName",
+           p.city AS "propCity",
+           COALESCE(NULLIF(t.assigned_name,''), u.name) AS "displayAssignee"
+    FROM tasks t
+    LEFT JOIN inventory p ON p.property_id = t.property_id
+    LEFT JOIN users u ON u.id = t.assigned_to
     ${where}
     ORDER BY
       CASE t.status WHEN 'open' THEN 0 ELSE 1 END,
       CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-      t.dueDate ASC,
-      t.createdAt DESC
+      t.due_date ASC,
+      t.created_at DESC
     LIMIT 200
-  `).all(...params);
+  `;
 
-  const counts = db.prepare(`
-    SELECT status, priority, COUNT(*) as cnt FROM Tasks t ${roleWhere} GROUP BY status, priority
-  `).all(...roleParams) as { status: string; priority: string; cnt: number }[];
+  const countsQuery = `
+    SELECT status, priority, COUNT(*) AS cnt
+    FROM tasks t
+    ${roleWhere}
+    GROUP BY status, priority
+  `;
 
-  const assignees = db.prepare(`
-    SELECT DISTINCT COALESCE(NULLIF(t.assignedName,''), u.name) as name
-    FROM Tasks t LEFT JOIN Users u ON u.id = t.assignedTo
-    ${roleWhere ? roleWhere + " AND" : "WHERE"} name IS NOT NULL AND name != ''
+  const assigneesQuery = `
+    SELECT DISTINCT name FROM (
+      SELECT COALESCE(NULLIF(t.assigned_name,''), u.name) AS name
+      FROM tasks t
+      LEFT JOIN users u ON u.id = t.assigned_to
+      ${roleWhere}
+    ) sub
+    WHERE name IS NOT NULL AND name != ''
     ORDER BY name
-  `).all(...roleParams) as { name: string }[];
+  `;
+
+  const [tasks, countsRaw, assignees] = await Promise.all([
+    sql.unsafe(tasksQuery, params),
+    sql.unsafe(countsQuery, roleParams),
+    sql.unsafe(assigneesQuery, roleParams),
+  ]);
+
+  const counts = (countsRaw as { status: string; priority: string; cnt: string | number }[]).map(r => ({
+    status: r.status,
+    priority: r.priority,
+    cnt: Number(r.cnt),
+  }));
 
   return Response.json({ tasks, counts, assignees });
 }
@@ -131,11 +176,16 @@ export async function PATCH(req: Request) {
   const { id, status, completionComment } = await req.json();
   if (!id) return Response.json({ error: "id required" }, { status: 400 });
 
-  const db = getDb();
-  db.prepare(`
-    UPDATE Tasks SET status = ?, completionComment = ?, completedAt = ?, updatedAt = datetime('now')
-    WHERE id = ?
-  `).run(status, completionComment || null, status === "done" ? new Date().toISOString() : null, id);
+  const sql = getSql();
+  await sql`
+    UPDATE tasks
+    SET
+      status = ${status},
+      completion_comment = ${completionComment || null},
+      completed_at = ${status === "done" ? new Date().toISOString() : null},
+      updated_at = NOW()
+    WHERE id = ${id}
+  `;
 
   return Response.json({ ok: true });
 }

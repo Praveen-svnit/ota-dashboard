@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { enrichTaskRecord } from "@/lib/dashboard-task-analytics";
 import { findTeamMemberByName } from "@/lib/team-directory";
@@ -11,8 +11,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
   const body = await req.json();
   const { status, title, description, priority, assignedTo, assignedName, dueDate, followUpAt, comment } = body;
 
-  const db = getDb();
-  const current = db.prepare("SELECT * FROM Tasks WHERE id = ?").get(taskId) as Record<string, unknown> | undefined;
+  const sql = await getSql();
+  const currentRows = await sql`SELECT * FROM tasks WHERE id = ${taskId}` as Array<Record<string, unknown>>;
+  const current = currentRows[0];
   if (!current) return Response.json({ error: "Task not found" }, { status: 404 });
 
   const resolvedTitle = typeof title === "string" ? title.trim() : String(current.title ?? "");
@@ -20,10 +21,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
   const resolvedPriority = typeof priority === "string" ? priority : String(current.priority ?? "medium");
   const resolvedAssignedName = assignedName !== undefined
     ? (typeof assignedName === "string" && assignedName.trim() ? assignedName.trim() : null)
-    : ((current.assignedName as string | null) ?? null);
+    : ((current.assigned_name as string | null) ?? null);
   const resolvedAssignedTo = assignedTo !== undefined
     ? (typeof assignedTo === "string" && assignedTo.trim() ? assignedTo.trim() : null)
-    : ((current.assignedTo as string | null) ?? null);
+    : ((current.assigned_to as string | null) ?? null);
   const member = findTeamMemberByName(resolvedAssignedName);
 
   if (status === "done" && !(typeof comment === "string" && comment.trim())) {
@@ -34,57 +35,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     title: resolvedTitle,
     description: resolvedDescription,
     priority: resolvedPriority as "low" | "medium" | "high" | "critical",
-    relatedOta: (current.relatedOta as string | null) ?? null,
+    relatedOta: (current.related_ota as string | null) ?? null,
     assignedName: resolvedAssignedName,
-    sourceLabel: (current.sourceLabel as string | null) ?? null,
-    sourceSection: (current.sourceSection as string | null) ?? null,
-    sourcePage: (current.sourcePage as string | null) ?? null,
+    sourceLabel: (current.source_label as string | null) ?? null,
+    sourceSection: (current.source_section as string | null) ?? null,
+    sourcePage: (current.source_page as string | null) ?? null,
   });
 
-  db.prepare(`
-    UPDATE Tasks
-    SET status = COALESCE(?, status),
-        title = COALESCE(?, title),
-        description = COALESCE(?, description),
-        priority = COALESCE(?, priority),
-        assignedTo = ?,
-        assignedName = ?,
-        assignedRole = ?,
-        assignedTeamLead = ?,
-        dueDate = COALESCE(?, dueDate),
-        followUpAt = COALESCE(?, followUpAt),
-        completionComment = CASE WHEN ? = 'done' THEN ? ELSE completionComment END,
-        completedAt = CASE WHEN ? = 'done' THEN datetime('now') ELSE completedAt END,
-        bucket = ?,
-        aiSummary = ?,
-        aiInsight = ?,
-        updatedAt = datetime('now')
-    WHERE id = ?
-  `).run(
-    status ?? null,
-    resolvedTitle || null,
-    resolvedDescription || null,
-    resolvedPriority || null,
-    resolvedAssignedTo,
-    resolvedAssignedName,
-    member?.role ?? null,
-    member?.teamLead ?? null,
-    dueDate ?? null,
-    followUpAt ?? null,
-    status ?? null,
-    typeof comment === "string" ? comment.trim() : null,
-    status ?? null,
-    enriched.bucket,
-    enriched.aiSummary,
-    enriched.aiInsight,
-    taskId,
-  );
+  await sql`
+    UPDATE tasks
+    SET status            = COALESCE(${status ?? null}, status),
+        title             = COALESCE(${resolvedTitle || null}, title),
+        description       = COALESCE(${resolvedDescription || null}, description),
+        priority          = COALESCE(${resolvedPriority || null}, priority),
+        assigned_to       = ${resolvedAssignedTo},
+        assigned_name     = ${resolvedAssignedName},
+        assigned_role     = ${member?.role ?? null},
+        assigned_team_lead = ${member?.teamLead ?? null},
+        due_date          = COALESCE(${dueDate ?? null}, due_date),
+        follow_up_at      = COALESCE(${followUpAt ?? null}, follow_up_at),
+        completion_comment = CASE WHEN ${status ?? null} = 'done' THEN ${typeof comment === "string" ? comment.trim() : null} ELSE completion_comment END,
+        completed_at      = CASE WHEN ${status ?? null} = 'done' THEN NOW() ELSE completed_at END,
+        bucket            = ${enriched.bucket},
+        ai_summary        = ${enriched.aiSummary},
+        ai_insight        = ${enriched.aiInsight},
+        updated_at        = NOW()
+    WHERE id = ${taskId}
+  `;
 
   if (typeof comment === "string" && comment.trim()) {
-    db.prepare(`
-      INSERT INTO TaskComments (taskId, comment, commentType, createdBy, createdByName, createdAt)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
-    `).run(taskId, comment.trim(), status === "done" ? "completion" : "update", session.id, session.name);
+    await sql`
+      INSERT INTO task_comments (task_id, comment, comment_type, created_by, created_by_name, created_at)
+      VALUES (${taskId}, ${comment.trim()}, ${status === "done" ? "completion" : "update"}, ${session.id}, ${session.name}, NOW())
+    `;
   }
 
   return Response.json({ ok: true });
@@ -95,8 +78,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ task
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { taskId } = await params;
-  const db = getDb();
-  db.prepare("DELETE FROM Tasks WHERE id = ?").run(taskId);
+  const sql = await getSql();
+  await sql`DELETE FROM tasks WHERE id = ${taskId}`;
 
   return Response.json({ ok: true });
 }

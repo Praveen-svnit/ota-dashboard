@@ -1,29 +1,59 @@
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { generateDashboardTaskCopilotAnswer, withDerivedTaskFields, type DashboardTaskComment, type DashboardTaskRecord } from "@/lib/dashboard-task-analytics";
 
-function fetchTasks(): DashboardTaskRecord[] {
-  const db = getDb();
-  const rows = db.prepare(`
+async function fetchTasks(): Promise<DashboardTaskRecord[]> {
+  const sql = getSql();
+  const rows = await sql`
     SELECT
-      t.*,
-      COALESCE(NULLIF(t.assignedName, ''), u.name) AS assignedNameResolved,
-      c.name AS createdByName
-    FROM Tasks t
-    LEFT JOIN Users u ON u.id = t.assignedTo
-    LEFT JOIN Users c ON c.id = t.createdBy
+      t.id,
+      t.property_id        AS "propertyId",
+      t.task_type          AS "taskType",
+      t.title,
+      t.description,
+      t.status,
+      t.priority,
+      t.assigned_to        AS "assignedTo",
+      t.assigned_name      AS "assignedName",
+      t.assigned_role      AS "assignedRole",
+      t.assigned_team_lead AS "assignedTeamLead",
+      t.created_by         AS "createdBy",
+      t.due_date           AS "dueDate",
+      t.follow_up_at       AS "followUpAt",
+      t.task_date          AS "taskDate",
+      t.source_route       AS "sourceRoute",
+      t.source_label       AS "sourceLabel",
+      t.source_anchor      AS "sourceAnchor",
+      t.source_page        AS "sourcePage",
+      t.source_section     AS "sourceSection",
+      t.related_ota        AS "relatedOta",
+      t.related_city       AS "relatedCity",
+      t.completion_comment AS "completionComment",
+      t.completed_at       AS "completedAt",
+      t.bucket,
+      t.ai_summary         AS "aiSummary",
+      t.ai_insight         AS "aiInsight",
+      t.tags,
+      t.created_at         AS "createdAt",
+      t.updated_at         AS "updatedAt",
+      COALESCE(NULLIF(t.assigned_name, ''), u.name) AS "assignedNameResolved",
+      c.name AS "createdByName"
+    FROM tasks t
+    LEFT JOIN users u ON u.id = t.assigned_to
+    LEFT JOIN users c ON c.id = t.created_by
     WHERE t.status != 'done'
-    ORDER BY t.updatedAt DESC, t.createdAt DESC
-  `).all() as Array<Record<string, unknown>>;
+    ORDER BY t.updated_at DESC, t.created_at DESC
+  ` as Array<Record<string, unknown>>;
 
   const taskIds = rows.map((row) => Number(row.id)).filter(Boolean);
-  const comments = taskIds.length > 0
-    ? db.prepare(`
-        SELECT id, taskId, comment, commentType, createdBy, createdByName, createdAt
-        FROM TaskComments
-        WHERE taskId IN (${taskIds.map(() => "?").join(",")})
-        ORDER BY createdAt ASC, id ASC
-      `).all(...taskIds) as DashboardTaskComment[]
+  const comments: DashboardTaskComment[] = taskIds.length > 0
+    ? (await sql`
+        SELECT id, task_id AS "taskId", comment, comment_type AS "commentType",
+               created_by AS "createdBy", created_by_name AS "createdByName", created_at AS "createdAt"
+        FROM task_comments
+        WHERE task_id = ANY(${taskIds})
+        ORDER BY created_at ASC, id ASC
+      `) as unknown as DashboardTaskComment[]
     : [];
 
   const commentsByTask = new Map<number, DashboardTaskComment[]>();
@@ -93,7 +123,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "Question is required." }, { status: 400 });
     }
 
-    const tasks = fetchTasks();
+    const tasks = await fetchTasks();
     const result = await generateDashboardTaskCopilotAnswer(question, tasks, history);
     return Response.json({ ...result, tasks });
   } catch (error) {

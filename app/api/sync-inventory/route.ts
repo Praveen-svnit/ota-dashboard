@@ -1,7 +1,7 @@
 import { getSql } from "@/lib/db-postgres";
-import { parseCSV, fetchSheet } from "@/lib/sheets";
+import { parseCSV } from "@/lib/sheets";
 import { INV_SHEET_ID, INV_SHEET_TAB } from "@/lib/constants";
-import { getServerSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
 // Column header → DB field mapping (case-insensitive, flexible)
@@ -32,7 +32,7 @@ function normalize(header: string): string {
 
 export async function POST(req: NextRequest) {
   // Allow both authenticated users (admin/head) and internal cron calls
-  const session = await getServerSession(req);
+  const session = await getSession();
   if (session && session.role !== "admin" && session.role !== "head") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }

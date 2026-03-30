@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 // Normalize sub-status variants to a canonical label
 function normalize(s: string | null): string {
@@ -32,18 +32,98 @@ const COL_ORDER = [
 
 export async function GET() {
   try {
-    const db = getDb();
+    const sql = getSql();
 
-    const count = (db.prepare("SELECT COUNT(*) as n FROM OtaListing").get() as { n: number }).n;
+    const count = Number((await sql`SELECT COUNT(*) as n FROM ota_listing`)[0].n);
     if (count === 0) {
       return Response.json({ error: "No data — sync the DB first" });
     }
 
-    const rows = db.prepare(`
-      SELECT ota, subStatus, COUNT(*) as n
-      FROM OtaListing
-      GROUP BY ota, subStatus
-    `).all() as Array<{ ota: string; subStatus: string | null; n: number }>;
+    const monthPrefix = new Date().toISOString().slice(0, 7); // e.g. "2026-03"
+
+    const TAT_THRESHOLD = 15;
+
+    // Run all independent queries in parallel
+    const [
+      rows,
+      fhStatsRows,
+      onboardedRows,
+      mtdRows,
+      categories,
+      tatBreakdownRows,
+      tatStatsRows,
+      ssStatusRows,
+    ] = await Promise.all([
+      sql`
+        SELECT ota, sub_status AS "subStatus", COUNT(*) AS n
+        FROM ota_listing
+        GROUP BY ota, sub_status
+      ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
+
+      sql`
+        SELECT
+          SUM(CASE WHEN fh_status = 'Live'    THEN 1 ELSE 0 END) AS live,
+          SUM(CASE WHEN fh_status = 'SoldOut' THEN 1 ELSE 0 END) AS "soldOut",
+          SUM(CASE WHEN fh_status IN ('Live','SoldOut') THEN 1 ELSE 0 END) AS total
+        FROM inventory
+      ` as Promise<Array<{ live: number; soldOut: number; total: number }>>,
+
+      sql`
+        SELECT COUNT(*) AS "onboardedThisMonth"
+        FROM inventory
+        WHERE TO_CHAR(fh_live_date::date, 'YYYY-MM') = ${monthPrefix}
+      ` as Promise<Array<{ onboardedThisMonth: number }>>,
+
+      sql`
+        SELECT COUNT(*) AS "mtdListings"
+        FROM ota_listing
+        WHERE TO_CHAR(live_date::date, 'YYYY-MM') = ${monthPrefix}
+      ` as Promise<Array<{ mtdListings: number }>>,
+
+      sql`
+        SELECT ota,
+          SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+          SUM(CASE WHEN LOWER(sub_status) = 'exception' THEN 1 ELSE 0 END) AS exception,
+          SUM(CASE WHEN LOWER(COALESCE(status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS "readyToGoLive",
+          SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
+                    AND LOWER(COALESCE(status,'')) != 'ready to go live'
+                    AND tat <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
+          SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
+                    AND LOWER(COALESCE(status,'')) != 'ready to go live'
+                    AND tat > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
+        FROM ota_listing
+        GROUP BY ota
+        ORDER BY live DESC
+      ` as Promise<Array<{ ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number }>>,
+
+      sql`
+        SELECT ota, sub_status AS "subStatus", COUNT(*) AS n
+        FROM ota_listing
+        WHERE LOWER(sub_status) != 'live'
+          AND LOWER(COALESCE(sub_status,'')) != 'exception'
+          AND tat > ${TAT_THRESHOLD}
+        GROUP BY ota, sub_status
+      ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
+
+      sql`
+        SELECT ota,
+          ROUND(AVG(tat)) AS "avgTat",
+          SUM(CASE WHEN tat <= 7  THEN 1 ELSE 0 END) AS "d0_7",
+          SUM(CASE WHEN tat > 7  AND tat <= 15 THEN 1 ELSE 0 END) AS "d8_15",
+          SUM(CASE WHEN tat > 15 AND tat <= 30 THEN 1 ELSE 0 END) AS "d16_30",
+          SUM(CASE WHEN tat > 30 AND tat <= 60 THEN 1 ELSE 0 END) AS "d31_60",
+          SUM(CASE WHEN tat > 60 THEN 1 ELSE 0 END) AS "d60p"
+        FROM ota_listing
+        WHERE LOWER(sub_status) = 'live' AND live_date IS NOT NULL
+        GROUP BY ota
+      ` as Promise<Array<{ ota: string; avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number }>>,
+
+      sql`
+        SELECT ota, sub_status AS "subStatus", status, COUNT(*) AS n
+        FROM ota_listing
+        GROUP BY ota, sub_status, status
+      ` as Promise<Array<{ ota: string; subStatus: string | null; status: string | null; n: number }>>,
+    ]);
 
     // Build pivot: { ota -> { subStatus -> count } }
     const pivot: Record<string, Record<string, number>> = {};
@@ -53,7 +133,7 @@ export async function GET() {
       const label = normalize(row.subStatus);
       subStatusSet.add(label);
       if (!pivot[row.ota]) pivot[row.ota] = {};
-      pivot[row.ota][label] = (pivot[row.ota][label] ?? 0) + row.n;
+      pivot[row.ota][label] = (pivot[row.ota][label] ?? 0) + Number(row.n);
     }
 
     // Column order: known first, then any extras
@@ -62,100 +142,61 @@ export async function GET() {
 
     const otas = Object.keys(pivot).sort((a, b) => (pivot[b]["Live"] ?? 0) - (pivot[a]["Live"] ?? 0));
 
-    // ── KPI stats from Property table ───────────────────────────────────────
-    const monthPrefix = new Date().toISOString().slice(0, 7); // e.g. "2026-03"
+    // KPI stats
+    const { live, soldOut, total } = {
+      live: Number(fhStatsRows[0].live),
+      soldOut: Number(fhStatsRows[0].soldOut),
+      total: Number(fhStatsRows[0].total),
+    };
+    const onboardedThisMonth = Number(onboardedRows[0].onboardedThisMonth);
+    const mtdListings = Number(mtdRows[0].mtdListings);
 
-    const { live, soldOut, total } = db.prepare(`
-      SELECT
-        SUM(CASE WHEN fhStatus = 'Live'    THEN 1 ELSE 0 END) AS live,
-        SUM(CASE WHEN fhStatus = 'SoldOut' THEN 1 ELSE 0 END) AS soldOut,
-        SUM(CASE WHEN fhStatus IN ('Live','SoldOut') THEN 1 ELSE 0 END) AS total
-      FROM Property
-    `).get() as { live: number; soldOut: number; total: number };
-
-    const { onboardedThisMonth } = db.prepare(`
-      SELECT COUNT(*) AS onboardedThisMonth
-      FROM Property
-      WHERE fhLiveDate LIKE ?
-    `).get(`${monthPrefix}%`) as { onboardedThisMonth: number };
-
-    const { mtdListings } = db.prepare(`
-      SELECT COUNT(*) AS mtdListings
-      FROM OtaListing
-      WHERE liveDate LIKE ?
-    `).get(`${monthPrefix}%`) as { mtdListings: number };
-
-    const TAT_THRESHOLD = 15;
-
-    const categories = db.prepare(`
-      SELECT ota,
-        SUM(CASE WHEN LOWER(subStatus) = 'live' THEN 1 ELSE 0 END) AS live,
-        SUM(CASE WHEN LOWER(subStatus) = 'exception' THEN 1 ELSE 0 END) AS exception,
-        SUM(CASE WHEN LOWER(COALESCE(status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS readyToGoLive,
-        SUM(CASE WHEN LOWER(subStatus) != 'live' AND LOWER(COALESCE(subStatus,'')) != 'exception'
-                  AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                  AND tat <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS inProcess,
-        SUM(CASE WHEN LOWER(subStatus) != 'live' AND LOWER(COALESCE(subStatus,'')) != 'exception'
-                  AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                  AND tat > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS tatExhausted
-      FROM OtaListing
-      GROUP BY ota
-      ORDER BY live DESC
-    `).all() as Array<{ ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number }>;
-
-    // ── TAT-exhausted sub-status breakdown (for expandable row) ─────────────
-    const tatBreakdownRows = db.prepare(`
-      SELECT ota, subStatus, COUNT(*) as n
-      FROM OtaListing
-      WHERE LOWER(subStatus) != 'live'
-        AND LOWER(COALESCE(subStatus,'')) != 'exception'
-        AND tat > ${TAT_THRESHOLD}
-      GROUP BY ota, subStatus
-    `).all() as Array<{ ota: string; subStatus: string | null; n: number }>;
-
+    // TAT-exhausted sub-status breakdown
     const tatBreakdown: Record<string, Record<string, number>> = {};
     const tatSubStatuses = new Set<string>();
     for (const row of tatBreakdownRows) {
       const label = normalize(row.subStatus);
       tatSubStatuses.add(label);
       if (!tatBreakdown[row.ota]) tatBreakdown[row.ota] = {};
-      tatBreakdown[row.ota][label] = (tatBreakdown[row.ota][label] ?? 0) + row.n;
+      tatBreakdown[row.ota][label] = (tatBreakdown[row.ota][label] ?? 0) + Number(row.n);
     }
     const tatSubStatusList = [...tatSubStatuses].sort();
 
-    // ── TAT stats per OTA (live listings only, for TAT breakdown rows) ─────────
-    const tatStatsRows = db.prepare(`
-      SELECT ota,
-        ROUND(AVG(tat)) AS avgTat,
-        SUM(CASE WHEN tat <= 7  THEN 1 ELSE 0 END) AS d0_7,
-        SUM(CASE WHEN tat > 7  AND tat <= 15 THEN 1 ELSE 0 END) AS d8_15,
-        SUM(CASE WHEN tat > 15 AND tat <= 30 THEN 1 ELSE 0 END) AS d16_30,
-        SUM(CASE WHEN tat > 30 AND tat <= 60 THEN 1 ELSE 0 END) AS d31_60,
-        SUM(CASE WHEN tat > 60 THEN 1 ELSE 0 END) AS d60p
-      FROM OtaListing
-      WHERE LOWER(subStatus) = 'live' AND fhLiveDate IS NOT NULL
-      GROUP BY ota
-    `).all() as Array<{ ota: string; avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number }>;
+    // TAT stats per OTA
     const tatStats: Record<string, { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number }> = {};
-    for (const r of tatStatsRows) tatStats[r.ota] = r;
+    for (const r of tatStatsRows) {
+      tatStats[r.ota] = {
+        avgTat: Number(r.avgTat),
+        d0_7: Number(r.d0_7),
+        d8_15: Number(r.d8_15),
+        d16_30: Number(r.d16_30),
+        d31_60: Number(r.d31_60),
+        d60p: Number(r.d60p),
+      };
+    }
 
-    // ── Sub-status × Status cross-pivot (for OTA detail page breakdown) ─────
-    const ssStatusRows = db.prepare(`
-      SELECT ota, subStatus, status, COUNT(*) as n
-      FROM OtaListing
-      GROUP BY ota, subStatus, status
-    `).all() as Array<{ ota: string; subStatus: string | null; status: string | null; n: number }>;
-    // shape: { ota → { subStatus → { status → count } } }
+    // Sub-status x Status cross-pivot
     const ssStatusPivot: Record<string, Record<string, Record<string, number>>> = {};
     for (const row of ssStatusRows) {
       const ssLabel = normalize(row.subStatus);
       const stLabel = row.status?.trim() || "Blank";
       if (!ssStatusPivot[row.ota]) ssStatusPivot[row.ota] = {};
       if (!ssStatusPivot[row.ota][ssLabel]) ssStatusPivot[row.ota][ssLabel] = {};
-      ssStatusPivot[row.ota][ssLabel][stLabel] = (ssStatusPivot[row.ota][ssLabel][stLabel] ?? 0) + row.n;
+      ssStatusPivot[row.ota][ssLabel][stLabel] = (ssStatusPivot[row.ota][ssLabel][stLabel] ?? 0) + Number(row.n);
     }
 
-    return Response.json({ pivot, columns, otas, stats: { live, soldOut, total, onboardedThisMonth, mtdListings }, categories, tatThreshold: TAT_THRESHOLD, tatBreakdown, tatSubStatusList, tatStats, ssStatusPivot });
+    return Response.json({
+      pivot,
+      columns,
+      otas,
+      stats: { live, soldOut, total, onboardedThisMonth, mtdListings },
+      categories,
+      tatThreshold: TAT_THRESHOLD,
+      tatBreakdown,
+      tatSubStatusList,
+      tatStats,
+      ssStatusPivot,
+    });
 
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });

@@ -1,27 +1,61 @@
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { enrichTaskRecord, withDerivedTaskFields, type DashboardTaskComment, type DashboardTaskPriority, type DashboardTaskStatus } from "@/lib/dashboard-task-analytics";
 import { createTaskNotification, getAdminRecipient } from "@/lib/task-notifications";
 import { findTeamMemberByName } from "@/lib/team-directory";
 
-function fetchTask(taskId: string) {
-  const db = getDb();
-  const row = db.prepare(`
-    SELECT t.*, COALESCE(NULLIF(t.assignedName, ''), u.name) AS assignedNameResolved, c.name AS createdByName
-    FROM Tasks t
-    LEFT JOIN Users u ON u.id = t.assignedTo
-    LEFT JOIN Users c ON c.id = t.createdBy
-    WHERE t.id = ?
-  `).get(taskId) as Record<string, unknown> | undefined;
+async function fetchTask(taskId: string) {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      t.id,
+      t.property_id        AS "propertyId",
+      t.task_type          AS "taskType",
+      t.title,
+      t.description,
+      t.status,
+      t.priority,
+      t.assigned_to        AS "assignedTo",
+      t.assigned_name      AS "assignedName",
+      t.assigned_role      AS "assignedRole",
+      t.assigned_team_lead AS "assignedTeamLead",
+      t.created_by         AS "createdBy",
+      t.due_date           AS "dueDate",
+      t.follow_up_at       AS "followUpAt",
+      t.task_date          AS "taskDate",
+      t.source_route       AS "sourceRoute",
+      t.source_label       AS "sourceLabel",
+      t.source_anchor      AS "sourceAnchor",
+      t.source_page        AS "sourcePage",
+      t.source_section     AS "sourceSection",
+      t.related_ota        AS "relatedOta",
+      t.related_city       AS "relatedCity",
+      t.completion_comment AS "completionComment",
+      t.completed_at       AS "completedAt",
+      t.bucket,
+      t.ai_summary         AS "aiSummary",
+      t.ai_insight         AS "aiInsight",
+      t.tags,
+      t.created_at         AS "createdAt",
+      t.updated_at         AS "updatedAt",
+      COALESCE(NULLIF(t.assigned_name, ''), u.name) AS "assignedNameResolved",
+      c.name AS "createdByName"
+    FROM tasks t
+    LEFT JOIN users u ON u.id = t.assigned_to
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.id = ${Number(taskId)}
+  `;
 
+  const row = rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
 
-  const comments = db.prepare(`
-    SELECT id, taskId, comment, commentType, createdBy, createdByName, createdAt
-    FROM TaskComments
-    WHERE taskId = ?
-    ORDER BY createdAt ASC, id ASC
-  `).all(taskId) as DashboardTaskComment[];
+  const comments = await sql`
+    SELECT id, task_id AS "taskId", comment, comment_type AS "commentType",
+           created_by AS "createdBy", created_by_name AS "createdByName", created_at AS "createdAt"
+    FROM task_comments
+    WHERE task_id = ${Number(taskId)}
+    ORDER BY created_at ASC, id ASC
+  ` as unknown as DashboardTaskComment[];
 
   return withDerivedTaskFields({
     id: Number(row.id),
@@ -64,7 +98,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { taskId } = await params;
-  const existing = fetchTask(taskId);
+  const existing = await fetchTask(taskId);
   if (!existing) return Response.json({ error: "Task not found" }, { status: 404 });
 
   const body = await req.json();
@@ -97,27 +131,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     sourcePage: existing.sourcePage,
   });
 
-  const db = getDb();
-  db.prepare(`
-    UPDATE Tasks
-    SET status = ?,
-        title = ?,
-        description = ?,
-        priority = ?,
-        assignedTo = ?,
-        assignedName = ?,
-        assignedRole = ?,
-        assignedTeamLead = ?,
-        dueDate = ?,
-        followUpAt = ?,
-        completionComment = CASE WHEN ? IN ('done', 'pending', 'supervisor_attention') THEN ? ELSE completionComment END,
-        completedAt = CASE WHEN ? = 'done' THEN datetime('now') ELSE NULL END,
-        bucket = ?,
-        aiSummary = ?,
-        aiInsight = ?,
-        updatedAt = datetime('now')
-    WHERE id = ?
-  `).run(
+  const sql = getSql();
+  const isTerminal = ["done", "pending", "supervisor_attention"].includes(status);
+
+  await sql.unsafe(`
+    UPDATE tasks
+    SET status             = $1,
+        title              = $2,
+        description        = $3,
+        priority           = $4,
+        assigned_to        = $5,
+        assigned_name      = $6,
+        assigned_role      = $7,
+        assigned_team_lead = $8,
+        due_date           = $9,
+        follow_up_at       = $10,
+        completion_comment = CASE WHEN $11 IN ('done', 'pending', 'supervisor_attention') THEN $12 ELSE completion_comment END,
+        completed_at       = CASE WHEN $13 = 'done' THEN NOW() ELSE NULL END,
+        bucket             = $14,
+        ai_summary         = $15,
+        ai_insight         = $16,
+        updated_at         = NOW()
+    WHERE id = $17
+  `, [
     status,
     title,
     description || null,
@@ -129,25 +165,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     dueDate,
     followUpAt,
     status,
-    ["done", "pending", "supervisor_attention"].includes(status) ? completionComment : null,
+    isTerminal ? completionComment : null,
     status,
     enriched.bucket,
     enriched.aiSummary,
     enriched.aiInsight,
-    taskId,
-  );
+    Number(taskId),
+  ]);
 
   if (comment) {
-    db.prepare(`
-      INSERT INTO TaskComments (taskId, comment, commentType, createdBy, createdByName, createdAt)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
-    `).run(taskId, comment, status === "done" ? "completion" : status === "supervisor_attention" ? "follow_up" : "update", session.id, session.name);
+    const commentType = status === "done" ? "completion" : status === "supervisor_attention" ? "follow_up" : "update";
+    await sql`
+      INSERT INTO task_comments (task_id, comment, comment_type, created_by, created_by_name, created_at)
+      VALUES (${Number(taskId)}, ${comment}, ${commentType}, ${session.id}, ${session.name}, NOW())
+    `;
   }
 
   if (status === "pending" || status === "supervisor_attention") {
-    const admin = getAdminRecipient(db);
+    const admin = await getAdminRecipient();
     if (admin) {
-      createTaskNotification(db, {
+      await createTaskNotification({
         taskId: Number(taskId),
         type: status === "supervisor_attention" ? "supervisor_attention" : "pending_review",
         title: `${status === "supervisor_attention" ? "Supervisor attention required" : "Task marked pending"}: ${title}`,
@@ -164,5 +201,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
     }
   }
 
-  return Response.json({ task: fetchTask(taskId) });
+  return Response.json({ task: await fetchTask(taskId) });
 }

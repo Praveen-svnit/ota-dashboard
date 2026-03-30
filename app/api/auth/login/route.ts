@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { signSession, sessionCookieOptions, SessionUser } from "@/lib/auth";
 
 interface UserRow {
-  id: string; username: string; passwordHash: string;
+  id: string; username: string; password_hash: string;
   name: string; role: string; ota: string | null;
-  teamLead: string | null; active: number;
+  team_lead: string | null; active: number;
 }
 
 export async function POST(req: Request) {
@@ -16,10 +16,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "Username and password required" }, { status: 400 });
   }
 
-  const db  = getDb();
-  const row = db.prepare("SELECT * FROM Users WHERE username = ? AND active = 1").get(username) as UserRow | undefined;
+  const sql = getSql();
+  const row = (await sql`SELECT * FROM users WHERE username = ${username} AND active = 1`)[0] as UserRow | undefined;
 
-  if (!row || !bcrypt.compareSync(password, row.passwordHash)) {
+  if (!row || !bcrypt.compareSync(password, row.password_hash)) {
     return Response.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     name:     row.name,
     role:     row.role as SessionUser["role"],
     ota:      row.ota ?? null,
-    teamLead: row.teamLead ?? null,
+    teamLead: row.team_lead ?? null,
   };
 
   const token = await signSession(user);

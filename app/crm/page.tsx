@@ -60,9 +60,10 @@ export default function CrmPage() {
   const [page,    setPage]    = useState(1);
   const [loading, setLoading] = useState(true);
 
-  const [search,       setSearch]       = useState("");
-  const [otaFilter,    setOtaFilter]    = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [search,          setSearch]          = useState("");
+  const [otaFilter,       setOtaFilter]       = useState("all");
+  const [statusFilter,    setStatusFilter]    = useState("all");
+  const [subStatusFilter, setSubStatusFilter] = useState("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fhDateFrom,   setFhDateFrom]   = useState("");
   const [fhDateTo,     setFhDateTo]     = useState("");
@@ -109,13 +110,13 @@ export default function CrmPage() {
   }, []);
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
-    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter };
+    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter };
     if (fhDateFrom)  q.fhFrom  = fhDateFrom;
     if (fhDateTo)    q.fhTo    = fhDateTo;
     if (otaDateFrom) q.otaFrom = otaDateFrom;
     if (otaDateTo)   q.otaTo   = otaDateTo;
     return new URLSearchParams({ ...q, ...extra });
-  }, [debouncedSearch, otaFilter, statusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -126,7 +127,7 @@ export default function CrmPage() {
   }, [buildParams, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
 
   const [csvLoading, setCsvLoading] = useState(false);
   const downloadCsv = () => {
@@ -469,6 +470,21 @@ export default function CrmPage() {
           <option value="content in progress">Content in Progress</option>
           <option value="listing in progress">Listing in Progress</option>
           <option value="pending">Pending</option>
+        </select>
+        <select value={subStatusFilter} onChange={(e) => setSubStatusFilter(e.target.value)}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF",
+            borderColor: subStatusFilter !== "all" ? "#818CF8" : "#CBD5E1",
+            background: subStatusFilter !== "all" ? "#EEF2FF" : "#FFF",
+          }}>
+          <option value="all">All Sub-Statuses</option>
+          <option value="live">Live</option>
+          <option value="not live">Not Live</option>
+          <option value="ready to go live">Ready to Go Live</option>
+          <option value="content in progress">Content in Progress</option>
+          <option value="listing in progress">Listing in Progress</option>
+          <option value="pending">Pending</option>
+          <option value="new">New</option>
+          <option value="soldout">Soldout</option>
         </select>
 
         {/* FH Live Date range */}

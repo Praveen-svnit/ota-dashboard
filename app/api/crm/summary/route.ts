@@ -1,85 +1,120 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function GET() {
   const session = await getSession();
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const db = getDb();
+  const sql = getSql();
 
-  // Overall subStatus counts (OtaListing + GMB), null/blank → 'New'
-  const statusCounts = db.prepare(`
-    WITH combined AS (
-      SELECT COALESCE(NULLIF(TRIM(subStatus),''), 'New') AS subStatus FROM OtaListing
-      UNION ALL
-      SELECT COALESCE(NULLIF(TRIM(gmbSubStatus),''), 'New') AS subStatus FROM GmbTracker
-    )
-    SELECT LOWER(subStatus) as subStatus, COUNT(*) as cnt
-    FROM combined
-    GROUP BY LOWER(subStatus)
-    ORDER BY cnt DESC
-  `).all() as { subStatus: string; cnt: number }[];
+  // Run all independent queries in parallel
+  const [
+    statusCounts,
+    statusTopCounts,
+    otaBreakdown,
+    fhPipeline,
+    [tasksOpenRow, tasksHighRow, tasksOverdueRow, tasksDoneRow],
+    recentLogs,
+    openTasks,
+  ] = await Promise.all([
+    // Overall subStatus counts — null/blank → 'New'
+    sql`
+      SELECT LOWER(COALESCE(NULLIF(TRIM(sub_status), ''), 'New')) AS "subStatus",
+             COUNT(*) AS cnt
+      FROM ota_listing
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(sub_status), ''), 'New'))
+      ORDER BY cnt DESC
+    `,
 
-  // Overall status counts (OtaListing + GMB), null/blank → 'New'
-  const statusTopCounts = db.prepare(`
-    WITH combined AS (
-      SELECT COALESCE(NULLIF(TRIM(status),''), 'New') AS status FROM OtaListing
-      UNION ALL
-      SELECT COALESCE(NULLIF(TRIM(gmbStatus),''), 'New') AS status FROM GmbTracker
-    )
-    SELECT LOWER(status) as status, COUNT(*) as cnt
-    FROM combined
-    GROUP BY LOWER(status)
-    ORDER BY cnt DESC
-  `).all() as { status: string; cnt: number }[];
+    // Overall status counts — null/blank → 'New'
+    sql`
+      SELECT LOWER(COALESCE(NULLIF(TRIM(status), ''), 'New')) AS status,
+             COUNT(*) AS cnt
+      FROM ota_listing
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(status), ''), 'New'))
+      ORDER BY cnt DESC
+    `,
 
-  // Per-OTA breakdown: live vs total
-  const otaBreakdown = db.prepare(`
-    SELECT ota,
-      COUNT(*) as total,
-      SUM(CASE WHEN LOWER(subStatus) = 'live' THEN 1 ELSE 0 END) as live,
-      SUM(CASE WHEN LOWER(subStatus) = 'not live' THEN 1 ELSE 0 END) as notLive,
-      SUM(CASE WHEN LOWER(subStatus) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) as inProgress
-    FROM OtaListing
-    GROUP BY ota
-    ORDER BY live DESC
-  `).all() as { ota: string; total: number; live: number; notLive: number; inProgress: number }[];
+    // Per-OTA breakdown
+    sql`
+      SELECT ota,
+             COUNT(*) AS total,
+             SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+             SUM(CASE WHEN LOWER(sub_status) = 'not live' THEN 1 ELSE 0 END) AS "notLive",
+             SUM(CASE WHEN LOWER(sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
+      FROM ota_listing
+      GROUP BY ota
+      ORDER BY live DESC
+    `,
 
-  // FH pipeline: count of properties that went live on D (today) through D-7
-  const fhPipeline = Array.from({ length: 8 }, (_, i) =>
-    (db.prepare(`SELECT COUNT(*) as n FROM Property WHERE DATE(fhLiveDate) = DATE('now','localtime','-${i} days')`).get() as { n: number }).n
-  );
+    // FH pipeline: 8 parallel COUNT queries (today through D-7)
+    // i is a trusted integer literal (0–7), safe to embed directly in SQL
+    Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        sql.unsafe(
+          `SELECT COUNT(*) AS n FROM inventory WHERE fh_live_date::date = CURRENT_DATE - INTERVAL '${i} days'`
+        ).then(rows => Number((rows[0] as { n: string | number }).n))
+      )
+    ),
 
-  // Task counts
-  const tasksOpen = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open'`).get() as { n: number }).n;
-  const tasksHigh = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open' AND priority = 'high'`).get() as { n: number }).n;
-  const tasksOverdue = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'open' AND dueDate IS NOT NULL AND dueDate < date('now','localtime')`).get() as { n: number }).n;
-  const tasksDone = (db.prepare(`SELECT COUNT(*) as n FROM Tasks WHERE status = 'done'`).get() as { n: number }).n;
+    // Task counts — 4 in parallel
+    Promise.all([
+      sql`SELECT COUNT(*) AS n FROM tasks WHERE status = 'open'`,
+      sql`SELECT COUNT(*) AS n FROM tasks WHERE status = 'open' AND priority = 'high'`,
+      sql`SELECT COUNT(*) AS n FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < CURRENT_DATE`,
+      sql`SELECT COUNT(*) AS n FROM tasks WHERE status = 'done'`,
+    ]),
 
-  // Recent activity (last 5 logs)
-  const recentLogs = db.prepare(`
-    SELECT pl.action, pl.field, pl.oldValue, pl.newValue, pl.note, pl.createdAt,
-           u.name as userName, p.name as propName, p.id as propId, pl.otaListingId
-    FROM PropertyLog pl
-    LEFT JOIN Users u ON u.id = pl.userId
-    LEFT JOIN Property p ON p.id = pl.propertyId
-    ORDER BY pl.createdAt DESC
-    LIMIT 8
-  `).all() as { action: string; field: string; oldValue: string; newValue: string; note: string; createdAt: string; userName: string; propName: string; propId: string; otaListingId: number }[];
+    // Recent activity logs
+    sql`
+      SELECT pl.action, pl.field,
+             pl.old_value AS "oldValue", pl.new_value AS "newValue",
+             pl.note, pl.created_at AS "createdAt",
+             u.name AS "userName",
+             p.property_name AS "propName", p.property_id AS "propId",
+             pl.ota_listing_id AS "otaListingId"
+      FROM property_log pl
+      LEFT JOIN users u ON u.id = pl.user_id
+      LEFT JOIN inventory p ON p.property_id = pl.property_id
+      ORDER BY pl.created_at DESC
+      LIMIT 8
+    `,
 
-  // Top 5 open tasks
-  const openTasks = db.prepare(`
-    SELECT t.id, t.propertyId, t.title, t.priority, t.dueDate, t.assignedTo,
-           u.name as assignedName, p.name as propName
-    FROM Tasks t
-    LEFT JOIN Users u ON u.id = t.assignedTo
-    LEFT JOIN Property p ON p.id = t.propertyId
-    WHERE t.status = 'open'
-    ORDER BY
-      CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-      t.dueDate ASC
-    LIMIT 10
-  `).all() as { id: number; propertyId: string; title: string; priority: string; dueDate: string; assignedTo: string; assignedName: string; propName: string }[];
+    // Top 10 open tasks ordered by priority then due date
+    sql`
+      SELECT t.id,
+             t.property_id AS "propertyId",
+             t.title, t.priority,
+             t.due_date AS "dueDate",
+             t.assigned_to AS "assignedTo",
+             u.name AS "assignedName",
+             p.property_name AS "propName"
+      FROM tasks t
+      LEFT JOIN users u ON u.id = t.assigned_to
+      LEFT JOIN inventory p ON p.property_id = t.property_id
+      WHERE t.status = 'open'
+      ORDER BY
+        CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        t.due_date ASC NULLS LAST
+      LIMIT 10
+    `,
+  ]);
 
-  return Response.json({ statusCounts, statusTopCounts, otaBreakdown, tasksOpen, tasksHigh, tasksOverdue, tasksDone, recentLogs, openTasks, fhPipeline });
+  const tasksOpen    = Number(tasksOpenRow[0].n);
+  const tasksHigh    = Number(tasksHighRow[0].n);
+  const tasksOverdue = Number(tasksOverdueRow[0].n);
+  const tasksDone    = Number(tasksDoneRow[0].n);
+
+  return Response.json({
+    statusCounts,
+    statusTopCounts,
+    otaBreakdown,
+    tasksOpen,
+    tasksHigh,
+    tasksOverdue,
+    tasksDone,
+    recentLogs,
+    openTasks,
+    fhPipeline,
+  });
 }

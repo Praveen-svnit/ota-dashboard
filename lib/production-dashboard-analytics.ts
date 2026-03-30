@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { OTA_COLORS, RNS_OTAS } from "@/lib/constants";
 
 const DB_TO_OTA: Record<string, string> = {
@@ -458,11 +458,14 @@ function buildDeterministicContext(snapshot: ProductionDashboard2Snapshot, quest
   return { answer, followUps };
 }
 
-export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapshot {
-  const db = getDb();
+export async function buildProductionDashboard2Snapshot(): Promise<ProductionDashboard2Snapshot> {
+  const sql = getSql();
   const now = new Date();
-  const latestSoldDateRow = db.prepare("SELECT MAX(sold_date) as maxDate FROM RnsSold").get() as { maxDate: string | null };
-  const latestSoldDate = latestSoldDateRow.maxDate ? new Date(`${latestSoldDateRow.maxDate}T00:00:00`) : now;
+
+  const [latestSoldDateRow] = await sql`SELECT MAX(date)::text AS "maxDate" FROM sold_rns`;
+  const latestSoldDate = (latestSoldDateRow as { maxDate: string | null }).maxDate
+    ? new Date(`${(latestSoldDateRow as { maxDate: string }).maxDate}T00:00:00`)
+    : now;
   const comparisonEnd = latestSoldDate < now ? latestSoldDate : now;
   const currentMonthStart = startOfMonth(now);
   const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -480,80 +483,97 @@ export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapsho
   const previous7End = addDays(now, -7);
   const recentWindowStart = previousMonthStart < last30Start ? previousMonthStart : last30Start;
 
-  const activeProperties = (
-    db.prepare("SELECT COUNT(*) as n FROM Property WHERE LOWER(fhStatus) IN ('live','soldout')").get() as { n: number }
-  ).n;
-  const totalProperties = (
-    db.prepare("SELECT COUNT(*) as n FROM Property").get() as { n: number }
-  ).n;
+  const [
+    [activeRow],
+    [totalRow],
+    otaStatusRows,
+    soldRows,
+    stayRnRows,
+    revenueRows,
+    [mtdListingRow],
+    currentComparisonRows,
+    lastMonthComparisonRows,
+    lastYearComparisonRows,
+  ] = await Promise.all([
+    sql`SELECT COUNT(*) AS n FROM inventory WHERE LOWER(fh_status) IN ('live','soldout')`,
+    sql`SELECT COUNT(*) AS n FROM inventory`,
+    sql`
+      SELECT ota,
+        SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+        COUNT(*) AS total
+      FROM ota_listing
+      WHERE ota = ANY(${RNS_OTAS})
+      GROUP BY ota
+    `,
+    sql`
+      SELECT date::text AS date, channel AS ota, SUM(rns) AS value
+      FROM sold_rns
+      WHERE date >= ${formatDate(recentWindowStart)}::date AND date <= ${formatDate(now)}::date
+      GROUP BY date, channel
+    `,
+    sql`
+      SELECT date::text AS date, channel AS ota, SUM(rns) AS value
+      FROM stay_rns
+      WHERE date >= ${formatDate(previousMonthStart)}::date AND date <= ${formatDate(now)}::date
+        AND UPPER(status) = 'CICO'
+      GROUP BY date, channel
+    `,
+    sql`
+      SELECT date::text AS date, channel AS ota, SUM(revenue) AS value
+      FROM stay_rns
+      WHERE date >= ${formatDate(previousMonthStart)}::date AND date <= ${formatDate(now)}::date
+        AND UPPER(status) = 'CICO'
+      GROUP BY date, channel
+    `,
+    sql`
+      SELECT COUNT(*) AS n FROM ota_listing
+      WHERE live_date IS NOT NULL AND live_date::date >= ${formatDate(currentMonthStart)}::date
+    `,
+    sql`
+      SELECT date::text AS date, SUM(rns) AS value
+      FROM sold_rns
+      WHERE date >= ${formatDate(comparisonCurrentMonthStart)}::date AND date <= ${formatDate(comparisonEnd)}::date
+      GROUP BY date
+    `,
+    sql`
+      SELECT date::text AS date, SUM(rns) AS value
+      FROM sold_rns
+      WHERE date >= ${formatDate(comparisonPreviousMonthStart)}::date AND date <= ${formatDate(comparisonPreviousMonthEnd)}::date
+      GROUP BY date
+    `,
+    sql`
+      SELECT date::text AS date, SUM(rns) AS value
+      FROM sold_rns
+      WHERE date >= ${formatDate(comparisonLastYearMonthStart)}::date AND date <= ${formatDate(comparisonLastYearEnd)}::date
+      GROUP BY date
+    `,
+  ]);
 
-  const otaStatusRows = db.prepare(`
-    SELECT ota,
-      SUM(CASE WHEN LOWER(subStatus) = 'live' THEN 1 ELSE 0 END) AS live,
-      COUNT(*) AS total
-    FROM OtaListing
-    WHERE ota IN (${RNS_OTAS.map(() => "?").join(",")})
-    GROUP BY ota
-  `).all(...RNS_OTAS) as Array<{ ota: string; live: number; total: number }>;
+  const activeProperties  = Number((activeRow as { n: unknown }).n);
+  const totalProperties   = Number((totalRow as { n: unknown }).n);
+  const mtdListingCount   = Number((mtdListingRow as { n: unknown }).n);
 
-  const soldRows = db.prepare(`
-    SELECT sold_date AS date, ota, SUM(rns) AS value
-    FROM RnsSold
-    WHERE sold_date >= ? AND sold_date <= ?
-    GROUP BY sold_date, ota
-  `).all(formatDate(recentWindowStart), formatDate(now)) as ValueRow[];
+  const typedOtaStatusRows = (otaStatusRows as Array<{ ota: string; live: unknown; total: unknown }>).map((r) => ({
+    ota: r.ota, live: Number(r.live), total: Number(r.total),
+  }));
+  const typedSoldRows        = soldRows        as ValueRow[];
+  const typedStayRnRows      = stayRnRows      as ValueRow[];
+  const typedRevenueRows     = revenueRows     as ValueRow[];
+  const typedCurrentComp     = currentComparisonRows    as Array<{ date: string; value: number }>;
+  const typedLastMonthComp   = lastMonthComparisonRows  as Array<{ date: string; value: number }>;
+  const typedLastYearComp    = lastYearComparisonRows   as Array<{ date: string; value: number }>;
 
-  const stayRnRows = db.prepare(`
-    SELECT stay_date AS date, ota, SUM(rns) AS value
-    FROM RnsStay
-    WHERE stay_date >= ? AND stay_date <= ? AND UPPER(guest_status) = 'CICO'
-    GROUP BY stay_date, ota
-  `).all(formatDate(previousMonthStart), formatDate(now)) as ValueRow[];
-
-  const revenueRows = db.prepare(`
-    SELECT stay_date AS date, ota, SUM(revenue) AS value
-    FROM RnsStay
-    WHERE stay_date >= ? AND stay_date <= ? AND UPPER(guest_status) = 'CICO'
-    GROUP BY stay_date, ota
-  `).all(formatDate(previousMonthStart), formatDate(now)) as ValueRow[];
-
-  const mtdListingCount = (
-    db.prepare("SELECT COUNT(*) as n FROM OtaListing WHERE liveDate IS NOT NULL AND liveDate >= ?")
-      .get(formatDate(currentMonthStart)) as { n: number }
-  ).n;
-
-  const currentComparisonRows = db.prepare(`
-    SELECT sold_date AS date, SUM(rns) AS value
-    FROM RnsSold
-    WHERE sold_date >= ? AND sold_date <= ?
-    GROUP BY sold_date
-  `).all(formatDate(comparisonCurrentMonthStart), formatDate(comparisonEnd)) as Array<{ date: string; value: number }>;
-
-  const lastMonthComparisonRows = db.prepare(`
-    SELECT sold_date AS date, SUM(rns) AS value
-    FROM RnsSold
-    WHERE sold_date >= ? AND sold_date <= ?
-    GROUP BY sold_date
-  `).all(formatDate(comparisonPreviousMonthStart), formatDate(comparisonPreviousMonthEnd)) as Array<{ date: string; value: number }>;
-
-  const lastYearComparisonRows = db.prepare(`
-    SELECT sold_date AS date, SUM(rns) AS value
-    FROM RnsSold
-    WHERE sold_date >= ? AND sold_date <= ?
-    GROUP BY sold_date
-  `).all(formatDate(comparisonLastYearMonthStart), formatDate(comparisonLastYearEnd)) as Array<{ date: string; value: number }>;
-
-  const currentRnByOta = aggregateRowsByOta(soldRows, currentMonthStart, now);
-  const previousRnByOta = aggregateRowsByOta(soldRows, previousMonthStart, previousSameDayEnd);
-  const currentStayRnByOta = aggregateRowsByOta(stayRnRows, currentMonthStart, now);
-  const previousStayRnByOta = aggregateRowsByOta(stayRnRows, previousMonthStart, previousSameDayEnd);
-  const currentRevenueByOta = aggregateRowsByOta(revenueRows, currentMonthStart, now);
-  const previousRevenueByOta = aggregateRowsByOta(revenueRows, previousMonthStart, previousSameDayEnd);
+  const currentRnByOta = aggregateRowsByOta(typedSoldRows, currentMonthStart, now);
+  const previousRnByOta = aggregateRowsByOta(typedSoldRows, previousMonthStart, previousSameDayEnd);
+  const currentStayRnByOta = aggregateRowsByOta(typedStayRnRows, currentMonthStart, now);
+  const previousStayRnByOta = aggregateRowsByOta(typedStayRnRows, previousMonthStart, previousSameDayEnd);
+  const currentRevenueByOta = aggregateRowsByOta(typedRevenueRows, currentMonthStart, now);
+  const previousRevenueByOta = aggregateRowsByOta(typedRevenueRows, previousMonthStart, previousSameDayEnd);
 
   const dailyTrend = buildDaySeries(last30Start, now);
   const dailyPointMap = new Map(dailyTrend.map((point) => [point.date, point]));
 
-  for (const row of soldRows) {
+  for (const row of typedSoldRows) {
     const ota = canonicalOta(row.ota);
     if (!ota || row.date < formatDate(last30Start)) continue;
     const point = dailyPointMap.get(row.date);
@@ -562,9 +582,9 @@ export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapsho
     point.total += row.value;
   }
 
-  const currentComparisonMap = aggregateRowsByDate(currentComparisonRows);
-  const lastMonthComparisonMap = aggregateRowsByDate(lastMonthComparisonRows);
-  const lastYearComparisonMap = aggregateRowsByDate(lastYearComparisonRows);
+  const currentComparisonMap = aggregateRowsByDate(typedCurrentComp);
+  const lastMonthComparisonMap = aggregateRowsByDate(typedLastMonthComp);
+  const lastYearComparisonMap = aggregateRowsByDate(typedLastYearComp);
   const comparisonTrend: ComparativeTrendPoint[] = [];
   let currentRunning = 0;
   let lastMonthRunning = 0;
@@ -605,11 +625,11 @@ export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapsho
   const totalPreviousStayRn = Object.values(previousStayRnByOta).reduce((sum, value) => sum + value, 0);
   const totalCurrentRevenue = Object.values(currentRevenueByOta).reduce((sum, value) => sum + value, 0);
   const totalPreviousRevenue = Object.values(previousRevenueByOta).reduce((sum, value) => sum + value, 0);
-  const totalLiveListings = otaStatusRows.reduce((sum, row) => sum + row.live, 0);
+  const totalLiveListings = typedOtaStatusRows.reduce((sum, row) => sum + row.live, 0);
   const elapsedDays = Math.max(now.getDate() - 1, 1);
   const portfolioRevenuePerRn = totalCurrentStayRn > 0 ? round(totalCurrentRevenue / totalCurrentStayRn, 0) : 0;
 
-  const otaPerformance = otaStatusRows
+  const otaPerformance = typedOtaStatusRows
     .map((row) => {
       const currentRn = currentRnByOta[row.ota] ?? 0;
       const previousRn = previousRnByOta[row.ota] ?? 0;
@@ -683,13 +703,13 @@ export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapsho
     });
   }
 
-  const cityLiveRows = db.prepare(`
-    SELECT p.city, o.ota, COUNT(*) AS cnt
-    FROM OtaListing o
-    JOIN Property p ON p.id = o.propertyId
-    WHERE LOWER(o.subStatus) = 'live' AND p.city IS NOT NULL AND p.city != ''
-    GROUP BY p.city, o.ota
-  `).all() as Array<{ city: string; ota: string; cnt: number }>;
+  const cityLiveRows = (await sql`
+    SELECT inv.city, ol.ota, COUNT(*) AS cnt
+    FROM ota_listing ol
+    JOIN inventory inv ON inv.property_id = ol.property_id
+    WHERE LOWER(ol.sub_status) = 'live' AND inv.city IS NOT NULL AND inv.city != ''
+    GROUP BY inv.city, ol.ota
+  `) as Array<{ city: string; ota: string; cnt: number }>;
 
   const otaLast30Totals = dailyTrend.reduce((acc, point) => {
     for (const ota of RNS_OTAS) acc[ota] = (acc[ota] ?? 0) + point.values[ota];
@@ -762,7 +782,7 @@ export function buildProductionDashboard2Snapshot(): ProductionDashboard2Snapsho
     compareLabel: monthLabel(previousMonthStart),
     activeProperties,
     totalProperties,
-    liveCoveragePct: pct(totalLiveListings, otaStatusRows.reduce((sum, row) => sum + row.total, 0)),
+    liveCoveragePct: pct(totalLiveListings, typedOtaStatusRows.reduce((sum, row) => sum + row.total, 0)),
     mtdRn: totalCurrentRn,
     prevMtdRn: totalPreviousRn,
     mtdStayRn: totalCurrentStayRn,
@@ -804,7 +824,7 @@ export async function generateProductionDashboard2Answer(
   question: string,
   history: CopilotMessageInput[] = []
 ): Promise<{ answer: string; mode: "deterministic" | "anthropic"; snapshot: ProductionDashboard2Snapshot; followUps: string[]; }> {
-  const snapshot = buildProductionDashboard2Snapshot();
+  const snapshot = await buildProductionDashboard2Snapshot();
   const fallback = buildDeterministicContext(snapshot, question, history);
 
   if (!process.env.ANTHROPIC_API_KEY) {

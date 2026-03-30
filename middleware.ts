@@ -6,7 +6,7 @@ const SECRET      = new TextEncoder().encode(
 );
 const COOKIE_NAME = "ota_session";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/sync-inventory", "/api/sync-rns", "/api/init-db"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

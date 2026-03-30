@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 
 export interface IncompleteRow {
   fhId:      string;
@@ -15,31 +15,41 @@ export interface IncompleteRow {
 
 export async function GET() {
   try {
-    const db = getDb();
+    const sql = getSql();
 
-    const count = (db.prepare("SELECT COUNT(*) as n FROM Property").get() as { n: number }).n;
+    const countRows = await sql`SELECT COUNT(*) as n FROM inventory`;
+    const count = Number((countRows[0] as { n: number }).n);
     if (count === 0) {
       return Response.json({ error: "No data — click Sync to DB in the topbar first" });
     }
 
-    const rows = db.prepare(`
-      SELECT p.id, p.name, p.city, o.ota, o.otaId, o.status, o.subStatus, o.liveDate, o.tatError
-      FROM Property p
-      JOIN OtaListing o ON o.propertyId = p.id
+    const rows = await sql`
+      SELECT
+        p.property_id AS id,
+        p.property_name AS name,
+        p.city,
+        ol.ota,
+        ol.ota_id AS "otaId",
+        ol.status,
+        ol.sub_status AS "subStatus",
+        ol.live_date AS "liveDate",
+        ol.tat_error AS "tatError"
+      FROM inventory p
+      JOIN ota_listing ol ON ol.property_id = p.property_id
       WHERE (
         -- live listings: otaId, status, or liveDate missing
-        (LOWER(COALESCE(o.subStatus,'')) = 'live'
-          AND (o.otaId IS NULL OR o.status IS NULL OR o.liveDate IS NULL))
+        (LOWER(COALESCE(ol.sub_status,'')) = 'live'
+          AND (ol.ota_id IS NULL OR ol.status IS NULL OR ol.live_date IS NULL))
         OR
         -- not-live listings: status or subStatus missing
-        (LOWER(COALESCE(o.subStatus,'')) != 'live'
-          AND (o.status IS NULL OR o.subStatus IS NULL))
+        (LOWER(COALESCE(ol.sub_status,'')) != 'live'
+          AND (ol.status IS NULL OR ol.sub_status IS NULL))
         OR
         -- TAT data errors: negative TAT
-        o.tatError = 1
+        ol.tat_error = 1
       )
-      ORDER BY p.name, o.ota
-    `).all() as Array<{
+      ORDER BY p.property_name, ol.ota
+    ` as Array<{
       id: string; name: string; city: string | null;
       ota: string; otaId: string | null; status: string | null;
       subStatus: string | null; liveDate: string | null; tatError: number;
@@ -59,7 +69,7 @@ export async function GET() {
         if (!row.subStatus) missing.push("Sub Status");
       }
 
-      if (row.tatError === 1) missing.push("Neg. TAT");
+      if (Number(row.tatError) === 1) missing.push("Neg. TAT");
 
       if (missing.length === 0) continue;
 
@@ -72,7 +82,7 @@ export async function GET() {
         status:    row.status,
         subStatus: row.subStatus,
         liveDate:  row.liveDate,
-        tatError:  row.tatError,
+        tatError:  Number(row.tatError),
         missing,
       });
     }
