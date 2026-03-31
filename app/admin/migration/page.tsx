@@ -52,7 +52,8 @@ export default function MigrationPage() {
   const [otaRows,      setOtaRows]      = useState<OtaRow[]>([]);
   const [loadingRows,  setLoadingRows]  = useState(false);
   const [propOtaStates, setPropOtaStates] = useState<Record<string, SyncState>>({});
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipSearch   = useRef(false);
 
   // Auth check
   useEffect(() => {
@@ -98,6 +99,7 @@ export default function MigrationPage() {
 
   // ── Property search ────────────────────────────────────────────────────────
   useEffect(() => {
+    if (skipSearch.current) { skipSearch.current = false; return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query.trim()) { setPropResults([]); return; }
     debounceRef.current = setTimeout(async () => {
@@ -105,9 +107,13 @@ export default function MigrationPage() {
       try {
         const res  = await fetch(`/api/crm/properties?search=${encodeURIComponent(query)}&limit=10&export=0`);
         const json = await res.json();
-        setPropResults((json.rows ?? []).map((r: { id: string; name: string; city: string; fhStatus: string }) => ({
-          id: r.id, name: r.name, city: r.city, fhStatus: r.fhStatus,
-        })));
+        // Deduplicate by property id (API returns one row per OTA)
+        const seen = new Set<string>();
+        const unique = (json.rows ?? []).reduce((acc: PropertyResult[], r: { id: string; name: string; city: string; fhStatus: string }) => {
+          if (!seen.has(r.id)) { seen.add(r.id); acc.push({ id: r.id, name: r.name, city: r.city, fhStatus: r.fhStatus }); }
+          return acc;
+        }, []);
+        setPropResults(unique);
       } finally {
         setSearching(false);
       }
@@ -115,6 +121,7 @@ export default function MigrationPage() {
   }, [query]);
 
   async function selectProperty(prop: PropertyResult) {
+    skipSearch.current = true;
     setSelectedProp(prop);
     setPropResults([]);
     setQuery(prop.name);
