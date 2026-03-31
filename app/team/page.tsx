@@ -309,22 +309,6 @@ export default function TeamPage() {
             <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: 20, marginBottom: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", marginBottom: 12 }}>New User</div>
 
-              {/* Quick pick */}
-              <div style={{ marginBottom: 14, padding: "10px 14px", background: "#F8FAFC", borderRadius: 9, border: "1px solid #E2E8F0" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 6 }}>Quick Pick from Team</div>
-                <select defaultValue="" onChange={e => {
-                  const m = TEAM_MEMBERS.find(x => x.name === e.target.value);
-                  if (m) setForm(p => ({ ...p, name: m.name, ota: m.ota, teamLead: m.teamLead, role: m.role, username: autoUsername(m.name) }));
-                }} style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>
-                  <option value="">— Select existing team member —</option>
-                  {TEAM_MEMBERS.map(m => (
-                    <option key={m.name} value={m.name}>
-                      {m.name} {m.ota ? `(${m.ota})` : ""} — {m.role === "tl" ? "Team Lead" : `TL: ${m.teamLead}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Row 1: Username, Password, Full Name */}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                 {[
