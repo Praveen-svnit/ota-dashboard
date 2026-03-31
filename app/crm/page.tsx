@@ -154,12 +154,14 @@ export default function CrmPage() {
   const totalPages = Math.ceil(total / 50);
 
   // Derived counts from summary
+  // sub_status field: live, not live, exception, etc.
   const liveCount      = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
   const notLiveCount   = summary?.statusCounts.find(s => s.subStatus === "not live")?.cnt ?? 0;
-  const readyCount     = summary?.statusCounts.find(s => s.subStatus === "ready to go live")?.cnt ?? 0;
-  const cipCount       = (summary?.statusCounts.find(s => s.subStatus === "content in progress")?.cnt ?? 0)
-                       + (summary?.statusCounts.find(s => s.subStatus === "listing in progress")?.cnt ?? 0);
   const totalListings  = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
+  // status field: ready to go live, content in progress, listing in progress, etc.
+  const readyCount     = summary?.statusTopCounts.find(s => s.status === "ready to go live")?.cnt ?? 0;
+  const cipCount       = (summary?.statusTopCounts.find(s => s.status === "content in progress")?.cnt ?? 0)
+                       + (summary?.statusTopCounts.find(s => s.status === "listing in progress")?.cnt ?? 0);
 
   const crmTiles = [
     { label: "Total Listings",  value: totalListings, bg: "#F8FAFC", color: "#0F172A", border: "#E2E8F0" },
