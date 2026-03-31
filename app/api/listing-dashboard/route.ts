@@ -87,10 +87,10 @@ export async function GET() {
           SUM(CASE WHEN LOWER(COALESCE(status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS "readyToGoLive",
           SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
                     AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                    AND tat <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
+                    AND COALESCE(tat, 0) <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
           SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
                     AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                    AND tat > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
+                    AND COALESCE(tat, 0) > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
         FROM ota_listing
         GROUP BY ota
         ORDER BY live DESC
@@ -101,7 +101,7 @@ export async function GET() {
         FROM ota_listing
         WHERE LOWER(sub_status) != 'live'
           AND LOWER(COALESCE(sub_status,'')) != 'exception'
-          AND tat > ${TAT_THRESHOLD}
+          AND COALESCE(tat, 0) > ${TAT_THRESHOLD}
         GROUP BY ota, sub_status
       ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
 
