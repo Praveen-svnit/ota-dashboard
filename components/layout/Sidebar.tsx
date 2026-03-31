@@ -46,13 +46,13 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     setSyncLog(null);
     setSyncError(false);
     try {
-      const res  = await fetch("/api/run-sync", { method: "POST" });
+      const res  = await fetch("/api/sync-inventory", { method: "POST" });
       const json = await res.json();
       if (!res.ok || json.error) {
         setSyncLog(json.error ?? "Unknown error");
         setSyncError(true);
       } else {
-        setSyncLog(json.log ?? "Sync complete.");
+        setSyncLog(json.message ?? "Sync complete.");
         setSyncError(false);
       }
     } catch (e: unknown) {
