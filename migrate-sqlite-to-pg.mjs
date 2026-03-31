@@ -45,14 +45,14 @@ async function batchInsert(tableName, colNames, rows, getVals) {
       ON CONFLICT DO NOTHING
     `;
     try {
-      await sql.unsafe(query);
+      await sql.query(query, []);
       done += valClauses.length;
       process.stdout.write(`\r   ${done}/${rows.length}  `);
     } catch (e) {
       // Try row-by-row for this batch if batch fails
       for (const clause of valClauses) {
         try {
-          await sql.unsafe(`INSERT INTO ${tableName} (${colNames.join(", ")}) VALUES ${clause} ON CONFLICT DO NOTHING`);
+          await sql.query(`INSERT INTO ${tableName} (${colNames.join(", ")}) VALUES ${clause} ON CONFLICT DO NOTHING`, []);
           done++;
         } catch { skip++; }
       }
@@ -162,7 +162,7 @@ console.log("5. Users → users …");
 // ── 6. genius_data ────────────────────────────────────────────────────────────
 console.log("6. GeniusData → genius_data …");
 {
-  await sql`TRUNCATE genius_data RESTART IDENTITY`;
+  await sql.query("TRUNCATE genius_data RESTART IDENTITY", []);
   const rows = sqliteDb.prepare(`SELECT prop_id, bdc_id, prop_name, city, fh_status, bdc_status, genius_status, last_checked, remark FROM GeniusData`).all();
   console.log(`   ${rows.length} rows`);
   await batchInsert(
@@ -176,7 +176,7 @@ console.log("6. GeniusData → genius_data …");
 // ── 7. hygiene_data ───────────────────────────────────────────────────────────
 console.log("7. HygieneData → hygiene_data …");
 {
-  await sql`TRUNCATE hygiene_data RESTART IDENTITY`;
+  await sql.query("TRUNCATE hygiene_data RESTART IDENTITY", []);
   const rows = sqliteDb.prepare(`
     SELECT prop_id, bdc_id, prop_name, city, review_score, review_count, preferred,
            genius_level, perf_score, top_promotion, commission_pct, views, conversion_pct,
