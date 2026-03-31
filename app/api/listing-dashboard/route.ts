@@ -185,12 +185,22 @@ export async function GET() {
       ssStatusPivot[row.ota][ssLabel][stLabel] = (ssStatusPivot[row.ota][ssLabel][stLabel] ?? 0) + Number(row.n);
     }
 
+    // Coerce Postgres numeric strings to JS numbers
+    const categoriesNorm = categories.map(r => ({
+      ota: r.ota,
+      live: Number(r.live),
+      exception: Number(r.exception),
+      readyToGoLive: Number(r.readyToGoLive),
+      inProcess: Number(r.inProcess),
+      tatExhausted: Number(r.tatExhausted),
+    }));
+
     return Response.json({
       pivot,
       columns,
       otas,
       stats: { live, soldOut, total, onboardedThisMonth, mtdListings },
-      categories,
+      categories: categoriesNorm,
       tatThreshold: TAT_THRESHOLD,
       tatBreakdown,
       tatSubStatusList,
