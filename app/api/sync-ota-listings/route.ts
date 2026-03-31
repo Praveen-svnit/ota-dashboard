@@ -2,6 +2,7 @@ import { getSql } from "@/lib/db-postgres";
 import { parseCSV } from "@/lib/sheets";
 import { SHEET_ID } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
+import { NextRequest } from "next/server";
 
 const BATCH = 200;
 
@@ -10,12 +11,9 @@ function escVal(v: string | null): string {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-/** Parse various date formats from sheets into YYYY-MM-DD */
 function parseDate(v: string | null): string | null {
   if (!v || !v.trim() || v.startsWith("#")) return null;
   const s = v.trim();
-
-  // Excel serial number (e.g. 46059)
   if (/^\d{4,5}$/.test(s)) {
     const serial = parseInt(s);
     if (serial > 30000 && serial < 60000) {
@@ -24,8 +22,6 @@ function parseDate(v: string | null): string | null {
     }
     return null;
   }
-
-  // DD-Mon-YYYY or DD-Mon-YY  e.g. "24-Aug-2021" or "15-Mar-18"
   const dmy = s.match(/^(\d{1,2})[\/\-]([A-Za-z]+)[\/\-](\d{2,4})$/);
   if (dmy) {
     const months: Record<string, string> = {
@@ -38,14 +34,9 @@ function parseDate(v: string | null): string | null {
     if (year.length === 2) year = (parseInt(year) > 50 ? "19" : "20") + year;
     return `${year}-${m}-${dmy[1].padStart(2, "0")}`;
   }
-
-  // M/D/YYYY  e.g. "1/25/2015"
   const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdy) return `${mdy[3]}-${mdy[1].padStart(2, "0")}-${mdy[2].padStart(2, "0")}`;
-
-  // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
   return null;
 }
 
@@ -63,7 +54,6 @@ async function fetchTab(tab: string): Promise<{ cols: string[]; rows: string[][]
   return parseCSV(await res.text());
 }
 
-/** Find column index by header name (case-insensitive partial match) */
 function col(cols: string[], name: string): number {
   const n = name.toLowerCase();
   return cols.findIndex(c => c.toLowerCase().trim() === n);
@@ -79,8 +69,26 @@ type OtaRecord = {
   pre_post: string | null;
 };
 
-async function batchUpsert(sql: ReturnType<typeof getSql>, records: OtaRecord[], updateSubStatus: boolean): Promise<number> {
+async function batchUpsert(
+  sql: ReturnType<typeof getSql>,
+  records: OtaRecord[],
+  updateSubStatus: boolean,
+  updateOnly: boolean = false   // if true, skip inserts (only update existing rows)
+): Promise<{ upserted: number }> {
   let upserted = 0;
+
+  // For update-only mode, pre-fetch existing property_ids for this OTA
+  let existingIds: Set<string> | null = null;
+  if (updateOnly && records.length > 0) {
+    const ota = records[0].ota;
+    const rows = await sql.query(
+      `SELECT property_id FROM ota_listing WHERE ota = $1`,
+      [ota]
+    ) as { property_id: string }[];
+    existingIds = new Set(rows.map(r => r.property_id));
+    records = records.filter(r => existingIds!.has(r.property_id));
+  }
+
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
     const vals = batch.map(r =>
@@ -95,7 +103,7 @@ async function batchUpsert(sql: ReturnType<typeof getSql>, records: OtaRecord[],
       INSERT INTO ota_listing (property_id, ota, status, sub_status, live_date, ota_id, pre_post, synced_at)
       VALUES ${vals}
       ON CONFLICT (property_id, ota) DO UPDATE SET
-        status     = COALESCE(EXCLUDED.status, ota_listing.status),
+        status     = COALESCE(EXCLUDED.status,    ota_listing.status),
         ${subStatusUpdate}
         live_date  = COALESCE(EXCLUDED.live_date, ota_listing.live_date),
         ota_id     = COALESCE(EXCLUDED.ota_id,    ota_listing.ota_id),
@@ -104,206 +112,173 @@ async function batchUpsert(sql: ReturnType<typeof getSql>, records: OtaRecord[],
     `, []);
     upserted += batch.length;
   }
-  return upserted;
+  return { upserted };
 }
 
-export async function POST() {
+// ── OTA definitions ───────────────────────────────────────────────────────────
+
+type OtaDef = {
+  ota: string;
+  tab: string;
+  updateSubStatus: boolean;
+  updateOnly: boolean;
+  buildRecords: (cols: string[], rows: string[][], propertyId?: string) => OtaRecord[];
+};
+
+const OTA_DEFS: OtaDef[] = [
+  {
+    ota: "GoMMT", tab: "GoMMT", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "listing property_id"), staC = col(cols, "mmt shell status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "property live date on go-mmt");
+      const idC = col(cols, "go-mmt id"), ppC = col(cols, "set");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "GoMMT", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
+  {
+    ota: "Agoda", tab: "Agoda", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), staC = col(cols, "agoda status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "agoda live date"), idC = col(cols, "agoda id");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Agoda", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: null }];
+      });
+    },
+  },
+  {
+    ota: "Expedia", tab: "Expedia", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "fh id"), staC = col(cols, "expedia status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "expedia live date"), idC = col(cols, "expedia id");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Expedia", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: null }];
+      });
+    },
+  },
+  {
+    ota: "Yatra", tab: "Yatra", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), staC = col(cols, "yatra status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "live date"), idC = col(cols, "vid"), ppC = col(cols, "prop set");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Yatra", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
+  {
+    ota: "Ixigo", tab: "Ixigo", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), staC = col(cols, "ixigo status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "live date"), idC = col(cols, "ixigo id"), ppC = col(cols, "prop set");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Ixigo", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
+  {
+    ota: "Akbar Travels", tab: "Akbar Travels", updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), staC = col(cols, "akt status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "akt live date"), idC = col(cols, "akt_id"), ppC = col(cols, "prop set");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Akbar Travels", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
+  // Multi-OTA sheet (Booking.com tab) — UPDATE only to avoid inserting churned properties
+  {
+    ota: "Booking.com", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), idC = col(cols, "bdc id"), staC = col(cols, "bdc status"), ppC = col(cols, "pre/post");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Booking.com", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
+  {
+    ota: "Cleartrip", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), idC = col(cols, "ct id"), staC = col(cols, "ct status");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "Cleartrip", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: null }];
+      });
+    },
+  },
+  {
+    ota: "EaseMyTrip", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    buildRecords(cols, rows, pid?) {
+      const pidC = col(cols, "property_id"), idC = col(cols, "emt id"), staC = col(cols, "emt status");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "EaseMyTrip", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: null }];
+      });
+    },
+  },
+];
+
+// ── Route handler ─────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
   const session = await getSession();
   if (session && session.role !== "admin" && session.role !== "head") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const otaFilter    = searchParams.get("ota")        ?? null;  // e.g. "GoMMT"
+  const propertyId   = searchParams.get("propertyId") ?? undefined; // e.g. "157"
+
   const sql = getSql();
   const results: Record<string, number> = {};
   const errors: string[] = [];
 
-  // ── 1. GoMMT ──────────────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("GoMMT");
-    const pidCol  = col(cols, "listing property_id");
-    const staCol  = col(cols, "mmt shell status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "property live date on go-mmt");
-    const idCol   = col(cols, "go-mmt id");
-    const ppCol   = col(cols, "set");
+  // Determine which OTA defs to run
+  const defs = otaFilter
+    ? OTA_DEFS.filter(d => d.ota === otaFilter)
+    : OTA_DEFS;
 
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "GoMMT",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  clean(r[ppCol]),
-      });
-    }
-    results["GoMMT"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`GoMMT: ${e}`); }
+  if (defs.length === 0) {
+    return Response.json({ error: `Unknown OTA: ${otaFilter}` }, { status: 400 });
+  }
 
-  // ── 2. Agoda ──────────────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("Agoda");
-    const pidCol  = col(cols, "property_id");
-    const staCol  = col(cols, "agoda status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "agoda live date");
-    const idCol   = col(cols, "agoda id");
-
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "Agoda",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  null,
-      });
-    }
-    results["Agoda"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`Agoda: ${e}`); }
-
-  // ── 3. Expedia ────────────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("Expedia");
-    const pidCol  = col(cols, "fh id");
-    const staCol  = col(cols, "expedia status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "expedia live date");
-    const idCol   = col(cols, "expedia id");
-
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "Expedia",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  null,
-      });
-    }
-    results["Expedia"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`Expedia: ${e}`); }
-
-  // ── 4. Yatra ──────────────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("Yatra");
-    const pidCol  = col(cols, "property_id");
-    const staCol  = col(cols, "yatra status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "live date");
-    const idCol   = col(cols, "vid");
-    const ppCol   = col(cols, "prop set");
-
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "Yatra",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  clean(r[ppCol]),
-      });
-    }
-    results["Yatra"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`Yatra: ${e}`); }
-
-  // ── 5. Ixigo ──────────────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("Ixigo");
-    const pidCol  = col(cols, "property_id");
-    const staCol  = col(cols, "ixigo status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "live date");
-    const idCol   = col(cols, "ixigo id");
-    const ppCol   = col(cols, "prop set");
-
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "Ixigo",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  clean(r[ppCol]),
-      });
-    }
-    results["Ixigo"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`Ixigo: ${e}`); }
-
-  // ── 6. Akbar Travels ──────────────────────────────────────────────────────
-  try {
-    const { cols, rows } = await fetchTab("Akbar Travels");
-    const pidCol  = col(cols, "property_id");
-    const staCol  = col(cols, "akt status");
-    const ssCol   = col(cols, "sub status");
-    const dateCol = col(cols, "akt live date");
-    const idCol   = col(cols, "akt_id");
-    const ppCol   = col(cols, "prop set");
-
-    const records: OtaRecord[] = [];
-    for (const r of rows) {
-      const pid = clean(r[pidCol]);
-      if (!pid) continue;
-      records.push({
-        property_id: pid, ota: "Akbar Travels",
-        status:    clean(r[staCol]),
-        sub_status: clean(r[ssCol]),
-        live_date:  parseDate(r[dateCol]),
-        ota_id:    clean(r[idCol]),
-        pre_post:  clean(r[ppCol]),
-      });
-    }
-    results["Akbar Travels"] = await batchUpsert(sql, records, true);
-  } catch (e) { errors.push(`Akbar Travels: ${e}`); }
-
-  // ── 7. Booking.com, Cleartrip, EaseMyTrip (multi-OTA sheet) ───────────────
-  try {
-    const { cols, rows } = await fetchTab("Booking.com");
-    const pidCol = col(cols, "property_id");
-    const ppCol  = col(cols, "pre/post");
-
-    const otaMap: { ota: string; idCol: number; statusCol: number }[] = [
-      { ota: "Booking.com",   idCol: col(cols, "bdc id"),     statusCol: col(cols, "bdc status")     },
-      { ota: "Cleartrip",     idCol: col(cols, "ct id"),      statusCol: col(cols, "ct status")      },
-      { ota: "EaseMyTrip",    idCol: col(cols, "emt id"),     statusCol: col(cols, "emt status")     },
-    ];
-
-    for (const { ota, idCol, statusCol } of otaMap) {
-      const records: OtaRecord[] = [];
-      for (const r of rows) {
-        const pid = clean(r[pidCol]);
-        if (!pid) continue;
-        records.push({
-          property_id: pid, ota,
-          status:    clean(r[statusCol]),
-          sub_status: null,           // not in multi-OTA sheet — preserve existing
-          live_date:  null,
-          ota_id:    clean(r[idCol]),
-          pre_post:  clean(r[ppCol]),
-        });
+  // Fetch tabs (de-duplicate: Booking.com tab is shared by 3 OTAs)
+  const tabCache: Record<string, { cols: string[]; rows: string[][] }> = {};
+  for (const def of defs) {
+    if (!tabCache[def.tab]) {
+      try {
+        tabCache[def.tab] = await fetchTab(def.tab);
+      } catch (e) {
+        errors.push(`Fetch "${def.tab}": ${e}`);
       }
-      results[ota] = await batchUpsert(sql, records, false); // false = don't overwrite sub_status
     }
-  } catch (e) { errors.push(`Multi-OTA (BDC/CT/EMT): ${e}`); }
+  }
+
+  // Process each OTA
+  for (const def of defs) {
+    const tabData = tabCache[def.tab];
+    if (!tabData) { errors.push(`${def.ota}: sheet not available`); continue; }
+    try {
+      const records = def.buildRecords(tabData.cols, tabData.rows, propertyId);
+      const { upserted } = await batchUpsert(sql, records, def.updateSubStatus, def.updateOnly);
+      results[def.ota] = upserted;
+    } catch (e) {
+      errors.push(`${def.ota}: ${e}`);
+    }
+  }
 
   const total = Object.values(results).reduce((a, b) => a + b, 0);
   const summary = Object.entries(results).map(([k, v]) => `${k}: ${v}`).join(", ");
-  const message = `Synced ${total} OTA listing rows. ${summary}${errors.length ? ` | Errors: ${errors.join("; ")}` : ""}`;
+  const message = `Synced ${total} rows. ${summary}${errors.length ? ` | Errors: ${errors.join("; ")}` : ""}`;
 
   return Response.json({ ok: errors.length === 0, message, results, errors });
 }
