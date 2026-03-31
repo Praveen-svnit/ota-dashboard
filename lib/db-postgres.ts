@@ -279,4 +279,28 @@ export async function initPostgresSchema() {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_hygiene_bdc_id ON hygiene_data(bdc_id)`;
+
+  // ── GMB Tracker ────────────────────────────────────────────────────────────
+  await sql`
+    CREATE TABLE IF NOT EXISTS gmb_tracker (
+      id                  SERIAL PRIMARY KEY,
+      property_id         TEXT NOT NULL,
+      property_name       TEXT,
+      city                TEXT,
+      created_at          TEXT,
+      fh_status           TEXT,
+      pre_post            TEXT,
+      gmb_status          TEXT,
+      gmb_sub_status      TEXT,
+      listing_type        TEXT,
+      number              TEXT,
+      review_link_tracker TEXT,
+      gmb_rating          TEXT,
+      gmb_review_count    TEXT,
+      synced_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (property_id)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_gmb_property_id ON gmb_tracker(property_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_gmb_status      ON gmb_tracker(gmb_status)`;
 }

@@ -200,5 +200,33 @@ console.log("7. HygieneData → hygiene_data …");
   );
 }
 
+// ── 8. gmb_tracker ────────────────────────────────────────────────────────────
+console.log("8. GmbTracker → gmb_tracker …");
+{
+  await sql.query("TRUNCATE gmb_tracker RESTART IDENTITY", []);
+  const rows = sqliteDb.prepare(`
+    SELECT propertyId, propertyName, city, createdAt, fhStatus, prePost,
+           gmbStatus, gmbSubStatus, listingType, number, reviewLinkTracker,
+           gmbRating, gmbReviewCount
+    FROM GmbTracker
+    WHERE propertyId IS NOT NULL
+  `).all();
+  console.log(`   ${rows.length} rows`);
+  await batchInsert(
+    "gmb_tracker",
+    ["property_id","property_name","city","created_at","fh_status","pre_post",
+     "gmb_status","gmb_sub_status","listing_type","number","review_link_tracker",
+     "gmb_rating","gmb_review_count","synced_at"],
+    rows,
+    r => [
+      String(r.propertyId), r.propertyName || null, r.city || null,
+      r.createdAt || null, r.fhStatus || null, r.prePost || null,
+      r.gmbStatus || null, r.gmbSubStatus || null, r.listingType || null,
+      r.number || null, r.reviewLinkTracker || null,
+      r.gmbRating || null, r.gmbReviewCount || null, new Date().toISOString()
+    ]
+  );
+}
+
 console.log("\n✅ Migration complete!");
 sqliteDb.close();
