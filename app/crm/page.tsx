@@ -77,6 +77,7 @@ export default function CrmPage() {
   const [breakdownData,    setBreakdownData]    = useState<{ statusCounts: { subStatus: string; cnt: number }[]; statusTopCounts: { status: string; cnt: number }[] } | null>(null);
   const [otaDropOpen,      setOtaDropOpen]      = useState(false);
   const [breakdownExpanded, setBreakdownExpanded] = useState(false);
+  const [pipelineExpanded,  setPipelineExpanded]  = useState(false);
   const otaDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -218,32 +219,46 @@ export default function CrmPage() {
         ))}
       </div>
 
-      {/* FH Live Date Tiles — Today through last 29 days (30 days) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 6, marginBottom: 8 }}>
-        {(summary?.fhPipeline ?? Array(30).fill(0)).map((count, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          const label = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-          const hasData = count > 0;
-          return (
-            <div key={i} style={{
-              background: i === 0 ? "#F0FDF4" : hasData ? "#F0F9FF" : "#F8FAFC",
-              border: `1px solid ${i === 0 ? "#BBF7D0" : hasData ? "#BAE6FD" : "#E2E8F0"}`,
-              borderRadius: 10, padding: "8px 10px",
-            }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", lineHeight: 1 }}>
-                {count}
-              </div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", marginTop: 3, opacity: 0.85, lineHeight: 1.3 }}>
-                {label}{i === 0 ? " (Today)" : ""}
-              </div>
+      {/* FH Live Date Tiles — Today through last 29 days (first 7 visible, rest expandable) */}
+      {(() => {
+        const pipeline = summary?.fhPipeline ?? Array(30).fill(0);
+        const visible = pipelineExpanded ? pipeline : pipeline.slice(0, 7);
+        return (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 6 }}>
+              {visible.map((count, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const label = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+                const hasData = count > 0;
+                return (
+                  <div key={i} style={{
+                    background: i === 0 ? "#F0FDF4" : hasData ? "#F0F9FF" : "#F8FAFC",
+                    border: `1px solid ${i === 0 ? "#BBF7D0" : hasData ? "#BAE6FD" : "#E2E8F0"}`,
+                    borderRadius: 10, padding: "8px 10px",
+                  }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", lineHeight: 1 }}>
+                      {count}
+                    </div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", marginTop: 3, opacity: 0.85, lineHeight: 1.3 }}>
+                      {label}{i === 0 ? " (Today)" : ""}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-      <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 12, fontWeight: 500 }}>
-        Live Date
-      </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 10, color: "#94A3B8", fontWeight: 500 }}>FH Live Date</span>
+              <button onClick={() => setPipelineExpanded(p => !p)} style={{
+                fontSize: 10, fontWeight: 600, color: "#0369A1", background: "none",
+                border: "none", cursor: "pointer", padding: 0, textDecoration: "underline",
+              }}>
+                {pipelineExpanded ? "Show less ▲" : `Show more (${pipeline.length - 7} days) ▼`}
+              </button>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Status Breakdown Tiles */}
       {(() => {
