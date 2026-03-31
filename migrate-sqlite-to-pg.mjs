@@ -228,5 +228,30 @@ console.log("8. GmbTracker → gmb_tracker …");
   );
 }
 
+// ── 9. gmb_tracker → ota_listing (ota='GMB') ─────────────────────────────────
+console.log("9. GmbTracker → ota_listing (GMB rows) …");
+{
+  // Remove existing GMB rows first
+  await sql.query("DELETE FROM ota_listing WHERE ota = 'GMB'", []);
+  const rows = sqliteDb.prepare(`
+    SELECT propertyId, gmbStatus, gmbSubStatus
+    FROM GmbTracker
+    WHERE propertyId IS NOT NULL
+  `).all();
+  console.log(`   ${rows.length} rows`);
+  await batchInsert(
+    "ota_listing",
+    ["property_id","ota","status","sub_status","synced_at"],
+    rows,
+    r => [
+      String(r.propertyId), "GMB",
+      r.gmbStatus  || null,
+      // Normalize common typo
+      r.gmbSubStatus === "Live" || r.gmbSubStatus === "LIve" ? "Live" : (r.gmbSubStatus || null),
+      new Date().toISOString()
+    ]
+  );
+}
+
 console.log("\n✅ Migration complete!");
 sqliteDb.close();
