@@ -107,11 +107,11 @@ export async function POST(req: NextRequest) {
         ON CONFLICT (property_id) DO UPDATE SET
           property_name   = EXCLUDED.property_name,
           city            = EXCLUDED.city,
-          fh_live_date    = EXCLUDED.fh_live_date,
-          fh_status       = EXCLUDED.fh_status,
-          pre_post_set    = EXCLUDED.pre_post_set,
-          onboarding_type = EXCLUDED.onboarding_type,
-          master_id       = EXCLUDED.master_id,
+          fh_live_date    = COALESCE(EXCLUDED.fh_live_date, inventory.fh_live_date),
+          fh_status       = COALESCE(EXCLUDED.fh_status,   inventory.fh_status),
+          pre_post_set    = COALESCE(EXCLUDED.pre_post_set, inventory.pre_post_set),
+          onboarding_type = COALESCE(EXCLUDED.onboarding_type, inventory.onboarding_type),
+          master_id       = COALESCE(EXCLUDED.master_id,   inventory.master_id),
           synced_at       = NOW()
       `;
       upserted++;
