@@ -4,7 +4,6 @@ import { INV_SHEET_ID, INV_SHEET_TAB } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
-// Column header → DB field mapping (case-insensitive, flexible)
 const COL_MAP: Record<string, string> = {
   "property id":     "property_id",
   "propertyid":      "property_id",
@@ -26,12 +25,18 @@ const COL_MAP: Record<string, string> = {
   "masterid":        "master_id",
 };
 
-function normalize(header: string): string {
+function normalizeHeader(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9/]/g, " ").trim();
 }
 
+function escVal(v: string | null): string {
+  if (v === null || v === undefined) return "NULL";
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+const BATCH = 200;
+
 export async function POST(req: NextRequest) {
-  // Allow both authenticated users (admin/head) and internal cron calls
   const session = await getSession();
   if (session && session.role !== "admin" && session.role !== "head") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -42,7 +47,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Fetch Inv sheet
     const url = `https://docs.google.com/spreadsheets/d/${INV_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(INV_SHEET_TAB)}`;
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`Failed to fetch Inv sheet: ${res.status}`);
@@ -50,71 +54,57 @@ export async function POST(req: NextRequest) {
 
     const { cols, rows } = parseCSV(csv);
 
-    // Map sheet columns to DB fields
     const fieldMap: Record<number, string> = {};
     cols.forEach((col, i) => {
-      const key = normalize(col);
+      const key = normalizeHeader(col);
       if (COL_MAP[key]) fieldMap[i] = COL_MAP[key];
     });
 
     if (!Object.values(fieldMap).includes("property_id")) {
-      return Response.json({ error: `Could not find 'Property ID' column. Headers found: ${cols.join(", ")}` }, { status: 400 });
+      return Response.json({ error: `Could not find 'Property ID' column. Headers: ${cols.join(", ")}` }, { status: 400 });
+    }
+
+    // Build records
+    type Rec = { property_id: string; property_name: string | null; city: string | null; fh_live_date: string | null; fh_status: string | null; pre_post_set: string | null; onboarding_type: string | null; master_id: string | null };
+    const records: Rec[] = [];
+    let skipped = 0;
+
+    for (const row of rows) {
+      const rec: Record<string, string | null> = { property_id: null, property_name: null, city: null, fh_live_date: null, fh_status: null, pre_post_set: null, onboarding_type: null, master_id: null };
+      for (const [i, field] of Object.entries(fieldMap)) {
+        rec[field] = row[Number(i)]?.trim() || null;
+      }
+      if (!rec.property_id) { skipped++; continue; }
+      if (rec.fh_live_date) {
+        const dmy = rec.fh_live_date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (dmy) rec.fh_live_date = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+      }
+      records.push(rec as Rec);
     }
 
     const sql = getSql();
     let upserted = 0;
-    let skipped  = 0;
 
-    for (const row of rows) {
-      const record: Record<string, string | null> = {
-        property_id:     null,
-        property_name:   null,
-        city:            null,
-        fh_live_date:    null,
-        fh_status:       null,
-        pre_post_set:    null,
-        onboarding_type: null,
-        master_id:       null,
-      };
+    for (let i = 0; i < records.length; i += BATCH) {
+      const batch = records.slice(i, i + BATCH);
+      const valClauses = batch.map(r =>
+        `(${escVal(r.property_id)}, ${escVal(r.property_name)}, ${escVal(r.city)}, ${r.fh_live_date ? `${escVal(r.fh_live_date)}::date` : "NULL"}, ${escVal(r.fh_status)}, ${escVal(r.pre_post_set)}, ${escVal(r.onboarding_type)}, ${escVal(r.master_id)})`
+      ).join(",\n");
 
-      for (const [i, field] of Object.entries(fieldMap)) {
-        const val = row[Number(i)]?.trim() || null;
-        record[field] = val;
-      }
-
-      if (!record.property_id) { skipped++; continue; }
-
-      // Parse date — accept DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
-      if (record.fh_live_date) {
-        const d = record.fh_live_date;
-        const dmy = d.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-        if (dmy) record.fh_live_date = `${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}`;
-      }
-
-      await sql`
+      await sql.query(`
         INSERT INTO inventory (property_id, property_name, city, fh_live_date, fh_status, pre_post_set, onboarding_type, master_id, synced_at)
-        VALUES (
-          ${record.property_id},
-          ${record.property_name},
-          ${record.city},
-          ${record.fh_live_date}::date,
-          ${record.fh_status},
-          ${record.pre_post_set},
-          ${record.onboarding_type},
-          ${record.master_id},
-          NOW()
-        )
+        VALUES ${valClauses}
         ON CONFLICT (property_id) DO UPDATE SET
           property_name   = EXCLUDED.property_name,
           city            = EXCLUDED.city,
-          fh_live_date    = COALESCE(EXCLUDED.fh_live_date, inventory.fh_live_date),
-          fh_status       = COALESCE(EXCLUDED.fh_status,   inventory.fh_status),
-          pre_post_set    = COALESCE(EXCLUDED.pre_post_set, inventory.pre_post_set),
-          onboarding_type = COALESCE(EXCLUDED.onboarding_type, inventory.onboarding_type),
-          master_id       = COALESCE(EXCLUDED.master_id,   inventory.master_id),
+          fh_live_date    = COALESCE(EXCLUDED.fh_live_date,    inventory.fh_live_date),
+          fh_status       = COALESCE(EXCLUDED.fh_status,       inventory.fh_status),
+          pre_post_set    = COALESCE(EXCLUDED.pre_post_set,     inventory.pre_post_set),
+          onboarding_type = COALESCE(EXCLUDED.onboarding_type,  inventory.onboarding_type),
+          master_id       = COALESCE(EXCLUDED.master_id,        inventory.master_id),
           synced_at       = NOW()
-      `;
-      upserted++;
+      `, []);
+      upserted += batch.length;
     }
 
     return Response.json({
