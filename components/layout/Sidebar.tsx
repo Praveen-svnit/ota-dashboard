@@ -28,11 +28,12 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     router.push("/login");
   }
 
-  const [syncing,   setSyncing]   = useState(false);
-  const [syncLog,   setSyncLog]   = useState<string | null>(null);
-  const [syncError, setSyncError] = useState(false);
-  const [logOpen,   setLogOpen]   = useState(false);
-  const [copied,    setCopied]    = useState(false);
+  const [syncing,      setSyncing]      = useState(false);
+  const [syncingOta,   setSyncingOta]   = useState(false);
+  const [syncLog,      setSyncLog]      = useState<string | null>(null);
+  const [syncError,    setSyncError]    = useState(false);
+  const [logOpen,      setLogOpen]      = useState(false);
+  const [copied,       setCopied]       = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
 
   async function runRefresh() {
@@ -60,6 +61,29 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
       setSyncError(true);
     } finally {
       setSyncing(false);
+      setLogOpen(true);
+    }
+  }
+
+  async function runOtaSync() {
+    setSyncingOta(true);
+    setSyncLog(null);
+    setSyncError(false);
+    try {
+      const res  = await fetch("/api/sync-ota-listings", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setSyncLog(json.error ?? "Unknown error");
+        setSyncError(true);
+      } else {
+        setSyncLog(json.message ?? "OTA sync complete.");
+        setSyncError(false);
+      }
+    } catch (e: unknown) {
+      setSyncLog(e instanceof Error ? e.message : "Network error");
+      setSyncError(true);
+    } finally {
+      setSyncingOta(false);
       setLogOpen(true);
     }
   }
@@ -232,6 +256,30 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
             {syncing ? "⟳" : "⇅"}
           </span>
           {!collapsed && (syncing ? "Syncing…" : "Sync to DB")}
+        </button>
+
+        {/* Sync OTA Listings button */}
+        <button
+          onClick={runOtaSync}
+          disabled={syncingOta}
+          title="Sync OTA listing status from individual OTA sheets"
+          style={{
+            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
+            gap: 7, width: "100%",
+            padding: collapsed ? "8px 0" : "8px 10px",
+            borderRadius: 7, border: "none", cursor: syncingOta ? "default" : "pointer",
+            background: syncingOta ? "#F1F5F9" : "#FFF7ED",
+            color: syncingOta ? "#94A3B8" : "#C2410C",
+            fontSize: 12, fontWeight: 600,
+            opacity: syncingOta ? 0.7 : 1,
+            transition: "background 0.15s",
+            marginTop: 5,
+          }}
+        >
+          <span style={{ fontSize: 14, animation: syncingOta ? "spin 1s linear infinite" : "none" }}>
+            {syncingOta ? "⟳" : "⊞"}
+          </span>
+          {!collapsed && (syncingOta ? "Syncing OTAs…" : "Sync OTA Sheets")}
         </button>
 
         {/* Show logs button — only when a log exists */}
