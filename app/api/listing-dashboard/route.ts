@@ -83,20 +83,33 @@ export async function GET() {
       ` as Promise<Array<{ mtdListings: number }>>,
 
       sql`
-        SELECT ol.ota,
-          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
-          SUM(CASE WHEN LOWER(ol.sub_status) = 'exception' THEN 1 ELSE 0 END) AS exception,
+        WITH active AS (
+          SELECT property_id, fh_live_date
+          FROM inventory
+          WHERE fh_status IN ('Live','SoldOut')
+        ),
+        ota_names AS (
+          SELECT DISTINCT ota FROM ota_listing
+        )
+        SELECT
+          n.ota,
+          SUM(CASE WHEN LOWER(COALESCE(ol.sub_status,'')) = 'live'      THEN 1 ELSE 0 END) AS live,
+          SUM(CASE WHEN LOWER(COALESCE(ol.sub_status,'')) = 'exception' THEN 1 ELSE 0 END) AS exception,
           SUM(CASE WHEN LOWER(COALESCE(ol.status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS "readyToGoLive",
-          SUM(CASE WHEN LOWER(ol.sub_status) != 'live' AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
-                    AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
-                    AND COALESCE(ol.tat, 0) <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
-          SUM(CASE WHEN LOWER(ol.sub_status) != 'live' AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
-                    AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
-                    AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
-        FROM ota_listing ol
-        JOIN inventory inv ON inv.property_id = ol.property_id
-          AND inv.fh_status IN ('Live','SoldOut')
-        GROUP BY ol.ota
+          SUM(CASE
+            WHEN LOWER(COALESCE(ol.sub_status,'')) NOT IN ('live','exception')
+             AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
+             AND COALESCE(CURRENT_DATE - a.fh_live_date::date, 0) <= ${TAT_THRESHOLD}
+            THEN 1 ELSE 0 END) AS "inProcess",
+          SUM(CASE
+            WHEN LOWER(COALESCE(ol.sub_status,'')) NOT IN ('live','exception')
+             AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
+             AND COALESCE(CURRENT_DATE - a.fh_live_date::date, 0) > ${TAT_THRESHOLD}
+            THEN 1 ELSE 0 END) AS "tatExhausted"
+        FROM active a
+        CROSS JOIN ota_names n
+        LEFT JOIN ota_listing ol ON ol.property_id = a.property_id AND ol.ota = n.ota
+        GROUP BY n.ota
         ORDER BY live DESC
       ` as Promise<Array<{ ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number }>>,
 
@@ -107,7 +120,7 @@ export async function GET() {
           AND inv.fh_status IN ('Live','SoldOut')
         WHERE LOWER(ol.sub_status) != 'live'
           AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
-          AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD}
+          AND COALESCE(CURRENT_DATE - inv.fh_live_date::date, 0) > ${TAT_THRESHOLD}
         GROUP BY ol.ota, ol.sub_status
       ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
 
