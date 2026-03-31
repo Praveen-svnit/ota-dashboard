@@ -476,7 +476,7 @@ export default function ListingDashboardPage() {
                           </td>
                           {otasSorted.map(ota => {
                             const r   = catMap[ota];
-                            const tot = r.live + r.exception + r.inProcess + r.tatExhausted;
+                            const tot = r.live + r.exception + (r.readyToGoLive ?? 0) + r.inProcess + r.tatExhausted;
                             const pct = tot > 0 ? ((r.live + r.exception) / tot) * 100 : 0;
                             const { text, bar } = liveColor(pct);
                             return (
@@ -637,7 +637,7 @@ export default function ListingDashboardPage() {
                           </td>
                           {otasSorted.map(ota => {
                             const r = catMap[ota];
-                            const t = r.live + r.exception + r.inProcess + r.tatExhausted;
+                            const t = r.live + r.exception + (r.readyToGoLive ?? 0) + r.inProcess + r.tatExhausted;
                             return (
                               <td key={ota} style={{ ...TD_CELL, background: TABLE_THEME.totalRowBg }}>
                                 <span style={{ fontWeight: 800, color: TABLE_THEME.totalText, fontSize: 12 }}>{t.toLocaleString()}</span>
@@ -750,7 +750,7 @@ export default function ListingDashboardPage() {
                       const ota = popup.ota;
                       const cat = catMap2[ota];
                       const ts  = data.tatStats[ota];
-                      const tot = cat ? cat.live + cat.exception + cat.inProcess + cat.tatExhausted : 0;
+                      const tot = cat ? cat.live + cat.exception + (cat.readyToGoLive ?? 0) + cat.inProcess + cat.tatExhausted : 0;
                       const livePct = tot > 0 ? ((cat.live + cat.exception) / tot * 100).toFixed(1) : "0.0";
                       return (
                         <div>
