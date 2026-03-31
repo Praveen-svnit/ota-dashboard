@@ -4,9 +4,20 @@ let _sql: ReturnType<typeof neon> | null = null;
 
 export function getSql() {
   if (!_sql) {
-    if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL not set");
+    const raw = process.env.DATABASE_URL;
+    if (!raw) throw new Error("DATABASE_URL not set");
+
     // neon() requires postgresql:// — Railway often provides postgres://
-    const url = process.env.DATABASE_URL.replace(/^postgres:\/\//, "postgresql://");
+    // Also strip unsupported options (channel_binding) and trim whitespace
+    let url = raw.trim().replace(/^postgres:\/\//, "postgresql://");
+
+    // Remove channel_binding param — not supported by neon HTTP client
+    try {
+      const u = new URL(url);
+      u.searchParams.delete("channel_binding");
+      url = u.toString();
+    } catch { /* keep url as-is if URL parse fails */ }
+
     _sql = neon(url);
   }
   return _sql;
