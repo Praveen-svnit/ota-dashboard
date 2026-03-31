@@ -55,9 +55,11 @@ export async function GET() {
       ssStatusRows,
     ] = await Promise.all([
       sql`
-        SELECT ota, sub_status AS "subStatus", COUNT(*) AS n
-        FROM ota_listing
-        GROUP BY ota, sub_status
+        SELECT ol.ota, ol.sub_status AS "subStatus", COUNT(*) AS n
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+          AND inv.fh_status IN ('Live','SoldOut')
+        GROUP BY ol.ota, ol.sub_status
       ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
 
       sql`
@@ -81,47 +83,55 @@ export async function GET() {
       ` as Promise<Array<{ mtdListings: number }>>,
 
       sql`
-        SELECT ota,
-          SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
-          SUM(CASE WHEN LOWER(sub_status) = 'exception' THEN 1 ELSE 0 END) AS exception,
-          SUM(CASE WHEN LOWER(COALESCE(status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS "readyToGoLive",
-          SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
-                    AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                    AND COALESCE(tat, 0) <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
-          SUM(CASE WHEN LOWER(sub_status) != 'live' AND LOWER(COALESCE(sub_status,'')) != 'exception'
-                    AND LOWER(COALESCE(status,'')) != 'ready to go live'
-                    AND COALESCE(tat, 0) > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
-        FROM ota_listing
-        GROUP BY ota
+        SELECT ol.ota,
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'exception' THEN 1 ELSE 0 END) AS exception,
+          SUM(CASE WHEN LOWER(COALESCE(ol.status,'')) = 'ready to go live' THEN 1 ELSE 0 END) AS "readyToGoLive",
+          SUM(CASE WHEN LOWER(ol.sub_status) != 'live' AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
+                    AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
+                    AND COALESCE(ol.tat, 0) <= ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "inProcess",
+          SUM(CASE WHEN LOWER(ol.sub_status) != 'live' AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
+                    AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
+                    AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD} THEN 1 ELSE 0 END) AS "tatExhausted"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+          AND inv.fh_status IN ('Live','SoldOut')
+        GROUP BY ol.ota
         ORDER BY live DESC
       ` as Promise<Array<{ ota: string; live: number; exception: number; readyToGoLive: number; inProcess: number; tatExhausted: number }>>,
 
       sql`
-        SELECT ota, sub_status AS "subStatus", COUNT(*) AS n
-        FROM ota_listing
-        WHERE LOWER(sub_status) != 'live'
-          AND LOWER(COALESCE(sub_status,'')) != 'exception'
-          AND COALESCE(tat, 0) > ${TAT_THRESHOLD}
-        GROUP BY ota, sub_status
+        SELECT ol.ota, ol.sub_status AS "subStatus", COUNT(*) AS n
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+          AND inv.fh_status IN ('Live','SoldOut')
+        WHERE LOWER(ol.sub_status) != 'live'
+          AND LOWER(COALESCE(ol.sub_status,'')) != 'exception'
+          AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD}
+        GROUP BY ol.ota, ol.sub_status
       ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
 
       sql`
-        SELECT ota,
-          ROUND(AVG(tat)) AS "avgTat",
-          SUM(CASE WHEN tat <= 7  THEN 1 ELSE 0 END) AS "d0_7",
-          SUM(CASE WHEN tat > 7  AND tat <= 15 THEN 1 ELSE 0 END) AS "d8_15",
-          SUM(CASE WHEN tat > 15 AND tat <= 30 THEN 1 ELSE 0 END) AS "d16_30",
-          SUM(CASE WHEN tat > 30 AND tat <= 60 THEN 1 ELSE 0 END) AS "d31_60",
-          SUM(CASE WHEN tat > 60 THEN 1 ELSE 0 END) AS "d60p"
-        FROM ota_listing
-        WHERE LOWER(sub_status) = 'live' AND live_date IS NOT NULL
-        GROUP BY ota
+        SELECT ol.ota,
+          ROUND(AVG(ol.tat)) AS "avgTat",
+          SUM(CASE WHEN ol.tat <= 7  THEN 1 ELSE 0 END) AS "d0_7",
+          SUM(CASE WHEN ol.tat > 7  AND ol.tat <= 15 THEN 1 ELSE 0 END) AS "d8_15",
+          SUM(CASE WHEN ol.tat > 15 AND ol.tat <= 30 THEN 1 ELSE 0 END) AS "d16_30",
+          SUM(CASE WHEN ol.tat > 30 AND ol.tat <= 60 THEN 1 ELSE 0 END) AS "d31_60",
+          SUM(CASE WHEN ol.tat > 60 THEN 1 ELSE 0 END) AS "d60p"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+          AND inv.fh_status IN ('Live','SoldOut')
+        WHERE LOWER(ol.sub_status) = 'live' AND ol.live_date IS NOT NULL
+        GROUP BY ol.ota
       ` as Promise<Array<{ ota: string; avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number }>>,
 
       sql`
-        SELECT ota, sub_status AS "subStatus", status, COUNT(*) AS n
-        FROM ota_listing
-        GROUP BY ota, sub_status, status
+        SELECT ol.ota, ol.sub_status AS "subStatus", ol.status, COUNT(*) AS n
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+          AND inv.fh_status IN ('Live','SoldOut')
+        GROUP BY ol.ota, ol.sub_status, ol.status
       ` as Promise<Array<{ ota: string; subStatus: string | null; status: string | null; n: number }>>,
     ]);
 
