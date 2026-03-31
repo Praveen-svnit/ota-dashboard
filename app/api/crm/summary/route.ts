@@ -53,11 +53,12 @@ export async function GET() {
       ORDER BY live DESC
     `,
 
-    // FH pipeline: active properties, today through D-7
+    // FH pipeline: active properties, today through D-29 (30 days)
+    // Use IST timezone offset (+5:30) so dates match the sheet dates
     Promise.all(
-      Array.from({ length: 8 }, (_, i) =>
+      Array.from({ length: 30 }, (_, i) =>
         sql.query(
-          `SELECT COUNT(*) AS n FROM inventory WHERE fh_status IN ('Live','SoldOut') AND fh_live_date::date = CURRENT_DATE - INTERVAL '${i} days'`
+          `SELECT COUNT(*) AS n FROM inventory WHERE fh_status IN ('Live','SoldOut') AND (fh_live_date AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '${i} days'`
         ).then(rows => Number((rows[0] as { n: string | number }).n))
       )
     ),

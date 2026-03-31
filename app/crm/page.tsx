@@ -158,16 +158,16 @@ export default function CrmPage() {
   const liveCount      = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
   const notLiveCount   = summary?.statusCounts.find(s => s.subStatus === "not live")?.cnt ?? 0;
   const totalListings  = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
-  // status field: ready to go live, content in progress, listing in progress, etc.
+  // status field: ready to go live
   const readyCount     = summary?.statusTopCounts.find(s => s.status === "ready to go live")?.cnt ?? 0;
-  const cipCount       = (summary?.statusTopCounts.find(s => s.status === "content in progress")?.cnt ?? 0)
-                       + (summary?.statusTopCounts.find(s => s.status === "listing in progress")?.cnt ?? 0);
+  // sub_status 'ota team' = listings being actively processed (OTA team working on it)
+  const cipCount       = summary?.statusCounts.find(s => s.subStatus === "ota team")?.cnt ?? 0;
 
   const crmTiles = [
     { label: "Total Listings",  value: totalListings, bg: "#F8FAFC", color: "#0F172A", border: "#E2E8F0" },
     { label: "Live",            value: liveCount,     bg: "#F0FDF4", color: "#059669", border: "#BBF7D0" },
     { label: "Ready to GoLive", value: readyCount,    bg: "#FEFCE8", color: "#854D0E", border: "#FDE68A" },
-    { label: "In Progress",     value: cipCount,      bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE" },
+    { label: "OTA Team",        value: cipCount,      bg: "#EEF2FF", color: "#4F46E5", border: "#C7D2FE" },
   ];
   const taskTiles = [
     { label: "Open Tasks",    value: summary?.tasksOpen    ?? 0, bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
@@ -218,22 +218,23 @@ export default function CrmPage() {
         ))}
       </div>
 
-      {/* FH Live Date Tiles — Today through last 7 days */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8, marginBottom: 8 }}>
-        {(summary?.fhPipeline ?? Array(8).fill(0)).map((count, i) => {
+      {/* FH Live Date Tiles — Today through last 29 days (30 days) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 6, marginBottom: 8 }}>
+        {(summary?.fhPipeline ?? Array(30).fill(0)).map((count, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const label = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+          const hasData = count > 0;
           return (
             <div key={i} style={{
-              background: i === 0 ? "#F0FDF4" : "#F0F9FF",
-              border: `1px solid ${i === 0 ? "#BBF7D0" : "#BAE6FD"}`,
-              borderRadius: 10, padding: "10px 12px",
+              background: i === 0 ? "#F0FDF4" : hasData ? "#F0F9FF" : "#F8FAFC",
+              border: `1px solid ${i === 0 ? "#BBF7D0" : hasData ? "#BAE6FD" : "#E2E8F0"}`,
+              borderRadius: 10, padding: "8px 10px",
             }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: i === 0 ? "#059669" : "#0369A1", lineHeight: 1 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", lineHeight: 1 }}>
                 {count}
               </div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#059669" : "#0369A1", marginTop: 3, opacity: 0.85, lineHeight: 1.3 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: i === 0 ? "#059669" : hasData ? "#0369A1" : "#94A3B8", marginTop: 3, opacity: 0.85, lineHeight: 1.3 }}>
                 {label}{i === 0 ? " (Today)" : ""}
               </div>
             </div>
