@@ -17,42 +17,47 @@ export async function GET() {
     recentLogs,
     openTasks,
   ] = await Promise.all([
-    // Overall subStatus counts — null/blank → 'New'
+    // subStatus counts — active properties only
     sql`
-      SELECT LOWER(COALESCE(NULLIF(TRIM(sub_status), ''), 'New')) AS "subStatus",
+      SELECT LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New')) AS "subStatus",
              COUNT(*) AS cnt
-      FROM ota_listing
-      GROUP BY LOWER(COALESCE(NULLIF(TRIM(sub_status), ''), 'New'))
+      FROM ota_listing ol
+      JOIN inventory inv ON inv.property_id = ol.property_id
+        AND inv.fh_status IN ('Live','SoldOut')
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New'))
       ORDER BY cnt DESC
     `,
 
-    // Overall status counts — null/blank → 'New'
+    // status counts — active properties only
     sql`
-      SELECT LOWER(COALESCE(NULLIF(TRIM(status), ''), 'New')) AS status,
+      SELECT LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New')) AS status,
              COUNT(*) AS cnt
-      FROM ota_listing
-      GROUP BY LOWER(COALESCE(NULLIF(TRIM(status), ''), 'New'))
+      FROM ota_listing ol
+      JOIN inventory inv ON inv.property_id = ol.property_id
+        AND inv.fh_status IN ('Live','SoldOut')
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New'))
       ORDER BY cnt DESC
     `,
 
-    // Per-OTA breakdown
+    // Per-OTA breakdown — active properties only
     sql`
-      SELECT ota,
+      SELECT ol.ota,
              COUNT(*) AS total,
-             SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
-             SUM(CASE WHEN LOWER(sub_status) = 'not live' THEN 1 ELSE 0 END) AS "notLive",
-             SUM(CASE WHEN LOWER(sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
-      FROM ota_listing
-      GROUP BY ota
+             SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+             SUM(CASE WHEN LOWER(ol.sub_status) = 'not live' THEN 1 ELSE 0 END) AS "notLive",
+             SUM(CASE WHEN LOWER(ol.sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
+      FROM ota_listing ol
+      JOIN inventory inv ON inv.property_id = ol.property_id
+        AND inv.fh_status IN ('Live','SoldOut')
+      GROUP BY ol.ota
       ORDER BY live DESC
     `,
 
-    // FH pipeline: 8 parallel COUNT queries (today through D-7)
-    // i is a trusted integer literal (0–7), safe to embed directly in SQL
+    // FH pipeline: active properties, today through D-7
     Promise.all(
       Array.from({ length: 8 }, (_, i) =>
         sql.query(
-          `SELECT COUNT(*) AS n FROM inventory WHERE fh_live_date::date = CURRENT_DATE - INTERVAL '${i} days'`
+          `SELECT COUNT(*) AS n FROM inventory WHERE fh_status IN ('Live','SoldOut') AND fh_live_date::date = CURRENT_DATE - INTERVAL '${i} days'`
         ).then(rows => Number((rows[0] as { n: string | number }).n))
       )
     ),
@@ -105,10 +110,17 @@ export async function GET() {
   const tasksOverdue = Number(tasksOverdueRow[0].n);
   const tasksDone    = Number(tasksDoneRow[0].n);
 
+  // Coerce Postgres numeric strings to JS numbers
+  const statusCountsN    = (statusCounts    as Record<string,unknown>[]).map(r => ({ subStatus: r.subStatus, cnt: Number(r.cnt) }));
+  const statusTopCountsN = (statusTopCounts as Record<string,unknown>[]).map(r => ({ status: r.status, cnt: Number(r.cnt) }));
+  const otaBreakdownN    = (otaBreakdown    as Record<string,unknown>[]).map(r => ({
+    ota: r.ota, total: Number(r.total), live: Number(r.live), notLive: Number(r.notLive), inProgress: Number(r.inProgress),
+  }));
+
   return Response.json({
-    statusCounts,
-    statusTopCounts,
-    otaBreakdown,
+    statusCounts:    statusCountsN,
+    statusTopCounts: statusTopCountsN,
+    otaBreakdown:    otaBreakdownN,
     tasksOpen,
     tasksHigh,
     tasksOverdue,

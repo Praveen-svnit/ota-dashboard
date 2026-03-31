@@ -93,6 +93,7 @@ export async function GET(req: Request) {
       ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
+    WHERE inv.fh_status IN ('Live','SoldOut')
   `;
 
   const rowsQuery = `
