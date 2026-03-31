@@ -13,6 +13,7 @@ const OTA_LIST = [
   { name: "Booking.com",    color: "#2563EB", bg: "#EFF6FF" },
   { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED" },
   { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE" },
+  { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF" },
 ];
 
 type SyncState = {

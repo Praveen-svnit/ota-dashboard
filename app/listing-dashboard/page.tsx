@@ -8,9 +8,10 @@ import GmbTab from "@/components/dashboard/GmbTab";
 const OTA_SLUG_MAP: Record<string, string> = {
   "GoMMT":"gommt","Booking.com":"booking-com","Agoda":"agoda","Expedia":"expedia",
   "Cleartrip":"cleartrip","Yatra":"yatra","Ixigo":"ixigo","Akbar Travels":"akbar-travels","EaseMyTrip":"easemytrip",
+  "Indigo":"indigo",
 };
 
-const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip"];
+const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo"];
 
 const T = {
   pageBg:   "#F4F7FB",
@@ -40,11 +41,13 @@ const OTA_COLORS: Record<string, string> = {
   "Ixigo":         "#FB923C",
   "Akbar Travels": "#38BDF8",
   "EaseMyTrip":    "#06B6D4",
+  "Indigo":        "#6B2FA0",
 };
 
 const OTA_SHORT: Record<string, string> = {
   "GoMMT":"GoMMT","Booking.com":"Booking.com","Agoda":"Agoda","Expedia":"Expedia",
   "Cleartrip":"Cleartrip","Yatra":"Yatra","Ixigo":"Ixigo","Akbar Travels":"Akbar Travels","EaseMyTrip":"EaseMyTrip",
+  "Indigo":"Indigo",
 };
 
 const OTA_LOGO_STYLE: Record<string, { mark: string; bg: string; text: string; ring: string }> = {
@@ -57,6 +60,7 @@ const OTA_LOGO_STYLE: Record<string, { mark: string; bg: string; text: string; r
   "Ixigo":         { mark: "ix", bg: "#FFF3E8", text: "#D46B08", ring: "#F7D1A6" },
   "Akbar Travels": { mark: "at", bg: "#E8F7FF", text: "#0369A1", ring: "#BAE6FD" },
   "EaseMyTrip":    { mark: "em", bg: "#E6FFFB", text: "#0F766E", ring: "#99F6E4" },
+  "Indigo":        { mark: "6E", bg: "#F0EBFF", text: "#6B2FA0", ring: "#D4B8FF" },
 };
 
 const SS_COLOR: Record<string, { text: string; bg: string }> = {

@@ -14,6 +14,7 @@ const OTA_COLORS: Record<string, string> = {
   "Ixigo":         "#FB923C",
   "Akbar Travels": "#38BDF8",
   "EaseMyTrip":    "#06B6D4",
+  "Indigo":        "#6B2FA0",
 };
 
 const OTA_SHORT: Record<string, string> = {
@@ -26,6 +27,7 @@ const OTA_SHORT: Record<string, string> = {
   "Ixigo":         "Ixigo",
   "Akbar Travels": "AKT",
   "EaseMyTrip":    "EMT",
+  "Indigo":        "6E",
 };
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; border: string }> = {
