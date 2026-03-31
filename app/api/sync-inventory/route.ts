@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       ).join(",\n");
 
       await sql.query(`
-        INSERT INTO inventory (property_id, property_name, city, fh_live_date, fh_status, pre_post_set, onboarding_type, master_id, synced_at)
+        INSERT INTO inventory (property_id, property_name, city, fh_live_date, fh_status, pre_post_set, onboarding_type, master_id)
         VALUES ${valClauses}
         ON CONFLICT (property_id) DO UPDATE SET
           property_name   = EXCLUDED.property_name,
