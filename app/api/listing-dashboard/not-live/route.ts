@@ -104,8 +104,8 @@ export async function GET(req: NextRequest) {
     `;
 
     const [countRows, rows] = await Promise.all([
-      sql.unsafe(countQuery, params),
-      sql.unsafe(rowsQuery, params),
+      sql.query(countQuery, params),
+      sql.query(rowsQuery, params),
     ]);
 
     const total = Number((countRows as { n: string | number }[])[0]?.n ?? 0);

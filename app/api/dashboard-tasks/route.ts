@@ -90,7 +90,7 @@ async function fetchDashboardTasks(filters: {
 
   const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
 
-  const rows = await sql.unsafe(`
+  const rows = await sql.query(`
     SELECT
       t.id,
       t.property_id        AS "propertyId",

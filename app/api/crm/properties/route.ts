@@ -130,8 +130,8 @@ export async function GET(req: Request) {
   `;
 
   const [rows, countRows] = await Promise.all([
-    sql.unsafe(rowsQuery, params as unknown[]),
-    sql.unsafe(countQuery, countParams as unknown[]),
+    sql.query(rowsQuery, params as unknown[]),
+    sql.query(countQuery, countParams as unknown[]),
   ]);
 
   const total = Number((countRows[0] as { n: string | number }).n);

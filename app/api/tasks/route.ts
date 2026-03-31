@@ -155,9 +155,9 @@ export async function GET(req: Request) {
   `;
 
   const [tasks, countsRaw, assignees] = await Promise.all([
-    sql.unsafe(tasksQuery, params),
-    sql.unsafe(countsQuery, roleParams),
-    sql.unsafe(assigneesQuery, roleParams),
+    sql.query(tasksQuery, params),
+    sql.query(countsQuery, roleParams),
+    sql.query(assigneesQuery, roleParams),
   ]);
 
   const counts = (countsRaw as { status: string; priority: string; cnt: string | number }[]).map(r => ({

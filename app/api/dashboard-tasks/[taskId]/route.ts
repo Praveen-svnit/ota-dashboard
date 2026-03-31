@@ -134,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ taskId
   const sql = getSql();
   const isTerminal = ["done", "pending", "supervisor_attention"].includes(status);
 
-  await sql.unsafe(`
+  await sql.query(`
     UPDATE tasks
     SET status             = $1,
         title              = $2,

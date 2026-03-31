@@ -51,7 +51,7 @@ export async function GET() {
     // i is a trusted integer literal (0–7), safe to embed directly in SQL
     Promise.all(
       Array.from({ length: 8 }, (_, i) =>
-        sql.unsafe(
+        sql.query(
           `SELECT COUNT(*) AS n FROM inventory WHERE fh_live_date::date = CURRENT_DATE - INTERVAL '${i} days'`
         ).then(rows => Number((rows[0] as { n: string | number }).n))
       )
