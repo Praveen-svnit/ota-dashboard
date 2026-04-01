@@ -4,15 +4,15 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const OTA_LIST = [
-  { name: "GoMMT",          color: "#E83F6F", bg: "#FFF0F5" },
-  { name: "Agoda",          color: "#7C3AED", bg: "#F5F0FF" },
-  { name: "Expedia",        color: "#0EA5E9", bg: "#F0FAFF" },
-  { name: "Yatra",          color: "#F43F5E", bg: "#FFF0F2" },
-  { name: "Ixigo",          color: "#FB923C", bg: "#FFF7F0" },
-  { name: "Akbar Travels",  color: "#38BDF8", bg: "#F0F9FF" },
-  { name: "Booking.com",    color: "#2563EB", bg: "#EFF6FF" },
-  { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED" },
-  { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE" },
+  { name: "GoMMT",          color: "#E83F6F", bg: "#FFF0F5", tab: "GoMMT" },
+  { name: "Agoda",          color: "#7C3AED", bg: "#F5F0FF", tab: "Agoda" },
+  { name: "Expedia",        color: "#0EA5E9", bg: "#F0FAFF", tab: "Expedia" },
+  { name: "Yatra",          color: "#F43F5E", bg: "#FFF0F2", tab: "Yatra" },
+  { name: "Ixigo",          color: "#FB923C", bg: "#FFF7F0", tab: "Ixigo" },
+  { name: "Akbar Travels",  color: "#38BDF8", bg: "#F0F9FF", tab: "Akbar Travels" },
+  { name: "Booking.com",    color: "#2563EB", bg: "#EFF6FF", tab: "BDC" },
+  { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED", tab: "Clear Trip" },
+  { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE", tab: "EMT" },
   { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF", noSheet: true },
 ];
 
@@ -231,13 +231,13 @@ export default function MigrationPage() {
 
         {/* OTA cards grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {OTA_LIST.map(({ name, color, bg }) => {
+          {OTA_LIST.map(({ name, color, bg, tab, noSheet: _noSheet }) => {
             const state  = otaStates[name];
             const bState = bootstrapStates[name];
             const isNew  = NO_SHEET_OTAS.has(name);
             return (
               <div key={name} style={{ background: bg, border: `1px solid ${color}22`, borderRadius: 10, padding: "14px 16px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 700, color }}>{name}</span>
                     {isNew && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "#D97706", background: "#FEF3C7", padding: "1px 6px", borderRadius: 10 }}>NEW</span>}
@@ -256,6 +256,13 @@ export default function MigrationPage() {
                     </button>
                   )}
                 </div>
+                {/* Sheet tab label */}
+                {!isNew && tab && (
+                  <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 8 }}>
+                    Sheet: <span style={{ fontWeight: 600, color: "#64748B" }}>{tab}</span>
+                  </div>
+                )}
+
                 {isNew && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>No sheet yet. Bootstrap creates blank listings for all active properties.</div>

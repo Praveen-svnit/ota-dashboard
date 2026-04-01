@@ -193,34 +193,36 @@ const OTA_DEFS: OtaDef[] = [
       });
     },
   },
-  // Multi-OTA sheet (Booking.com tab) — UPDATE only to avoid inserting churned properties
   {
-    ota: "Booking.com", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    ota: "Booking.com", tab: "BDC", updateSubStatus: true, updateOnly: false,
     buildRecords(cols, rows, pid?) {
-      const pidC = col(cols, "property_id"), idC = col(cols, "bdc id"), staC = col(cols, "bdc status"), ppC = col(cols, "pre/post");
+      const pidC = col(cols, "property_id"), idC = col(cols, "bdc id"), staC = col(cols, "bdc status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "bdc listing date");
       return rows.flatMap(r => {
         const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
-        return [{ property_id: p, ota: "Booking.com", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+        return [{ property_id: p, ota: "Booking.com", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: null }];
       });
     },
   },
   {
-    ota: "Cleartrip", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    ota: "Cleartrip", tab: "Clear Trip", updateSubStatus: true, updateOnly: false,
     buildRecords(cols, rows, pid?) {
-      const pidC = col(cols, "property_id"), idC = col(cols, "ct id"), staC = col(cols, "ct status");
+      const pidC = col(cols, "property_id"), idC = col(cols, "ct hid"), staC = col(cols, "ct status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "ct live date");
       return rows.flatMap(r => {
         const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
-        return [{ property_id: p, ota: "Cleartrip", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: null }];
+        return [{ property_id: p, ota: "Cleartrip", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: null }];
       });
     },
   },
   {
-    ota: "EaseMyTrip", tab: "Booking.com", updateSubStatus: false, updateOnly: true,
+    ota: "EaseMyTrip", tab: "EMT", updateSubStatus: true, updateOnly: false,
     buildRecords(cols, rows, pid?) {
-      const pidC = col(cols, "property_id"), idC = col(cols, "emt id"), staC = col(cols, "emt status");
+      const pidC = col(cols, "fh id"), idC = col(cols, "emt hotel id"), staC = col(cols, "emt status");
+      const ssC = col(cols, "sub status"), dateC = col(cols, "emt live date");
       return rows.flatMap(r => {
         const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
-        return [{ property_id: p, ota: "EaseMyTrip", status: clean(r[staC]), sub_status: null, live_date: null, ota_id: clean(r[idC]), pre_post: null }];
+        return [{ property_id: p, ota: "EaseMyTrip", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: null }];
       });
     },
   },
@@ -251,7 +253,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: `Unknown OTA: ${otaFilter}` }, { status: 400 });
   }
 
-  // Fetch tabs (de-duplicate: Booking.com tab is shared by 3 OTAs)
+  // Fetch tabs (de-duplicate in case multiple OTAs share a tab)
   const tabCache: Record<string, { cols: string[]; rows: string[][] }> = {};
   for (const def of defs) {
     if (!tabCache[def.tab]) {
