@@ -3,27 +3,34 @@ import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { OTAS } from "@/lib/constants";
 
+// sub_statuses is now a map: { [status]: string[] }
 export type OtaStatusConfig = {
   ota: string;
   statuses: string[];
-  subStatuses: string[];
+  subStatuses: Record<string, string[]>;  // keyed by status value
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
 };
 
-// Seed defaults — what was previously hardcoded in the CRM property page
+// ── Defaults ───────────────────────────────────────────────────────────────
+
 const DEFAULT_STATUSES = [
   "Shell Created", "Live", "Not Live", "Ready to Go Live",
   "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
 ];
 
-const DEFAULT_SUB_STATUSES = [
-  "Live", "Not Live", "Shell Created", "Ready to Go Live",
-  "Content in Progress", "Listing in Progress",
-  "Content Pending", "Images Pending", "Approval Pending",
-  "OTA Verification", "Under Review", "Suspended", "Duplicate",
-];
+const DEFAULT_SUB_STATUS_MAP: Record<string, string[]> = {
+  "Shell Created":          ["Shell Created", "Content Pending", "Images Pending"],
+  "Live":                   ["Live"],
+  "Not Live":               ["Not Live", "Suspended", "Duplicate"],
+  "Ready to Go Live":       ["Ready to Go Live", "Approval Pending", "OTA Verification"],
+  "Content in Progress":    ["Content in Progress", "Content Pending", "Images Pending"],
+  "Listing in Progress":    ["Listing in Progress", "Under Review"],
+  "Pending":                ["Pending", "Approval Pending"],
+  "Soldout":                ["Soldout"],
+  "Closed":                 ["Closed"],
+};
 
 const AGODA_STATUSES = [
   "Live", "Listing Claimed by Owner", "Delisted", "Not to List on OTA",
@@ -31,29 +38,48 @@ const AGODA_STATUSES = [
   "Listing Under Process", "Live (Duplicate)",
 ];
 
-const AGODA_SUB_STATUSES = [
-  "Live", "Revenue", "Churned", "Exception", "Rev+",
-  "Pending at OTA", "Pending at Agoda", "Supply/Operations",
-];
+const AGODA_SUB_STATUS_MAP: Record<string, string[]> = {
+  "Live":                     ["Live"],
+  "Listing Claimed by Owner": ["Revenue", "Supply/Operations"],
+  "Delisted":                 ["Churned"],
+  "Not to List on OTA":       ["Exception"],
+  "Only FH":                  ["Rev+"],
+  "Ready to go Live":         ["Pending at OTA"],
+  "Yet to be Shared":         ["Pending at OTA"],
+  "Listing Under Process":    ["Pending at Agoda"],
+  "Live (Duplicate)":         ["Live"],
+};
 
-const DEFAULTS: Record<string, { statuses: string[]; subStatuses: string[] }> = {};
+const DEFAULTS: Record<string, { statuses: string[]; subStatuses: Record<string, string[]> }> = {};
 for (const ota of OTAS) {
   DEFAULTS[ota] = ota === "Agoda"
-    ? { statuses: AGODA_STATUSES, subStatuses: AGODA_SUB_STATUSES }
-    : { statuses: DEFAULT_STATUSES, subStatuses: DEFAULT_SUB_STATUSES };
+    ? { statuses: AGODA_STATUSES, subStatuses: AGODA_SUB_STATUS_MAP }
+    : { statuses: DEFAULT_STATUSES, subStatuses: DEFAULT_SUB_STATUS_MAP };
 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 async function ensureTable(sql: ReturnType<typeof getSql>) {
   await sql.query(`
     CREATE TABLE IF NOT EXISTS ota_status_config (
-      ota         TEXT PRIMARY KEY,
-      statuses    JSONB NOT NULL DEFAULT '[]',
-      sub_statuses JSONB NOT NULL DEFAULT '[]',
-      updated_at  TIMESTAMPTZ DEFAULT NOW(),
-      updated_by  TEXT
+      ota          TEXT PRIMARY KEY,
+      statuses     JSONB NOT NULL DEFAULT '[]',
+      sub_statuses JSONB NOT NULL DEFAULT '{}',
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_by   TEXT
     )
   `, []);
 }
+
+// Normalise whatever shape is in the DB to Record<string, string[]>
+function normaliseSubStatuses(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object") return {};
+  // Old shape was string[] — migrate gracefully to empty map
+  if (Array.isArray(raw)) return {};
+  return raw as Record<string, string[]>;
+}
+
+// ── Route handlers ─────────────────────────────────────────────────────────
 
 export async function GET() {
   const session = await getSession();
@@ -68,7 +94,7 @@ export async function GET() {
             updated_at AS "updatedAt", updated_by AS "updatedBy"
      FROM ota_status_config`,
     []
-  ) as { ota: string; statuses: string[]; subStatuses: string[]; updatedAt: string; updatedBy: string }[];
+  ) as { ota: string; statuses: string[]; subStatuses: unknown; updatedAt: string; updatedBy: string }[];
 
   const dbMap: Record<string, typeof rows[0]> = {};
   for (const r of rows) dbMap[r.ota] = r;
@@ -76,9 +102,22 @@ export async function GET() {
   const configs: OtaStatusConfig[] = OTAS.map(ota => {
     const row = dbMap[ota];
     if (row) {
-      return { ota, statuses: row.statuses, subStatuses: row.subStatuses, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
+      return {
+        ota,
+        statuses: row.statuses,
+        subStatuses: normaliseSubStatuses(row.subStatuses),
+        updatedAt: row.updatedAt,
+        updatedBy: row.updatedBy,
+        isDefault: false,
+      };
     }
-    return { ota, ...DEFAULTS[ota] ?? { statuses: DEFAULT_STATUSES, subStatuses: DEFAULT_SUB_STATUSES }, updatedAt: null, updatedBy: null, isDefault: true };
+    return {
+      ota,
+      ...(DEFAULTS[ota] ?? { statuses: DEFAULT_STATUSES, subStatuses: DEFAULT_SUB_STATUS_MAP }),
+      updatedAt: null,
+      updatedBy: null,
+      isDefault: true,
+    };
   });
 
   return Response.json({ configs });
@@ -90,10 +129,10 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
   const { ota, statuses, subStatuses } = await req.json() as {
-    ota: string; statuses: string[]; subStatuses: string[];
+    ota: string; statuses: string[]; subStatuses: Record<string, string[]>;
   };
 
-  if (!ota || !Array.isArray(statuses) || !Array.isArray(subStatuses))
+  if (!ota || !Array.isArray(statuses) || typeof subStatuses !== "object")
     return Response.json({ error: "Invalid payload" }, { status: 400 });
 
   const sql = getSql();

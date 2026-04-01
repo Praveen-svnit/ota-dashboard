@@ -6,7 +6,7 @@ import { OTA_COLORS, OTAS } from "@/lib/constants";
 type OtaConfig = {
   ota: string;
   statuses: string[];
-  subStatuses: string[];
+  subStatuses: Record<string, string[]>;  // { [status]: string[] }
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
@@ -14,7 +14,7 @@ type OtaConfig = {
 
 type Tab = "active" | "edit";
 
-// ── colour helpers ────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 function otaColor(ota: string) { return OTA_COLORS[ota] ?? "#64748B"; }
 
 function hex2rgba(hex: string, alpha: number) {
@@ -24,7 +24,6 @@ function hex2rgba(hex: string, alpha: number) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ── small chip component ──────────────────────────────────────────────────────
 function Chip({ label, color = "#64748B" }: { label: string; color?: string }) {
   return (
     <span style={{
@@ -37,11 +36,11 @@ function Chip({ label, color = "#64748B" }: { label: string; color?: string }) {
   );
 }
 
-// ── editable list ─────────────────────────────────────────────────────────────
-function EditableList({
-  label, items, accent, onChange,
+// ── small inline list editor ──────────────────────────────────────────────────
+function MiniList({
+  items, accent, onChange,
 }: {
-  label: string; items: string[]; accent: string; onChange: (v: string[]) => void;
+  items: string[]; accent: string; onChange: (v: string[]) => void;
 }) {
   const [newVal, setNewVal] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,9 +52,7 @@ function EditableList({
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   }
-
   function remove(i: number) { onChange(items.filter((_, idx) => idx !== i)); }
-
   function add() {
     const v = newVal.trim();
     if (!v || items.includes(v)) return;
@@ -65,96 +62,103 @@ function EditableList({
   }
 
   return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
-        {label} <span style={{ fontWeight: 400, color: "#CBD5E1" }}>({items.length})</span>
-      </div>
-
-      <div style={{ border: "1px solid #E8ECF0", borderRadius: 8, overflow: "hidden", background: "#FAFBFC" }}>
-        {items.length === 0 && (
-          <div style={{ padding: "12px 14px", fontSize: 12, color: "#CBD5E1", fontStyle: "italic" }}>
-            No items — add one below
-          </div>
-        )}
-        {items.map((item, i) => (
-          <div key={i} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "7px 10px",
-            borderBottom: i < items.length - 1 ? "1px solid #F1F5F9" : "none",
-            background: "#fff",
-          }}>
-            <span style={{
-              flex: 1, fontSize: 12, color: "#1E293B",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}>{item}</span>
-            <button onClick={() => move(i, -1)} disabled={i === 0}
-              style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#E2E8F0" : "#94A3B8", fontSize: 12, padding: "0 2px", lineHeight: 1 }}>↑</button>
-            <button onClick={() => move(i, 1)} disabled={i === items.length - 1}
-              style={{ background: "none", border: "none", cursor: i === items.length - 1 ? "default" : "pointer", color: i === items.length - 1 ? "#E2E8F0" : "#94A3B8", fontSize: 12, padding: "0 2px", lineHeight: 1 }}>↓</button>
-            <button onClick={() => remove(i)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#FDA4AF", fontSize: 13, padding: "0 2px", lineHeight: 1, fontWeight: 600 }}>×</button>
-          </div>
-        ))}
-
-        {/* Add row */}
-        <div style={{ display: "flex", gap: 0, borderTop: items.length > 0 ? "1px solid #E8ECF0" : "none" }}>
-          <input
-            ref={inputRef}
-            value={newVal}
-            onChange={e => setNewVal(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") add(); }}
-            placeholder="Add new…"
-            style={{
-              flex: 1, padding: "7px 12px", border: "none", background: "transparent",
-              fontSize: 12, color: "#1E293B", outline: "none",
-            }}
-          />
-          <button onClick={add}
-            style={{
-              padding: "6px 14px", background: accent, color: "#fff",
-              border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600,
-              borderRadius: 0,
-            }}>+ Add</button>
+    <div style={{ border: "1px solid #E8ECF0", borderRadius: 8, overflow: "hidden", background: "#FAFBFC" }}>
+      {items.length === 0 && (
+        <div style={{ padding: "10px 12px", fontSize: 12, color: "#CBD5E1", fontStyle: "italic" }}>None</div>
+      )}
+      {items.map((item, i) => (
+        <div key={i} style={{
+          display: "flex", alignItems: "center", gap: 4, padding: "6px 10px",
+          borderBottom: i < items.length - 1 ? "1px solid #F1F5F9" : "none",
+          background: "#fff",
+        }}>
+          <span style={{ flex: 1, fontSize: 12, color: "#1E293B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item}</span>
+          <button onClick={() => move(i, -1)} disabled={i === 0}
+            style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#E2E8F0" : "#94A3B8", fontSize: 11, padding: "0 2px" }}>↑</button>
+          <button onClick={() => move(i, 1)} disabled={i === items.length - 1}
+            style={{ background: "none", border: "none", cursor: i === items.length - 1 ? "default" : "pointer", color: i === items.length - 1 ? "#E2E8F0" : "#94A3B8", fontSize: 11, padding: "0 2px" }}>↓</button>
+          <button onClick={() => remove(i)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#FDA4AF", fontSize: 13, padding: "0 2px", fontWeight: 600 }}>×</button>
         </div>
+      ))}
+      <div style={{ display: "flex", borderTop: items.length > 0 ? "1px solid #E8ECF0" : "none" }}>
+        <input ref={inputRef} value={newVal} onChange={e => setNewVal(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") add(); }}
+          placeholder="Add…"
+          style={{ flex: 1, padding: "6px 10px", border: "none", background: "transparent", fontSize: 12, color: "#1E293B", outline: "none" }} />
+        <button onClick={add}
+          style={{ padding: "5px 12px", background: accent, color: "#fff", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+</button>
       </div>
     </div>
   );
 }
 
-// ── main page ─────────────────────────────────────────────────────────────────
+// ── page ──────────────────────────────────────────────────────────────────────
 export default function StatusConfigPage() {
   const [tab, setTab]         = useState<Tab>("active");
   const [configs, setConfigs] = useState<OtaConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [selOta, setSelOta]   = useState(OTAS[0]);
-  const [edit, setEdit]       = useState<{ statuses: string[]; subStatuses: string[] } | null>(null);
-  const [saving, setSaving]   = useState(false);
-  const [saved, setSaved]     = useState(false);
 
-  useEffect(() => {
-    fetch("/api/admin/status-config")
-      .then(r => r.json())
-      .then(d => { setConfigs(d.configs ?? []); setLoading(false); });
-  }, []);
+  // Edit state
+  const [editStatuses,    setEditStatuses]    = useState<string[]>([]);
+  const [editSubStatuses, setEditSubStatuses] = useState<Record<string, string[]>>({});
+  const [selStatus, setSelStatus] = useState<string | null>(null);
 
-  // Sync edit state whenever selectedOta or configs change
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+
+  async function fetchConfigs() {
+    const d = await fetch("/api/admin/status-config").then(r => r.json());
+    setConfigs(d.configs ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchConfigs(); }, []);
+
+  // Sync edit state when selOta or configs change
   useEffect(() => {
     const cfg = configs.find(c => c.ota === selOta);
-    if (cfg) setEdit({ statuses: [...cfg.statuses], subStatuses: [...cfg.subStatuses] });
+    if (cfg) {
+      setEditStatuses([...cfg.statuses]);
+      setEditSubStatuses(JSON.parse(JSON.stringify(cfg.subStatuses)));
+      setSelStatus(cfg.statuses[0] ?? null);
+    }
     setSaved(false);
   }, [selOta, configs]);
 
+  function moveStatus(i: number, dir: -1 | 1) {
+    const next = [...editStatuses];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setEditStatuses(next);
+  }
+
+  function removeStatus(s: string) {
+    setEditStatuses(prev => prev.filter(x => x !== s));
+    setEditSubStatuses(prev => { const n = { ...prev }; delete n[s]; return n; });
+    if (selStatus === s) setSelStatus(editStatuses.find(x => x !== s) ?? null);
+  }
+
+  function addStatus() {
+    const v = newStatus.trim();
+    if (!v || editStatuses.includes(v)) return;
+    setEditStatuses(prev => [...prev, v]);
+    setEditSubStatuses(prev => ({ ...prev, [v]: [] }));
+    setSelStatus(v);
+    setNewStatus("");
+  }
+
   async function handleSave() {
-    if (!edit) return;
     setSaving(true);
     await fetch("/api/admin/status-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ota: selOta, statuses: edit.statuses, subStatuses: edit.subStatuses }),
+      body: JSON.stringify({ ota: selOta, statuses: editStatuses, subStatuses: editSubStatuses }),
     });
-    // Refresh
-    const d = await fetch("/api/admin/status-config").then(r => r.json());
-    setConfigs(d.configs ?? []);
+    await fetchConfigs();
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -167,21 +171,20 @@ export default function StatusConfigPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ota: selOta }),
     });
-    const d = await fetch("/api/admin/status-config").then(r => r.json());
-    setConfigs(d.configs ?? []);
+    await fetchConfigs();
   }
 
   const currentCfg = configs.find(c => c.ota === selOta);
   const accent      = otaColor(selOta);
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 1100, margin: "0 auto" }}>
+    <div style={{ padding: "28px 32px", maxWidth: 1200, margin: "0 auto" }}>
 
-      {/* Page header */}
+      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#1E293B" }}>Status &amp; Sub-Status Logic</h1>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "#94A3B8" }}>
-          Define which status and sub-status options are available per OTA in the CRM dropdown.
+          Define per-OTA status options and their mapped sub-statuses.
         </p>
       </div>
 
@@ -201,12 +204,12 @@ export default function StatusConfigPage() {
         ))}
       </div>
 
-      {/* ── Active Logic ───────────────────────────────────────────────────── */}
+      {/* ── Active Logic ──────────────────────────────────────────────────── */}
       {tab === "active" && (
         loading
           ? <div style={{ color: "#94A3B8", fontSize: 13 }}>Loading…</div>
           : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
               {configs.map(cfg => {
                 const color = otaColor(cfg.ota);
                 return (
@@ -217,14 +220,12 @@ export default function StatusConfigPage() {
                     {/* Card header */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: color }} />
                         <span style={{ fontSize: 13, fontWeight: 700, color: "#1E293B" }}>{cfg.ota}</span>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                         {cfg.isDefault && (
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", background: "#F1F5F9", padding: "2px 6px", borderRadius: 4, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                            Default
-                          </span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", background: "#F1F5F9", padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Default</span>
                         )}
                         <button onClick={() => { setSelOta(cfg.ota); setTab("edit"); }}
                           style={{ fontSize: 10, padding: "3px 8px", background: "none", border: `1px solid ${hex2rgba(color, 0.35)}`, borderRadius: 5, color, cursor: "pointer", fontWeight: 600 }}>
@@ -233,20 +234,23 @@ export default function StatusConfigPage() {
                       </div>
                     </div>
 
-                    {/* Statuses */}
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#B0BAC9", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>
-                        Statuses ({cfg.statuses.length})
-                      </div>
-                      <div>{cfg.statuses.map(s => <Chip key={s} label={s} color={color} />)}</div>
-                    </div>
-
-                    {/* Sub-statuses */}
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#B0BAC9", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>
-                        Sub-Statuses ({cfg.subStatuses.length})
-                      </div>
-                      <div>{cfg.subStatuses.map(s => <Chip key={s} label={s} color="#64748B" />)}</div>
+                    {/* Per-status sub-status listing */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {cfg.statuses.map(s => (
+                        <div key={s}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <Chip label={s} color={color} />
+                            {(cfg.subStatuses[s] ?? []).length > 0 && (
+                              <>
+                                <span style={{ fontSize: 10, color: "#CBD5E1" }}>→</span>
+                                {(cfg.subStatuses[s] ?? []).map(ss => (
+                                  <Chip key={ss} label={ss} color="#64748B" />
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     {/* Last updated */}
@@ -263,14 +267,14 @@ export default function StatusConfigPage() {
           )
       )}
 
-      {/* ── Edit Logic ─────────────────────────────────────────────────────── */}
+      {/* ── Edit Logic ────────────────────────────────────────────────────── */}
       {tab === "edit" && (
         <div>
-          {/* OTA selector strip */}
+          {/* OTA selector */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 24 }}>
             {OTAS.map(ota => {
-              const c     = otaColor(ota);
-              const sel   = ota === selOta;
+              const c   = otaColor(ota);
+              const sel = ota === selOta;
               const isDef = configs.find(x => x.ota === ota)?.isDefault ?? true;
               return (
                 <button key={ota} onClick={() => setSelOta(ota)}
@@ -283,91 +287,169 @@ export default function StatusConfigPage() {
                   }}>
                   {ota}
                   {!isDef && (
-                    <span style={{
-                      position: "absolute", top: -4, right: -4, width: 8, height: 8,
-                      borderRadius: "50%", background: c, border: "1.5px solid #fff",
-                    }} />
+                    <span style={{ position: "absolute", top: -4, right: -4, width: 8, height: 8, borderRadius: "50%", background: c, border: "1.5px solid #fff" }} />
                   )}
                 </button>
               );
             })}
           </div>
 
-          {/* Editor panel */}
-          {edit && (
-            <div style={{ background: "#fff", border: "1px solid #E8ECF0", borderRadius: 12, padding: "24px 28px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
-              {/* Panel header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
-                  <span style={{ fontSize: 16, fontWeight: 800, color: "#1E293B" }}>{selOta}</span>
-                  {currentCfg?.isDefault && (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", background: "#F1F5F9", padding: "2px 7px", borderRadius: 4 }}>
-                      Default
-                    </span>
-                  )}
+          {/* Three-column editor */}
+          <div style={{ background: "#fff", border: "1px solid #E8ECF0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+
+            {/* Panel header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #F1F5F9" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: accent }} />
+                <span style={{ fontSize: 15, fontWeight: 800, color: "#1E293B" }}>{selOta}</span>
+                {currentCfg?.isDefault && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", background: "#F1F5F9", padding: "2px 7px", borderRadius: 4 }}>Default</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {currentCfg?.updatedAt && (
+                  <span style={{ fontSize: 11, color: "#94A3B8" }}>
+                    Saved {new Date(currentCfg.updatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                    {currentCfg.updatedBy ? ` · ${currentCfg.updatedBy}` : ""}
+                  </span>
+                )}
+                <button onClick={handleReset}
+                  style={{ fontSize: 11, padding: "5px 12px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#fff", color: "#94A3B8", cursor: "pointer" }}>
+                  Reset to Default
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  style={{
+                    fontSize: 12, fontWeight: 700, padding: "7px 20px", borderRadius: 7,
+                    border: "none", cursor: saving ? "default" : "pointer",
+                    background: saved ? "#10B981" : accent, color: "#fff",
+                    opacity: saving ? 0.7 : 1, transition: "background 0.3s",
+                  }}>
+                  {saving ? "Saving…" : saved ? "✓ Saved" : "Save Changes"}
+                </button>
+              </div>
+            </div>
+
+            {/* Three columns */}
+            <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 1fr", height: 480 }}>
+
+              {/* Col 1: Status list */}
+              <div style={{ borderRight: "1px solid #F1F5F9", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                    Statuses ({editStatuses.length})
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {currentCfg?.updatedAt && (
-                    <span style={{ fontSize: 11, color: "#94A3B8" }}>
-                      Saved {new Date(currentCfg.updatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                      {currentCfg.updatedBy ? ` by ${currentCfg.updatedBy}` : ""}
-                    </span>
-                  )}
-                  <button onClick={handleReset}
-                    style={{ fontSize: 11, padding: "5px 12px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#fff", color: "#94A3B8", cursor: "pointer" }}>
-                    Reset to Default
-                  </button>
-                  <button onClick={handleSave} disabled={saving}
-                    style={{
-                      fontSize: 12, fontWeight: 700, padding: "7px 20px", borderRadius: 7,
-                      border: "none", cursor: saving ? "default" : "pointer",
-                      background: saved ? "#10B981" : accent, color: "#fff",
-                      opacity: saving ? 0.7 : 1, transition: "background 0.3s",
-                    }}>
-                    {saving ? "Saving…" : saved ? "✓ Saved" : "Save Changes"}
-                  </button>
+                <div style={{ flex: 1, overflowY: "auto" }}>
+                  {editStatuses.map((s, i) => {
+                    const isSel  = s === selStatus;
+                    const subCnt = (editSubStatuses[s] ?? []).length;
+                    return (
+                      <div key={s}
+                        onClick={() => setSelStatus(s)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          padding: "9px 14px", cursor: "pointer",
+                          borderBottom: "1px solid #F9FAFB",
+                          background: isSel ? hex2rgba(accent, 0.08) : "#fff",
+                          borderLeft: isSel ? `3px solid ${accent}` : "3px solid transparent",
+                        }}>
+                        <span style={{ flex: 1, fontSize: 12, fontWeight: isSel ? 600 : 400, color: isSel ? accent : "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s}</span>
+                        {subCnt > 0 && (
+                          <span style={{ fontSize: 10, color: "#94A3B8", flexShrink: 0 }}>{subCnt}</span>
+                        )}
+                        <button onClick={e => { e.stopPropagation(); moveStatus(i, -1); }} disabled={i === 0}
+                          style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#E2E8F0" : "#94A3B8", fontSize: 10, padding: "0 1px" }}>↑</button>
+                        <button onClick={e => { e.stopPropagation(); moveStatus(i, 1); }} disabled={i === editStatuses.length - 1}
+                          style={{ background: "none", border: "none", cursor: i === editStatuses.length - 1 ? "default" : "pointer", color: i === editStatuses.length - 1 ? "#E2E8F0" : "#94A3B8", fontSize: 10, padding: "0 1px" }}>↓</button>
+                        <button onClick={e => { e.stopPropagation(); removeStatus(s); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#FDA4AF", fontSize: 13, padding: "0 1px", fontWeight: 600 }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Add status */}
+                <div style={{ borderTop: "1px solid #E8ECF0", display: "flex" }}>
+                  <input value={newStatus} onChange={e => setNewStatus(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") addStatus(); }}
+                    placeholder="Add status…"
+                    style={{ flex: 1, padding: "8px 12px", border: "none", fontSize: 12, color: "#1E293B", outline: "none", background: "transparent" }} />
+                  <button onClick={addStatus}
+                    style={{ padding: "6px 12px", background: accent, color: "#fff", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+</button>
                 </div>
               </div>
 
-              {/* Two-column editor */}
-              <div style={{ display: "flex", gap: 24 }}>
-                <EditableList
-                  label="Statuses"
-                  items={edit.statuses}
-                  accent={accent}
-                  onChange={v => setEdit(e => e ? { ...e, statuses: v } : e)}
-                />
-                <EditableList
-                  label="Sub-Statuses"
-                  items={edit.subStatuses}
-                  accent={accent}
-                  onChange={v => setEdit(e => e ? { ...e, subStatuses: v } : e)}
-                />
+              {/* Col 2: Sub-statuses for selected status */}
+              <div style={{ borderRight: "1px solid #F1F5F9", display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.1em" }}>Sub-Statuses for</div>
+                  {selStatus
+                    ? <Chip label={selStatus} color={accent} />
+                    : <span style={{ fontSize: 11, color: "#CBD5E1" }}>← select a status</span>}
+                </div>
+                <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
+                  {selStatus
+                    ? (
+                      <MiniList
+                        items={editSubStatuses[selStatus] ?? []}
+                        accent={accent}
+                        onChange={v => setEditSubStatuses(prev => ({ ...prev, [selStatus]: v }))}
+                      />
+                    )
+                    : (
+                      <div style={{ fontSize: 12, color: "#CBD5E1", fontStyle: "italic", marginTop: 8 }}>
+                        Select a status on the left to edit its sub-statuses.
+                      </div>
+                    )
+                  }
+                </div>
               </div>
 
-              {/* Preview */}
-              <div style={{ marginTop: 24, padding: "14px 16px", background: "#F8FAFC", borderRadius: 8, border: "1px solid #F1F5F9" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#B0BAC9", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
-                  Preview — Dropdown will show these options
+              {/* Col 3: Preview */}
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.1em" }}>Preview</div>
                 </div>
-                <div style={{ display: "flex", gap: 24 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4 }}>Status</div>
-                    <select style={{ fontSize: 12, padding: "5px 10px", border: "1px solid #E2E8F0", borderRadius: 6, color: "#1E293B", background: "#fff" }}>
-                      {edit.statuses.map(s => <option key={s}>{s}</option>)}
+                <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 6 }}>Status dropdown</div>
+                    <select style={{ fontSize: 12, padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 6, color: "#1E293B", background: "#fff", width: "100%" }}>
+                      {editStatuses.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 4 }}>Sub-Status</div>
-                    <select style={{ fontSize: 12, padding: "5px 10px", border: "1px solid #E2E8F0", borderRadius: 6, color: "#1E293B", background: "#fff" }}>
-                      {edit.subStatuses.map(s => <option key={s}>{s}</option>)}
-                    </select>
+                  {selStatus && (
+                    <div>
+                      <div style={{ fontSize: 10, color: "#94A3B8", marginBottom: 6 }}>
+                        Sub-Status dropdown <span style={{ color: accent }}>(when status = {selStatus})</span>
+                      </div>
+                      <select style={{ fontSize: 12, padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 6, color: "#1E293B", background: "#fff", width: "100%" }}>
+                        {(editSubStatuses[selStatus] ?? []).map(s => <option key={s}>{s}</option>)}
+                      </select>
+                      {(editSubStatuses[selStatus] ?? []).length === 0 && (
+                        <div style={{ fontSize: 11, color: "#FDA4AF", marginTop: 6 }}>No sub-statuses defined for this status</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Full mapping summary */}
+                  <div style={{ marginTop: 20, padding: "12px", background: "#F8FAFC", borderRadius: 8, border: "1px solid #F1F5F9" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#B0BAC9", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Full Mapping</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {editStatuses.map(s => (
+                        <div key={s} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <Chip label={s} color={accent} />
+                          <span style={{ fontSize: 10, color: "#CBD5E1" }}>→</span>
+                          {(editSubStatuses[s] ?? []).length > 0
+                            ? (editSubStatuses[s] ?? []).map(ss => <Chip key={ss} label={ss} color="#64748B" />)
+                            : <span style={{ fontSize: 10, color: "#E2E8F0" }}>none</span>
+                          }
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
