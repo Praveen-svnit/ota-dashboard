@@ -96,8 +96,8 @@ async function ensureTable(sql: ReturnType<typeof getSql>) {
 
 export async function GET() {
   const session = await getSession();
-  if (!session || (session.role !== "admin" && session.role !== "head"))
-    return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!session)
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const sql = getSql();
   await ensureTable(sql);

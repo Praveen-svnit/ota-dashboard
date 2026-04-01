@@ -5,12 +5,13 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { OTA_COLORS, OTAS } from "@/lib/constants";
 
-const STATUS_OPTIONS = [
+// Fallback arrays (used only if config hasn't loaded yet)
+const STATUS_OPTIONS_FALLBACK = [
   "Shell Created", "Live", "Not Live", "Ready to Go Live", "Content in Progress",
   "Listing in Progress", "Pending", "Soldout", "Closed",
 ];
 
-const SUB_STATUS_OPTIONS = [
+const SUB_STATUS_OPTIONS_FALLBACK = [
   "Content Pending", "Images Pending", "Approval Pending",
   "OTA Verification", "Under Review", "Suspended", "Duplicate",
 ];
@@ -140,6 +141,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [logs,     setLogs]     = useState<Log[]>([]);
 
   const [loading,  setLoading]  = useState(true);
+  const [otaConfigs, setOtaConfigs] = useState<Record<string, { subStatuses: string[]; statusMap: Record<string, string[]> }>>({});
 
   // Metrics
   const [metrics,    setMetrics]    = useState<Record<string, string>>({});
@@ -183,6 +185,28 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       .then((r) => r.json()).then((d) => setTasks(d.tasks ?? []));
     fetch("/api/crm/users/list")
       .then((r) => r.json()).then((d) => setTaskUsers(d.users ?? []));
+    fetch("/api/admin/status-config")
+      .then((r) => r.json())
+      .then((d: { configs?: { ota: string; subStatuses: string[]; statusMap: Record<string, string[]> }[] }) => {
+        if (!d.configs) return;
+        const map: Record<string, { subStatuses: string[]; statusMap: Record<string, string[]> }> = {};
+        for (const c of d.configs) map[c.ota] = { subStatuses: c.subStatuses, statusMap: c.statusMap };
+        setOtaConfigs(map);
+      })
+      .catch(() => {/* non-admin users may get 403 — silently ignore */});
+  }
+
+  function getStatusOptions(ota: string): string[] {
+    const cfg = otaConfigs[ota];
+    if (!cfg) return ota === "Agoda" ? Object.keys(AGODA_STATUS_MAP) : STATUS_OPTIONS_FALLBACK;
+    // Derive unique statuses from the statusMap values
+    return [...new Set(Object.values(cfg.statusMap).flat())];
+  }
+
+  function getSubStatusOptions(ota: string): string[] {
+    const cfg = otaConfigs[ota];
+    if (!cfg) return SUB_STATUS_OPTIONS_FALLBACK;
+    return cfg.subStatuses;
   }
 
   async function addOta(ota: string) {
@@ -514,7 +538,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                             }
                           }}
                             style={{ padding: "6px 8px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12 }}>
-                            {(activeListing.ota === "Agoda" ? AGODA_STATUS_OPTIONS : STATUS_OPTIONS).map((s) => (
+                            {getStatusOptions(activeListing.ota).map((s) => (
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
@@ -586,7 +610,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           <select value={editValue} onChange={(e) => setEditValue(e.target.value)}
                             style={{ padding: "6px 8px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12 }}>
                             <option value="">—</option>
-                            {SUB_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                            {getSubStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                           <input
                             value={editNote}
