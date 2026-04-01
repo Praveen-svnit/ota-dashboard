@@ -54,6 +54,12 @@ export default function MigrationPage() {
   const [syncAllBusy, setSyncAllBusy] = useState(false);
   const [syncAllLog,  setSyncAllLog]  = useState<string[]>([]);
 
+  // Global sync actions (moved from sidebar)
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [syncingInv,   setSyncingInv]   = useState(false);
+  const [globalLog,    setGlobalLog]    = useState<string | null>(null);
+  const [globalErr,    setGlobalErr]    = useState(false);
+
   // Property search
   const [query,        setQuery]        = useState("");
   const [propResults,  setPropResults]  = useState<PropertyResult[]>([]);
@@ -75,6 +81,27 @@ export default function MigrationPage() {
       }
     });
   }, [router]);
+
+  // ── Global utility actions ────────────────────────────────────────────────
+  function runRefresh() {
+    setRefreshing(true);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 1500);
+  }
+
+  async function runSyncInventory() {
+    setSyncingInv(true);
+    setGlobalLog(null);
+    setGlobalErr(false);
+    try {
+      const res  = await fetch("/api/sync-inventory", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) { setGlobalLog(json.error ?? "Unknown error"); setGlobalErr(true); }
+      else { setGlobalLog(json.message ?? "Sync complete."); setGlobalErr(false); }
+    } catch (e: unknown) {
+      setGlobalLog(e instanceof Error ? e.message : "Network error"); setGlobalErr(true);
+    } finally { setSyncingInv(false); }
+  }
 
   // ── Bootstrap new OTA ─────────────────────────────────────────────────────
   async function bootstrapOta(ota: string) {
@@ -200,6 +227,39 @@ export default function MigrationPage() {
         <div style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>
           Sync OTA listing data from Google Sheets into the database. Existing CRM notes and assignments are preserved.
         </div>
+      </div>
+
+      {/* ── Utility actions ──────────────────────────────────────────────────── */}
+      <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, padding: "16px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#64748B", marginRight: 4 }}>Quick Actions</span>
+
+        {/* Sync App */}
+        <button onClick={runRefresh} disabled={refreshing} style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "7px 14px",
+          borderRadius: 7, border: "none", cursor: refreshing ? "default" : "pointer",
+          background: refreshing ? "#F1F5F9" : "#F0FDF4", color: refreshing ? "#94A3B8" : "#16A34A",
+          fontSize: 12, fontWeight: 600, opacity: refreshing ? 0.7 : 1,
+        }}>
+          <span style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }}>{refreshing ? "⟳" : "↻"}</span>
+          {refreshing ? "Refreshing…" : "Sync App"}
+        </button>
+
+        {/* Sync Inventory to DB */}
+        <button onClick={runSyncInventory} disabled={syncingInv} style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "7px 14px",
+          borderRadius: 7, border: "none", cursor: syncingInv ? "default" : "pointer",
+          background: syncingInv ? "#F1F5F9" : "#EFF6FF", color: syncingInv ? "#94A3B8" : "#2563EB",
+          fontSize: 12, fontWeight: 600, opacity: syncingInv ? 0.7 : 1,
+        }}>
+          <span style={{ animation: syncingInv ? "spin 1s linear infinite" : "none" }}>{syncingInv ? "⟳" : "⇅"}</span>
+          {syncingInv ? "Syncing…" : "Sync Inventory to DB"}
+        </button>
+
+        {globalLog && (
+          <span style={{ fontSize: 11, color: globalErr ? "#DC2626" : "#059669", fontWeight: 500 }}>
+            {globalErr ? `⚠ ${globalLog}` : `✓ ${globalLog}`}
+          </span>
+        )}
       </div>
 
       {/* ── Section A: OTA-wise sync ─────────────────────────────────────────── */}

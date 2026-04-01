@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 
 interface SessionUser { id: string; username: string; name: string; role: string; ota: string | null; }
 
@@ -28,72 +28,10 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     router.push("/login");
   }
 
-  const [syncing,      setSyncing]      = useState(false);
-  const [syncingOta,   setSyncingOta]   = useState(false);
-  const [syncLog,      setSyncLog]      = useState<string | null>(null);
-  const [syncError,    setSyncError]    = useState(false);
-  const [logOpen,      setLogOpen]      = useState(false);
-  const [copied,       setCopied]       = useState(false);
-  const logRef = useRef<HTMLPreElement>(null);
-
   async function runRefresh() {
     setRefreshing(true);
     router.refresh();
     setTimeout(() => setRefreshing(false), 1500);
-  }
-
-  async function runSync() {
-    setSyncing(true);
-    setSyncLog(null);
-    setSyncError(false);
-    try {
-      const res  = await fetch("/api/sync-inventory", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        setSyncLog(json.error ?? "Unknown error");
-        setSyncError(true);
-      } else {
-        setSyncLog(json.message ?? "Sync complete.");
-        setSyncError(false);
-      }
-    } catch (e: unknown) {
-      setSyncLog(e instanceof Error ? e.message : "Network error");
-      setSyncError(true);
-    } finally {
-      setSyncing(false);
-      setLogOpen(true);
-    }
-  }
-
-  async function runOtaSync() {
-    setSyncingOta(true);
-    setSyncLog(null);
-    setSyncError(false);
-    try {
-      const res  = await fetch("/api/sync-ota-listings", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        setSyncLog(json.error ?? "Unknown error");
-        setSyncError(true);
-      } else {
-        setSyncLog(json.message ?? "OTA sync complete.");
-        setSyncError(false);
-      }
-    } catch (e: unknown) {
-      setSyncLog(e instanceof Error ? e.message : "Network error");
-      setSyncError(true);
-    } finally {
-      setSyncingOta(false);
-      setLogOpen(true);
-    }
-  }
-
-  function copyLog() {
-    if (!syncLog) return;
-    navigator.clipboard.writeText(syncLog).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
   }
 
   function NavLink({ icon, label, href, indent = false }: { icon: string; label: string; href: string; indent?: boolean }) {
@@ -236,69 +174,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           {!collapsed && (refreshing ? "Refreshing…" : "Sync App")}
         </button>
 
-        {/* Sync button */}
-        <button
-          onClick={runSync}
-          disabled={syncing}
-          title="Sync all tables from Sheets to DB"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
-            gap: 7, width: "100%",
-            padding: collapsed ? "8px 0" : "8px 10px",
-            borderRadius: 7, border: "none", cursor: syncing ? "default" : "pointer",
-            background: syncing ? "#F1F5F9" : "#EFF6FF",
-            color: syncing ? "#94A3B8" : "#2563EB",
-            fontSize: 12, fontWeight: 600,
-            opacity: syncing ? 0.7 : 1,
-            transition: "background 0.15s",
-          }}
-        >
-          <span style={{ fontSize: 14, animation: syncing ? "spin 1s linear infinite" : "none" }}>
-            {syncing ? "⟳" : "⇅"}
-          </span>
-          {!collapsed && (syncing ? "Syncing…" : "Sync to DB")}
-        </button>
-
-        {/* Sync OTA Listings button */}
-        <button
-          onClick={runOtaSync}
-          disabled={syncingOta}
-          title="Sync OTA listing status from individual OTA sheets"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
-            gap: 7, width: "100%",
-            padding: collapsed ? "8px 0" : "8px 10px",
-            borderRadius: 7, border: "none", cursor: syncingOta ? "default" : "pointer",
-            background: syncingOta ? "#F1F5F9" : "#FFF7ED",
-            color: syncingOta ? "#94A3B8" : "#C2410C",
-            fontSize: 12, fontWeight: 600,
-            opacity: syncingOta ? 0.7 : 1,
-            transition: "background 0.15s",
-            marginTop: 5,
-          }}
-        >
-          <span style={{ fontSize: 14, animation: syncingOta ? "spin 1s linear infinite" : "none" }}>
-            {syncingOta ? "⟳" : "⊞"}
-          </span>
-          {!collapsed && (syncingOta ? "Syncing OTAs…" : "Sync OTA Sheets")}
-        </button>
-
-        {/* Show logs button — only when a log exists */}
-        {!collapsed && syncLog && (
-          <button
-            onClick={() => setLogOpen(true)}
-            style={{
-              marginTop: 5, width: "100%", padding: "5px 10px",
-              borderRadius: 6, border: "1px solid #E2E8F0",
-              background: "#FAFAFA", color: syncError ? "#DC2626" : "#64748B",
-              fontSize: 11, cursor: "pointer", textAlign: "left",
-              fontWeight: 500,
-            }}
-          >
-            {syncError ? "⚠ View error log" : "✓ View sync log"}
-          </button>
-        )}
-
         {!collapsed && (
           <div style={{ marginTop: 6, fontSize: 10, color: "#94A3B8" }}>
             {lastRefreshed
@@ -340,81 +215,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           </button>
         )}
       </div>
-
-      {/* Log viewer modal */}
-      {logOpen && syncLog && (
-        <div
-          onClick={() => setLogOpen(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 999,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex", alignItems: "flex-end", justifyContent: "flex-start",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              margin: "0 0 0 0",
-              width: "min(680px, 96vw)",
-              maxHeight: "70vh",
-              background: "#0F172A",
-              borderRadius: "0 12px 0 0",
-              display: "flex", flexDirection: "column",
-              boxShadow: "4px -4px 24px rgba(0,0,0,0.4)",
-            }}
-          >
-            {/* Modal header */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "10px 14px", borderBottom: "1px solid #1E293B",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: syncError ? "#F87171" : "#34D399" }}>
-                {syncError ? "⚠ Sync Error" : "✓ Sync Complete"} — Log
-              </span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  onClick={copyLog}
-                  style={{
-                    padding: "4px 10px", borderRadius: 5,
-                    border: "1px solid #334155",
-                    background: copied ? "#065F46" : "#1E293B",
-                    color: copied ? "#6EE7B7" : "#94A3B8",
-                    fontSize: 11, cursor: "pointer", fontWeight: 600,
-                  }}
-                >
-                  {copied ? "✓ Copied" : "Copy"}
-                </button>
-                <button
-                  onClick={() => setLogOpen(false)}
-                  style={{
-                    padding: "4px 10px", borderRadius: 5,
-                    border: "1px solid #334155",
-                    background: "#1E293B", color: "#94A3B8",
-                    fontSize: 11, cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* Log content */}
-            <pre
-              ref={logRef}
-              style={{
-                margin: 0, padding: "12px 14px",
-                overflowY: "auto", flex: 1,
-                fontSize: 11, lineHeight: 1.6,
-                color: syncError ? "#FCA5A5" : "#CBD5E1",
-                fontFamily: "ui-monospace, monospace",
-                whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}
-            >
-              {syncLog}
-            </pre>
-          </div>
-        </div>
-      )}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
