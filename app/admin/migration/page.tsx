@@ -13,12 +13,20 @@ const OTA_LIST = [
   { name: "Booking.com",    color: "#2563EB", bg: "#EFF6FF" },
   { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED" },
   { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE" },
-  { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF" },
+  { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF", noSheet: true },
 ];
+
+// OTAs without a Google Sheet yet — only bootstrap available, no sync
+const NO_SHEET_OTAS = new Set(["Indigo"]);
 
 type SyncState = {
   syncing: boolean;
   result: { upserted: number; error?: string } | null;
+};
+
+type BootstrapState = {
+  running: boolean;
+  result: { created: number; error?: string } | null;
 };
 
 type OtaRow = {
@@ -41,7 +49,8 @@ type PropertyResult = {
 export default function MigrationPage() {
   const router = useRouter();
   const [role,       setRole]       = useState<string | null>(null);
-  const [otaStates,  setOtaStates]  = useState<Record<string, SyncState>>({});
+  const [otaStates,      setOtaStates]      = useState<Record<string, SyncState>>({});
+  const [bootstrapStates, setBootstrapStates] = useState<Record<string, BootstrapState>>({});
   const [syncAllBusy, setSyncAllBusy] = useState(false);
   const [syncAllLog,  setSyncAllLog]  = useState<string[]>([]);
 
@@ -66,6 +75,22 @@ export default function MigrationPage() {
       }
     });
   }, [router]);
+
+  // ── Bootstrap new OTA ─────────────────────────────────────────────────────
+  async function bootstrapOta(ota: string) {
+    setBootstrapStates(p => ({ ...p, [ota]: { running: true, result: null } }));
+    try {
+      const res  = await fetch(`/api/admin/bootstrap-ota?ota=${encodeURIComponent(ota)}`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setBootstrapStates(p => ({ ...p, [ota]: { running: false, result: { created: 0, error: json.error ?? "Unknown error" } } }));
+      } else {
+        setBootstrapStates(p => ({ ...p, [ota]: { running: false, result: { created: json.created } } }));
+      }
+    } catch (e) {
+      setBootstrapStates(p => ({ ...p, [ota]: { running: false, result: { created: 0, error: String(e) } } }));
+    }
+  }
 
   // ── OTA-wise sync ──────────────────────────────────────────────────────────
   async function syncOta(ota: string) {
@@ -207,26 +232,54 @@ export default function MigrationPage() {
         {/* OTA cards grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {OTA_LIST.map(({ name, color, bg }) => {
-            const state = otaStates[name];
+            const state  = otaStates[name];
+            const bState = bootstrapStates[name];
+            const isNew  = NO_SHEET_OTAS.has(name);
             return (
               <div key={name} style={{ background: bg, border: `1px solid ${color}22`, borderRadius: 10, padding: "14px 16px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color }}>{name}</span>
-                  <button
-                    onClick={() => syncOta(name)}
-                    disabled={state?.syncing}
-                    style={{
-                      padding: "4px 12px", borderRadius: 6, border: `1px solid ${color}44`,
-                      background: state?.syncing ? "#F1F5F9" : "#FFF", color: state?.syncing ? "#94A3B8" : color,
-                      fontSize: 11, fontWeight: 600, cursor: state?.syncing ? "default" : "pointer",
-                    }}
-                  >
-                    {state?.syncing ? "Syncing…" : "Sync"}
-                  </button>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color }}>{name}</span>
+                    {isNew && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "#D97706", background: "#FEF3C7", padding: "1px 6px", borderRadius: 10 }}>NEW</span>}
+                  </div>
+                  {!isNew && (
+                    <button
+                      onClick={() => syncOta(name)}
+                      disabled={state?.syncing}
+                      style={{
+                        padding: "4px 12px", borderRadius: 6, border: `1px solid ${color}44`,
+                        background: state?.syncing ? "#F1F5F9" : "#FFF", color: state?.syncing ? "#94A3B8" : color,
+                        fontSize: 11, fontWeight: 600, cursor: state?.syncing ? "default" : "pointer",
+                      }}
+                    >
+                      {state?.syncing ? "Syncing…" : "Sync"}
+                    </button>
+                  )}
                 </div>
-                {state?.result && (
-                  <div style={{ fontSize: 11, marginTop: 4, color: state.result.error ? "#DC2626" : "#059669", fontWeight: 500 }}>
+                {isNew && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>No sheet yet. Bootstrap creates blank listings for all active properties.</div>
+                    <button
+                      onClick={() => bootstrapOta(name)}
+                      disabled={bState?.running}
+                      style={{
+                        padding: "5px 14px", borderRadius: 6, border: "none",
+                        background: bState?.running ? "#F1F5F9" : color, color: bState?.running ? "#94A3B8" : "#FFF",
+                        fontSize: 11, fontWeight: 700, cursor: bState?.running ? "default" : "pointer", width: "100%",
+                      }}
+                    >
+                      {bState?.running ? "Bootstrapping…" : "⊕ Bootstrap All Properties"}
+                    </button>
+                  </div>
+                )}
+                {!isNew && state?.result && (
+                  <div style={{ fontSize: 11, color: state.result.error ? "#DC2626" : "#059669", fontWeight: 500 }}>
                     {state.result.error ? `✗ ${state.result.error}` : `✓ ${state.result.upserted} rows synced`}
+                  </div>
+                )}
+                {isNew && bState?.result && (
+                  <div style={{ fontSize: 11, color: bState.result.error ? "#DC2626" : "#059669", fontWeight: 500 }}>
+                    {bState.result.error ? `✗ ${bState.result.error}` : `✓ ${bState.result.created} listings created`}
                   </div>
                 )}
               </div>
