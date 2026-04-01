@@ -3,39 +3,24 @@ import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { OTAS } from "@/lib/constants";
 
-// subStatuses = the primary list of sub-status values
-// statusMap   = for each sub-status, which statuses it can roll up to
 export type OtaStatusConfig = {
   ota: string;
   subStatuses: string[];
-  statusMap: Record<string, string[]>;  // { [subStatus]: string[] }
+  statusMap: Record<string, string[]>;  // { [subStatus]: string[] }  derived from master
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
 };
 
-// ── Defaults ───────────────────────────────────────────────────────────────
+// ── Defaults (used when no custom config saved AND master table empty) ─────
 
 const DEFAULT_SUB_STATUSES = [
-  "Live",
-  "Not Live",
-  "Shell Created",
-  "Ready to Go Live",
-  "Content in Progress",
-  "Listing in Progress",
-  "Content Pending",
-  "Images Pending",
-  "Approval Pending",
-  "OTA Verification",
-  "Under Review",
-  "Suspended",
-  "Duplicate",
-  "Pending",
-  "Soldout",
-  "Closed",
+  "Live", "Not Live", "Shell Created", "Ready to Go Live",
+  "Content in Progress", "Listing in Progress", "Content Pending",
+  "Images Pending", "Approval Pending", "OTA Verification",
+  "Under Review", "Suspended", "Duplicate", "Pending", "Soldout", "Closed",
 ];
 
-// Sub-status → which statuses it belongs to
 const DEFAULT_STATUS_MAP: Record<string, string[]> = {
   "Live":                 ["Live"],
   "Not Live":             ["Not Live"],
@@ -92,6 +77,20 @@ async function ensureTable(sql: ReturnType<typeof getSql>) {
   `, []);
 }
 
+async function getMasterMap(sql: ReturnType<typeof getSql>): Promise<Record<string, string[]>> {
+  try {
+    const rows = await sql.query(
+      `SELECT sub_status AS "subStatus", statuses FROM status_config_master ORDER BY sort_order`,
+      []
+    ) as { subStatus: string; statuses: string[] }[];
+    const map: Record<string, string[]> = {};
+    for (const r of rows) map[r.subStatus] = r.statuses;
+    return map;
+  } catch {
+    return {}; // master table not yet created — fall back to stored statusMap
+  }
+}
+
 // ── Route handlers ─────────────────────────────────────────────────────────
 
 export async function GET() {
@@ -101,6 +100,9 @@ export async function GET() {
 
   const sql = getSql();
   await ensureTable(sql);
+
+  const masterMap = await getMasterMap(sql);
+  const hasMaster = Object.keys(masterMap).length > 0;
 
   const rows = await sql.query(
     `SELECT ota, statuses, sub_statuses AS "statusMap",
@@ -115,10 +117,20 @@ export async function GET() {
   const configs: OtaStatusConfig[] = OTAS.map(ota => {
     const row = dbMap[ota];
     if (row) {
-      const sm = (row.statusMap && typeof row.statusMap === "object" && !Array.isArray(row.statusMap))
-        ? row.statusMap as Record<string, string[]>
-        : {};
-      return { ota, subStatuses: row.statuses, statusMap: sm, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
+      const enabledSubStatuses: string[] = Array.isArray(row.statuses) ? row.statuses : [];
+      // Derive statusMap from master if available; fall back to stored map
+      let statusMap: Record<string, string[]>;
+      if (hasMaster) {
+        statusMap = {};
+        for (const ss of enabledSubStatuses) {
+          if (masterMap[ss]) statusMap[ss] = masterMap[ss];
+        }
+      } else {
+        statusMap = (row.statusMap && typeof row.statusMap === "object" && !Array.isArray(row.statusMap))
+          ? row.statusMap as Record<string, string[]>
+          : {};
+      }
+      return { ota, subStatuses: enabledSubStatuses, statusMap, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
     }
     return {
       ota,
@@ -135,26 +147,26 @@ export async function POST(req: NextRequest) {
   if (!session || (session.role !== "admin" && session.role !== "head"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  const { ota, subStatuses, statusMap } = await req.json() as {
-    ota: string; subStatuses: string[]; statusMap: Record<string, string[]>;
+  // Now only accepts subStatuses — the list of enabled sub_status names from master
+  const { ota, subStatuses } = await req.json() as {
+    ota: string; subStatuses: string[];
   };
 
-  if (!ota || !Array.isArray(subStatuses) || typeof statusMap !== "object")
+  if (!ota || !Array.isArray(subStatuses))
     return Response.json({ error: "Invalid payload" }, { status: 400 });
 
   const sql = getSql();
   await ensureTable(sql);
 
-  // statuses column stores the sub-status list; sub_statuses column stores the map
   await sql.query(`
     INSERT INTO ota_status_config (ota, statuses, sub_statuses, updated_at, updated_by)
-    VALUES ($1, $2::jsonb, $3::jsonb, NOW(), $4)
+    VALUES ($1, $2::jsonb, '{}'::jsonb, NOW(), $3)
     ON CONFLICT (ota) DO UPDATE SET
       statuses     = $2::jsonb,
-      sub_statuses = $3::jsonb,
+      sub_statuses = '{}'::jsonb,
       updated_at   = NOW(),
-      updated_by   = $4
-  `, [ota, JSON.stringify(subStatuses), JSON.stringify(statusMap), session.name]);
+      updated_by   = $3
+  `, [ota, JSON.stringify(subStatuses), session.name]);
 
   return Response.json({ ok: true });
 }
