@@ -42,6 +42,7 @@ interface Summary {
   tasksOpen: number; tasksHigh: number; tasksOverdue: number; tasksDone: number;
   fhPipeline: number[];
   recentLogs: { action: string; field: string; oldValue: string; newValue: string; note: string; createdAt: string; userName: string; propName: string; propId: string }[];
+  userOta: string | null;
 }
 
 function timeAgo(ts: string) {
@@ -266,7 +267,9 @@ export default function CrmPage() {
         const items = statusView === "status"
           ? data.statusTopCounts.map(s => ({ label: s.status, cnt: s.cnt }))
           : data.statusCounts.map(s => ({ label: s.subStatus, cnt: s.cnt }));
-        const availableOtas = [...(summary?.otaBreakdown ?? []).map(o => o.ota).filter(Boolean), "GMB"];
+        const availableOtas = summary?.userOta
+          ? [summary.userOta]
+          : (summary?.otaBreakdown ?? []).map(o => o.ota).filter(Boolean);
         return (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -475,9 +478,12 @@ export default function CrmPage() {
           }}
         />
         <select value={otaFilter} onChange={(e) => setOtaFilter(e.target.value)}
+          disabled={!!summary?.userOta}
           style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>
           <option value="all">All Listings</option>
-          {[...OTA_LIST, "GMB"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {(summary?.userOta ? [summary.userOta] : [...OTA_LIST, "GMB"]).map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #CBD5E1", fontSize: 12, background: "#FFF" }}>

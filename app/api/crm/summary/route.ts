@@ -139,5 +139,6 @@ export async function GET() {
     recentLogs,
     openTasks,
     fhPipeline,
+    userOta: session.ota ?? null,
   });
 }
