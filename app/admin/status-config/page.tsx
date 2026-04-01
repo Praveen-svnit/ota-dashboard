@@ -5,8 +5,8 @@ import { OTA_COLORS, OTAS } from "@/lib/constants";
 
 type OtaConfig = {
   ota: string;
-  statuses: string[];
-  subStatuses: Record<string, string[]>;
+  subStatuses: string[];
+  statusMap: Record<string, string[]>;  // { [subStatus]: statuses[] }
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
@@ -18,7 +18,6 @@ function hex2rgba(hex: string, a: number) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// ── inline add-input with enter-to-submit ────────────────────────────────────
 function AddInput({ placeholder, accent, onAdd }: { placeholder: string; accent: string; onAdd: (v: string) => void }) {
   const [val, setVal] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -34,25 +33,22 @@ function AddInput({ placeholder, accent, onAdd }: { placeholder: string; accent:
       <input ref={ref} value={val} onChange={e => setVal(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") submit(); }}
         placeholder={placeholder}
-        style={{ padding: "3px 8px", border: "none", outline: "none", fontSize: 11, color: "#374151", background: "transparent", width: 120 }} />
+        style={{ padding: "3px 8px", border: "none", outline: "none", fontSize: 11, color: "#374151", background: "transparent", width: 130 }} />
       <button onClick={submit}
         style={{ padding: "3px 8px", background: accent, color: "#fff", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+</button>
     </div>
   );
 }
 
-// ── page ──────────────────────────────────────────────────────────────────────
 export default function StatusConfigPage() {
   const [configs,  setConfigs]  = useState<OtaConfig[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [selOta,   setSelOta]   = useState(OTAS[0]);
   const [tab,      setTab]      = useState<"active" | "edit">("active");
 
-  // Working copy for the selected OTA
-  const [statuses,    setStatuses]    = useState<string[]>([]);
-  const [subStatuses, setSubStatuses] = useState<Record<string, string[]>>({});
-  // Which status name is being renamed right now
-  const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
+  const [subStatuses, setSubStatuses] = useState<string[]>([]);
+  const [statusMap,   setStatusMap]   = useState<Record<string, string[]>>({});
+  const [renaming,    setRenaming]    = useState<{ from: string; to: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
@@ -67,22 +63,30 @@ export default function StatusConfigPage() {
   useEffect(() => {
     const cfg = configs.find(c => c.ota === selOta);
     if (!cfg) return;
-    setStatuses([...cfg.statuses]);
-    setSubStatuses(JSON.parse(JSON.stringify(cfg.subStatuses)));
+    setSubStatuses([...cfg.subStatuses]);
+    setStatusMap(JSON.parse(JSON.stringify(cfg.statusMap)));
     setRenaming(null);
     setSaved(false);
   }, [selOta, configs]);
 
-  // ── status mutations ───────────────────────────────────────────────────────
-  function addStatus(name: string) {
-    if (!name || statuses.includes(name)) return;
-    setStatuses(prev => [...prev, name]);
-    setSubStatuses(prev => ({ ...prev, [name]: [] }));
+  // ── sub-status list mutations ──────────────────────────────────────────────
+  function addSubStatus(name: string) {
+    if (!name || subStatuses.includes(name)) return;
+    setSubStatuses(prev => [...prev, name]);
+    setStatusMap(prev => ({ ...prev, [name]: [] }));
   }
 
-  function removeStatus(s: string) {
-    setStatuses(prev => prev.filter(x => x !== s));
-    setSubStatuses(prev => { const n = { ...prev }; delete n[s]; return n; });
+  function removeSubStatus(ss: string) {
+    setSubStatuses(prev => prev.filter(x => x !== ss));
+    setStatusMap(prev => { const n = { ...prev }; delete n[ss]; return n; });
+  }
+
+  function moveSubStatus(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= subStatuses.length) return;
+    const next = [...subStatuses];
+    [next[i], next[j]] = [next[j], next[i]];
+    setSubStatuses(next);
   }
 
   function commitRename() {
@@ -90,43 +94,38 @@ export default function StatusConfigPage() {
     const { from, to: rawTo } = renaming;
     const to = rawTo.trim();
     if (!to || to === from) { setRenaming(null); return; }
-    if (statuses.includes(to)) { setRenaming(null); return; }
-    const newStatuses = statuses.map(s => s === from ? to : s);
-    const newSub: Record<string, string[]> = {};
-    for (const [k, v] of Object.entries(subStatuses)) newSub[k === from ? to : k] = v;
-    setStatuses(newStatuses);
-    setSubStatuses(newSub);
+    if (subStatuses.includes(to)) { setRenaming(null); return; }
+    setSubStatuses(prev => prev.map(x => x === from ? to : x));
+    setStatusMap(prev => {
+      const n: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(prev)) n[k === from ? to : k] = v;
+      return n;
+    });
     setRenaming(null);
   }
 
-  function moveStatus(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= statuses.length) return;
-    const next = [...statuses];
-    [next[i], next[j]] = [next[j], next[i]];
-    setStatuses(next);
-  }
-
-  // ── sub-status mutations ────────────────────────────────────────────────────
-  function addSubStatus(status: string, ss: string) {
-    if (!ss) return;
-    setSubStatuses(prev => ({
+  // ── mapped status mutations ────────────────────────────────────────────────
+  function addStatus(subStatus: string, status: string) {
+    if (!status) return;
+    setStatusMap(prev => ({
       ...prev,
-      [status]: prev[status]?.includes(ss) ? prev[status] : [...(prev[status] ?? []), ss],
+      [subStatus]: (prev[subStatus] ?? []).includes(status)
+        ? prev[subStatus]
+        : [...(prev[subStatus] ?? []), status],
     }));
   }
 
-  function removeSubStatus(status: string, ss: string) {
-    setSubStatuses(prev => ({ ...prev, [status]: (prev[status] ?? []).filter(x => x !== ss) }));
+  function removeStatus(subStatus: string, status: string) {
+    setStatusMap(prev => ({ ...prev, [subStatus]: (prev[subStatus] ?? []).filter(x => x !== status) }));
   }
 
-  // ── save ───────────────────────────────────────────────────────────────────
+  // ── save / reset ───────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
     await fetch("/api/admin/status-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ota: selOta, statuses, subStatuses }),
+      body: JSON.stringify({ ota: selOta, subStatuses, statusMap }),
     });
     await fetchConfigs();
     setSaving(false);
@@ -150,11 +149,10 @@ export default function StatusConfigPage() {
   return (
     <div style={{ padding: "28px 32px", maxWidth: 960, margin: "0 auto" }}>
 
-      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#1E293B" }}>Status &amp; Sub-Status Logic</h1>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "#94A3B8" }}>
-          Define statuses per OTA and map sub-statuses to each.
+          Define sub-statuses per OTA and map the statuses they belong to.
         </p>
       </div>
 
@@ -193,22 +191,26 @@ export default function StatusConfigPage() {
                     </button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                    {cfg.statuses.map(s => (
-                      <div key={s} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                    {cfg.subStatuses.map(ss => (
+                      <div key={ss} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                        {/* Sub-status */}
                         <span style={{
                           flexShrink: 0, fontSize: 11, fontWeight: 600, padding: "2px 10px", borderRadius: 20,
-                          background: hex2rgba(c, 0.1), color: c, border: `1px solid ${hex2rgba(c, 0.2)}`,
-                          minWidth: 80, textAlign: "center",
-                        }}>{s}</span>
-                        {(cfg.subStatuses[s] ?? []).length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 4px", paddingTop: 2 }}>
-                            {(cfg.subStatuses[s] ?? []).map(ss => (
-                              <span key={ss} style={{
-                                fontSize: 10, padding: "1px 6px", borderRadius: 10,
-                                background: "#F1F5F9", color: "#64748B", border: "1px solid #E2E8F0",
-                              }}>{ss}</span>
-                            ))}
-                          </div>
+                          background: "#F1F5F9", color: "#475569", border: "1px solid #E2E8F0",
+                          minWidth: 90, textAlign: "center",
+                        }}>{ss}</span>
+                        {(cfg.statusMap[ss] ?? []).length > 0 && (
+                          <>
+                            <span style={{ fontSize: 10, color: "#CBD5E1", paddingTop: 3 }}>→</span>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 4px", paddingTop: 2 }}>
+                              {(cfg.statusMap[ss] ?? []).map(s => (
+                                <span key={s} style={{
+                                  fontSize: 10, padding: "1px 7px", borderRadius: 10,
+                                  background: hex2rgba(c, 0.1), color: c, border: `1px solid ${hex2rgba(c, 0.2)}`,
+                                }}>{s}</span>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </div>
                     ))}
@@ -253,7 +255,7 @@ export default function StatusConfigPage() {
           {/* Editor card */}
           <div style={{ background: "#fff", border: "1px solid #E8ECF0", borderRadius: 12, overflow: "hidden" }}>
 
-            {/* Card top bar */}
+            {/* Top bar */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #F1F5F9" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ width: 11, height: 11, borderRadius: "50%", background: accent }} />
@@ -283,104 +285,88 @@ export default function StatusConfigPage() {
             </div>
 
             {/* Column headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "40px 200px 1fr 60px", padding: "8px 20px", background: "#F8FAFC", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "40px 220px 1fr 48px", padding: "8px 20px", background: "#F8FAFC", borderBottom: "1px solid #F1F5F9" }}>
               <div />
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Status</div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Sub-Statuses</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Sub-Status</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Mapped Statuses</div>
               <div />
             </div>
 
-            {/* Status rows */}
+            {/* Rows */}
             <div>
-              {statuses.map((s, i) => (
-                <div key={s} style={{
-                  display: "grid", gridTemplateColumns: "40px 200px 1fr 60px",
+              {subStatuses.map((ss, i) => (
+                <div key={ss} style={{
+                  display: "grid", gridTemplateColumns: "40px 220px 1fr 48px",
                   alignItems: "flex-start", padding: "10px 20px",
-                  borderBottom: "1px solid #F9FAFB",
-                  background: "#fff",
+                  borderBottom: "1px solid #F9FAFB", background: "#fff",
                 }}>
 
                   {/* Reorder */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }}>
-                    <button onClick={() => moveStatus(i, -1)} disabled={i === 0}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 5 }}>
+                    <button onClick={() => moveSubStatus(i, -1)} disabled={i === 0}
                       style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? "#E2E8F0" : "#94A3B8", fontSize: 11, padding: 0, lineHeight: 1 }}>↑</button>
-                    <button onClick={() => moveStatus(i, 1)} disabled={i === statuses.length - 1}
-                      style={{ background: "none", border: "none", cursor: i === statuses.length - 1 ? "default" : "pointer", color: i === statuses.length - 1 ? "#E2E8F0" : "#94A3B8", fontSize: 11, padding: 0, lineHeight: 1 }}>↓</button>
+                    <button onClick={() => moveSubStatus(i, 1)} disabled={i === subStatuses.length - 1}
+                      style={{ background: "none", border: "none", cursor: i === subStatuses.length - 1 ? "default" : "pointer", color: i === subStatuses.length - 1 ? "#E2E8F0" : "#94A3B8", fontSize: 11, padding: 0, lineHeight: 1 }}>↓</button>
                   </div>
 
-                  {/* Status name — click to rename */}
-                  <div style={{ paddingRight: 12, paddingTop: 3 }}>
-                    {renaming?.from === s ? (
-                      <input
-                        autoFocus
-                        value={renaming.to}
-                        onChange={e => setRenaming({ from: s, to: e.target.value })}
+                  {/* Sub-status name — click to rename */}
+                  <div style={{ paddingRight: 14, paddingTop: 2 }}>
+                    {renaming?.from === ss ? (
+                      <input autoFocus value={renaming.to}
+                        onChange={e => setRenaming({ from: ss, to: e.target.value })}
                         onKeyDown={e => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setRenaming(null); }}
                         onBlur={commitRename}
-                        style={{
-                          width: "100%", padding: "4px 8px", fontSize: 12, fontWeight: 600,
-                          border: `1.5px solid ${accent}`, borderRadius: 6, outline: "none", color: "#1E293B",
-                        }}
+                        style={{ width: "100%", padding: "4px 8px", fontSize: 12, fontWeight: 600, border: `1.5px solid ${accent}`, borderRadius: 6, outline: "none", color: "#1E293B" }}
                       />
                     ) : (
-                      <button
-                        onClick={() => setRenaming({ from: s, to: s })}
-                        title="Click to rename"
+                      <button onClick={() => setRenaming({ from: ss, to: ss })} title="Click to rename"
                         style={{
                           display: "block", width: "100%", textAlign: "left",
                           padding: "4px 10px", fontSize: 12, fontWeight: 600,
-                          background: hex2rgba(accent, 0.08), color: accent,
-                          border: `1px solid ${hex2rgba(accent, 0.2)}`, borderRadius: 6,
-                          cursor: "text",
+                          background: "#F1F5F9", color: "#475569",
+                          border: "1px solid #E2E8F0", borderRadius: 6, cursor: "text",
                         }}>
-                        {s}
+                        {ss}
                       </button>
                     )}
                   </div>
 
-                  {/* Sub-statuses */}
+                  {/* Mapped statuses (OTA-coloured chips) */}
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 6px", paddingTop: 4 }}>
-                    {(subStatuses[s] ?? []).map(ss => (
-                      <span key={ss} style={{
+                    {(statusMap[ss] ?? []).map(s => (
+                      <span key={s} style={{
                         display: "inline-flex", alignItems: "center", gap: 4,
-                        padding: "2px 6px 2px 8px", borderRadius: 20, fontSize: 11,
-                        background: "#F1F5F9", color: "#475569", border: "1px solid #E2E8F0",
+                        padding: "2px 6px 2px 9px", borderRadius: 20, fontSize: 11,
+                        background: hex2rgba(accent, 0.1), color: accent, border: `1px solid ${hex2rgba(accent, 0.22)}`,
                       }}>
-                        {ss}
-                        <button onClick={() => removeSubStatus(s, ss)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#94A3B8", fontSize: 13, padding: 0, lineHeight: 1, fontWeight: 700 }}>×</button>
+                        {s}
+                        <button onClick={() => removeStatus(ss, s)}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: hex2rgba(accent, 0.5), fontSize: 13, padding: 0, lineHeight: 1, fontWeight: 700 }}>×</button>
                       </span>
                     ))}
                     <AddInput
-                      placeholder="Add sub-status"
+                      placeholder="Map a status…"
                       accent={accent}
-                      onAdd={ss => addSubStatus(s, ss)}
+                      onAdd={s => addStatus(ss, s)}
                     />
                   </div>
 
-                  {/* Delete status */}
-                  <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
-                    <button onClick={() => removeStatus(s)}
-                      title="Remove status"
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#FDA4AF", fontSize: 15, padding: "2px 6px", fontWeight: 700 }}>
-                      ×
-                    </button>
+                  {/* Delete row */}
+                  <div style={{ display: "flex", justifyContent: "center", paddingTop: 5 }}>
+                    <button onClick={() => removeSubStatus(ss)} title="Remove"
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#FDA4AF", fontSize: 15, padding: "2px 6px", fontWeight: 700 }}>×</button>
                   </div>
                 </div>
               ))}
 
-              {/* Add new status row */}
-              <div style={{ display: "grid", gridTemplateColumns: "40px 200px 1fr 60px", padding: "10px 20px", background: "#FAFBFC", borderTop: "1px solid #F1F5F9" }}>
+              {/* Add new sub-status */}
+              <div style={{ display: "grid", gridTemplateColumns: "40px 220px 1fr 48px", padding: "10px 20px", background: "#FAFBFC", borderTop: "1px solid #F1F5F9" }}>
                 <div />
                 <div>
-                  <AddInput
-                    placeholder="New status…"
-                    accent={accent}
-                    onAdd={addStatus}
-                  />
+                  <AddInput placeholder="New sub-status…" accent={accent} onAdd={addSubStatus} />
                 </div>
                 <div style={{ paddingTop: 5, paddingLeft: 4, fontSize: 11, color: "#CBD5E1" }}>
-                  Add a status first, then map sub-statuses to it
+                  Add a sub-status, then map statuses to it
                 </div>
                 <div />
               </div>
