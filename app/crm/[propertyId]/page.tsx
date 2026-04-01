@@ -3,10 +3,10 @@
 import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { OTA_COLORS } from "@/lib/constants";
+import { OTA_COLORS, OTAS } from "@/lib/constants";
 
 const STATUS_OPTIONS = [
-  "Live", "Not Live", "Ready to Go Live", "Content in Progress",
+  "Shell Created", "Live", "Not Live", "Ready to Go Live", "Content in Progress",
   "Listing in Progress", "Pending", "Soldout", "Closed",
 ];
 
@@ -155,6 +155,8 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [autoSubStatus, setAutoSubStatus] = useState<string | null>(null);
   const [noteInput,  setNoteInput]  = useState<Record<number, string>>({});
   const [activeOta,  setActiveOta]  = useState<string | null>(null);
+  const [addOtaOpen, setAddOtaOpen] = useState(false);
+  const [addingOta,  setAddingOta]  = useState<string | null>(null);
 
   // Tasks
   const [tasks,        setTasks]        = useState<Task[]>([]);
@@ -181,6 +183,22 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       .then((r) => r.json()).then((d) => setTasks(d.tasks ?? []));
     fetch("/api/crm/users/list")
       .then((r) => r.json()).then((d) => setTaskUsers(d.users ?? []));
+  }
+
+  async function addOta(ota: string) {
+    setAddingOta(ota);
+    setAddOtaOpen(false);
+    const res  = await fetch(`/api/crm/properties/${propertyId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ota }),
+    });
+    const json = await res.json();
+    if (json.listing) {
+      setListings(prev => [...prev, json.listing]);
+      setActiveOta(ota);
+    }
+    setAddingOta(null);
   }
 
   async function createTask() {
@@ -364,6 +382,53 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                 </button>
               );
             })}
+
+            {/* Add OTA button — shows OTAs not yet listed for this property */}
+            {(() => {
+              const existing = new Set(listings.map(l => l.ota));
+              const missing  = OTAS.filter(o => !existing.has(o));
+              if (missing.length === 0) return null;
+              return (
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setAddOtaOpen(o => !o)}
+                    disabled={!!addingOta}
+                    style={{
+                      padding: "6px 12px", borderRadius: 20, border: "1px dashed #CBD5E1",
+                      background: "#F8FAFC", color: "#94A3B8",
+                      fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    {addingOta ? `Adding ${addingOta}…` : "+ Add OTA"}
+                  </button>
+                  {addOtaOpen && (
+                    <>
+                      <div onClick={() => setAddOtaOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />
+                      <div style={{
+                        position: "absolute", top: "110%", left: 0, zIndex: 50,
+                        background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 10,
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.10)", minWidth: 160, padding: "6px 0",
+                      }}>
+                      {missing.map(ota => (
+                        <button key={ota} onClick={() => addOta(ota)}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left",
+                            padding: "8px 16px", border: "none", background: "none",
+                            fontSize: 12, fontWeight: 600, color: OTA_COLORS[ota] ?? "#0F172A",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "#F8FAFC")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                        >
+                          {ota}
+                        </button>
+                      ))}
+                    </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Property overview (shown when Property tab is active) */}
