@@ -477,7 +477,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   display: "flex", alignItems: "center", gap: 12 }}>
                   <span style={{ fontSize: 15, fontWeight: 800, color }}>{activeListing.ota}</span>
                   {activeListing.otaId && (
-                    <span style={{ fontSize: 10, color: "#94A3B8" }}>OTA ID: {activeListing.otaId}</span>
+                    <span style={{ fontSize: 10, color: "#94A3B8", fontFamily: "monospace" }}>{activeListing.otaId}</span>
                   )}
                   {activeListing.ota === "Agoda" && (() => {
                     const pp = (activeListing.prePost || "postset").toLowerCase();
@@ -634,6 +634,54 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                         {activeListing.tat > 0 ? `${activeListing.tat}d` : "—"}
                         {activeListing.tatError === 1 && " (over)"}
                       </span>
+                    </div>
+
+                    {/* OTA ID */}
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>OTA ID</div>
+                      {isEditing("otaId") ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 200 }}>
+                          <input
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="Enter OTA ID…"
+                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
+                              border: "1px solid #CBD5E1", outline: "none", fontFamily: "monospace" }}
+                          />
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={async () => {
+                              setSaving(true);
+                              await fetch("/api/crm/update-status", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "otaId", value: editValue, note: "OTA ID updated" }),
+                              });
+                              setSaving(false);
+                              setEditing(null);
+                              load();
+                            }} disabled={saving}
+                              style={{ flex: 1, padding: "6px 12px", borderRadius: 7, border: "none",
+                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {saving ? "Saving…" : "Save"}
+                            </button>
+                            <button onClick={() => { setEditing(null); }}
+                              style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #E2E8F0",
+                                background: "#FFF", fontSize: 11, cursor: "pointer" }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <span style={{ fontSize: 12, color: "#475569", fontFamily: "monospace" }}>
+                            {activeListing.otaId || "—"}
+                          </span>
+                          <button onClick={() => { setEditing({ id: activeListing.id, field: "otaId" }); setEditValue(activeListing.otaId ?? ""); }}
+                            style={{ fontSize: 10, color: "#94A3B8", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                            ✎
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Listing Link */}
