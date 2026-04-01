@@ -17,8 +17,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
   const [collapsed,  setCollapsed]  = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
-  const [refreshing, setRefreshing] = useState(false);
-
   useEffect(() => {
     fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => d && setSessionUser(d.user));
   }, []);
@@ -26,12 +24,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
-  }
-
-  async function runRefresh() {
-    setRefreshing(true);
-    router.refresh();
-    setTimeout(() => setRefreshing(false), 1500);
   }
 
   function NavLink({ icon, label, href, indent = false }: { icon: string; label: string; href: string; indent?: boolean }) {
@@ -149,30 +141,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
       {/* Footer */}
       <div style={{ padding: collapsed ? "10px 6px" : "10px 10px 14px", borderTop: "1px solid #F1F5F9" }}>
-
-        {/* Sync App button */}
-        <button
-          onClick={runRefresh}
-          disabled={refreshing}
-          title="Reload page data from DB"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
-            gap: 7, width: "100%",
-            padding: collapsed ? "8px 0" : "8px 10px",
-            borderRadius: 7, border: "none", cursor: refreshing ? "default" : "pointer",
-            background: refreshing ? "#F1F5F9" : "#F0FDF4",
-            color: refreshing ? "#94A3B8" : "#16A34A",
-            fontSize: 12, fontWeight: 600,
-            opacity: refreshing ? 0.7 : 1,
-            transition: "background 0.15s",
-            marginBottom: 5,
-          }}
-        >
-          <span style={{ fontSize: 14, animation: refreshing ? "spin 1s linear infinite" : "none" }}>
-            {refreshing ? "⟳" : "↻"}
-          </span>
-          {!collapsed && (refreshing ? "Refreshing…" : "Sync App")}
-        </button>
 
         {!collapsed && (
           <div style={{ marginTop: 6, fontSize: 10, color: "#94A3B8" }}>
