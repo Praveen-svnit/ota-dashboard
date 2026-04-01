@@ -7,6 +7,10 @@ export async function GET() {
 
   const sql = getSql();
 
+  // OTA-scoped users (interns with an assigned OTA) see only their OTA's data
+  const otaCond   = session.ota ? `AND ol.ota = $1` : "";
+  const otaParams = session.ota ? [session.ota]     : [];
+
   // Run all independent queries in parallel
   const [
     statusCounts,
@@ -18,40 +22,46 @@ export async function GET() {
     openTasks,
   ] = await Promise.all([
     // subStatus counts — active properties only
-    sql`
-      SELECT LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New')) AS "subStatus",
-             COUNT(*) AS cnt
-      FROM ota_listing ol
-      JOIN inventory inv ON inv.property_id = ol.property_id
-        AND inv.fh_status IN ('Live','SoldOut')
-      GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New'))
-      ORDER BY cnt DESC
-    `,
+    sql.query(
+      `SELECT LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New')) AS "subStatus",
+              COUNT(*) AS cnt
+       FROM ota_listing ol
+       JOIN inventory inv ON inv.property_id = ol.property_id
+         AND inv.fh_status IN ('Live','SoldOut')
+       ${otaCond}
+       GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New'))
+       ORDER BY cnt DESC`,
+      otaParams
+    ),
 
     // status counts — active properties only
-    sql`
-      SELECT LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New')) AS status,
-             COUNT(*) AS cnt
-      FROM ota_listing ol
-      JOIN inventory inv ON inv.property_id = ol.property_id
-        AND inv.fh_status IN ('Live','SoldOut')
-      GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New'))
-      ORDER BY cnt DESC
-    `,
+    sql.query(
+      `SELECT LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New')) AS status,
+              COUNT(*) AS cnt
+       FROM ota_listing ol
+       JOIN inventory inv ON inv.property_id = ol.property_id
+         AND inv.fh_status IN ('Live','SoldOut')
+       ${otaCond}
+       GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New'))
+       ORDER BY cnt DESC`,
+      otaParams
+    ),
 
     // Per-OTA breakdown — active properties only
-    sql`
-      SELECT ol.ota,
-             COUNT(*) AS total,
-             SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
-             SUM(CASE WHEN LOWER(ol.sub_status) = 'not live' THEN 1 ELSE 0 END) AS "notLive",
-             SUM(CASE WHEN LOWER(ol.sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
-      FROM ota_listing ol
-      JOIN inventory inv ON inv.property_id = ol.property_id
-        AND inv.fh_status IN ('Live','SoldOut')
-      GROUP BY ol.ota
-      ORDER BY live DESC
-    `,
+    sql.query(
+      `SELECT ol.ota,
+              COUNT(*) AS total,
+              SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+              SUM(CASE WHEN LOWER(ol.sub_status) = 'not live' THEN 1 ELSE 0 END) AS "notLive",
+              SUM(CASE WHEN LOWER(ol.sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
+       FROM ota_listing ol
+       JOIN inventory inv ON inv.property_id = ol.property_id
+         AND inv.fh_status IN ('Live','SoldOut')
+       ${otaCond}
+       GROUP BY ol.ota
+       ORDER BY live DESC`,
+      otaParams
+    ),
 
     // FH pipeline: active properties, today through D-29 (30 days)
     // Use IST timezone offset (+5:30) so dates match the sheet dates

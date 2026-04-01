@@ -28,8 +28,15 @@ export async function GET(req: Request) {
 
   // ── Role-based access control ──────────────────────────────
   if (session.role === "intern") {
-    params.push(session.id);
-    conditions.push(`c.assigned_to = $${p()}`);
+    if (session.ota) {
+      // OTA-assigned interns see all properties for their OTA
+      params.push(session.ota);
+      conditions.push(`c.ota = $${p()}`);
+    } else {
+      // Interns without OTA see only their assigned properties
+      params.push(session.id);
+      conditions.push(`c.assigned_to = $${p()}`);
+    }
   } else if (session.role === "tl") {
     // Fetch intern IDs under this TL (tagged template handles its own binding)
     const internRows = await sql`
