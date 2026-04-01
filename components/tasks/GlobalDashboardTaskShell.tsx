@@ -176,6 +176,9 @@ export default function GlobalDashboardTaskShell() {
 
   if (pathname === "/login") return null;
 
+  // Only show buttons on Today's Assigned Tasks page
+  const showButtons = pathname === "/todays-assigned-tasks";
+
   async function createTask() {
     if (!form.title.trim() || saving) return;
     setSaving(true);
@@ -291,50 +294,54 @@ export default function GlobalDashboardTaskShell() {
         </div>
       )}
 
-      <button
-        onClick={() => setNotificationPanelOpen((current) => !current)}
-        style={{
-          position: "fixed",
-          right: 24,
-          bottom: 116,
-          zIndex: 81,
-          border: "none",
-          cursor: "pointer",
-          borderRadius: 18,
-          padding: "12px 14px",
-          background: notifications.length > 0 ? "linear-gradient(135deg, #7C2D12, #EA580C)" : "#0F172A",
-          color: "#FFFFFF",
-          boxShadow: "0 12px 30px rgba(15, 23, 42, 0.22)",
-        }}
-      >
+      {showButtons && (
+        <button
+          onClick={() => setNotificationPanelOpen((current) => !current)}
+          style={{
+            position: "fixed",
+            right: 24,
+            bottom: 116,
+            zIndex: 81,
+            border: "none",
+            cursor: "pointer",
+            borderRadius: 18,
+            padding: "12px 14px",
+            background: notifications.length > 0 ? "linear-gradient(135deg, #7C2D12, #EA580C)" : "#0F172A",
+            color: "#FFFFFF",
+            boxShadow: "0 12px 30px rgba(15, 23, 42, 0.22)",
+          }}
+        >
         <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.8 }}>Alerts</div>
         <div style={{ marginTop: 4, fontSize: 14, fontWeight: 900 }}>Notifications</div>
         <div style={{ marginTop: 4, fontSize: 11 }}>{notifications.length} unread</div>
       </button>
+      )}
 
-      <button
-        onClick={() => {
-          setForm(createDefaultState(pathname));
-          setOpen(true);
-        }}
-        style={{
-          position: "fixed",
-          right: 24,
-          bottom: 24,
-          zIndex: 80,
-          border: "none",
-          cursor: "pointer",
-          borderRadius: 20,
-          padding: "14px 16px",
-          background: "linear-gradient(135deg, #0F172A, #1D4ED8)",
-          color: "#FFFFFF",
-          boxShadow: "0 14px 36px rgba(15, 23, 42, 0.26)",
-        }}
-      >
+      {showButtons && (
+        <button
+          onClick={() => {
+            setForm(createDefaultState(pathname));
+            setOpen(true);
+          }}
+          style={{
+            position: "fixed",
+            right: 24,
+            bottom: 24,
+            zIndex: 80,
+            border: "none",
+            cursor: "pointer",
+            borderRadius: 20,
+            padding: "14px 16px",
+            background: "linear-gradient(135deg, #0F172A, #1D4ED8)",
+            color: "#FFFFFF",
+            boxShadow: "0 14px 36px rgba(15, 23, 42, 0.26)",
+          }}
+        >
         <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.75 }}>Tasks</div>
         <div style={{ marginTop: 4, fontSize: 14, fontWeight: 900 }}>Raise Task</div>
         <div style={{ marginTop: 4, fontSize: 11 }}>{globalActiveCount} active on board</div>
       </button>
+      )}
 
       {notificationPanelOpen && (
         <div
