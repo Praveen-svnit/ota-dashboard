@@ -62,6 +62,17 @@ export async function initPostgresSchema() {
   await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_final   ON stay_rns(final_prop_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_initial ON stay_rns(initial_prop_id)`;
 
+  // Booking-level columns (added for Axisroom export format)
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_id          TEXT`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_created_at  DATE`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS checkout            DATE`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS guest_status_desc   TEXT`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_source_desc TEXT`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS ota_booking_source  INTEGER`;
+  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS zone                TEXT`;
+  await sql`ALTER TABLE stay_rns ALTER COLUMN revenue TYPE NUMERIC(14,4)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_stayrns_booking_id ON stay_rns(booking_id) WHERE booking_id IS NOT NULL`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS sold_rns (
       id               SERIAL PRIMARY KEY,

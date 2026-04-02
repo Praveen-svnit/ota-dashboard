@@ -208,7 +208,7 @@ async function getRnsFromDb(): Promise<RawDataResult | null> {
   const rows = await sql`
     SELECT date::text AS date, channel, rns
     FROM stay_rns
-    WHERE UPPER(status) = 'CICO'
+    WHERE UPPER(status) = 'CICO' OR LOWER(guest_status_desc) = 'checkout'
     ORDER BY date
   ` as Array<{ date: string; channel: string; rns: number }>;
 
@@ -320,7 +320,7 @@ async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: nu
   const rows = await sql`
     SELECT date::text AS date, channel, revenue AS rns
     FROM stay_rns
-    WHERE UPPER(status) = 'CICO'
+    WHERE UPPER(status) = 'CICO' OR LOWER(guest_status_desc) = 'checkout'
     ORDER BY date
   ` as Array<{ date: string; channel: string; rns: number }>;
 
