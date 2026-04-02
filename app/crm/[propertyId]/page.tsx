@@ -627,17 +627,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       </div>
                     </div>
 
-                    {/* Latest note banner */}
-                    {activeListing.crmNote && (
-                      <div style={{ marginTop: 14, display: "flex", alignItems: "flex-start", gap: 8,
-                        background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "9px 14px" }}>
-                        <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>📝</span>
-                        <div>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.06em" }}>Latest note · </span>
-                          <span style={{ fontSize: 12, color: "#1E293B" }}>{activeListing.crmNote}</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {/* Info grid */}
