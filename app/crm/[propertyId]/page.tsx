@@ -532,6 +532,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           <span style={{ fontSize: 10, color: "#94A3B8" }}>
                             {activeListing.crmUpdatedAt ? `Updated ${relativeTime(activeListing.crmUpdatedAt)}` : "Not yet updated"}
                           </span>
+                          <div style={{ flex: 1 }} />
+                          <button onClick={() => setShowTaskForm((v) => !v)}
+                            style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 7,
+                              border: "1px solid #E2E8F0", background: showTaskForm ? "#0F172A" : "#F8FAFC",
+                              color: showTaskForm ? "#FFF" : "#374151", cursor: "pointer", whiteSpace: "nowrap" }}>
+                            {showTaskForm ? "Cancel" : "+ Add Task"}
+                          </button>
                         </div>
 
                         {/* Status display / edit */}
@@ -897,99 +904,56 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
             );
           })()}
 
-          {/* Tasks Panel */}
+          {/* Activity timeline — full width in left column */}
           <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-            <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Tasks</span>
-                {tasks.filter((t) => t.status === "open").length > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 20, padding: "1px 8px" }}>
-                    {tasks.filter((t) => t.status === "open").length} open
-                  </span>
-                )}
-              </div>
-              <button onClick={() => setShowTaskForm((v) => !v)}
-                style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 8,
-                  border: "1px solid #E2E8F0", background: showTaskForm ? "#0F172A" : "#F8FAFC",
-                  color: showTaskForm ? "#FFF" : "#374151", cursor: "pointer" }}>
-                {showTaskForm ? "Cancel" : "+ Add Task"}
-              </button>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>Activity</span>
+              <span style={{ fontSize: 10, color: "#94A3B8" }}>{otaLogs.length} entries</span>
             </div>
-            {showTaskForm && (
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC", display: "flex", flexDirection: "column", gap: 10 }}>
-                <input placeholder="Task title *" value={newTask.title}
-                  onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))}
-                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, outline: "none" }} />
-                <textarea placeholder="Description (optional)" value={newTask.description}
-                  onChange={(e) => setNewTask((p) => ({ ...p, description: e.target.value }))}
-                  rows={2}
-                  style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, outline: "none", resize: "none", fontFamily: "inherit" }} />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <select value={newTask.priority} onChange={(e) => setNewTask((p) => ({ ...p, priority: e.target.value }))}
-                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, background: "#FFF" }}>
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                  </select>
-                  <select value={newTask.assignedTo} onChange={(e) => setNewTask((p) => ({ ...p, assignedTo: e.target.value }))}
-                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12, background: "#FFF" }}>
-                    <option value="">Unassigned</option>
-                    {taskUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
-                  <input type="date" value={newTask.dueDate} onChange={(e) => setNewTask((p) => ({ ...p, dueDate: e.target.value }))}
-                    style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12 }} />
-                </div>
-                <button onClick={createTask} disabled={!newTask.title.trim() || savingTask}
-                  style={{ padding: "8px 0", borderRadius: 8, border: "none",
-                    background: newTask.title.trim() ? "#2563EB" : "#E2E8F0",
-                    color: newTask.title.trim() ? "#FFF" : "#94A3B8",
-                    fontSize: 12, fontWeight: 700, cursor: newTask.title.trim() ? "pointer" : "not-allowed" }}>
-                  {savingTask ? "Creating…" : "Create Task"}
-                </button>
-              </div>
-            )}
-            <div style={{ padding: tasks.length === 0 ? "24px 20px" : "4px 0" }}>
-              {tasks.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#94A3B8", fontSize: 12 }}>No tasks yet</div>
-              ) : tasks.map((task) => {
-                const priorityColor = task.priority === "high" ? "#DC2626" : task.priority === "medium" ? "#D97706" : "#64748B";
-                const isDone = task.status === "done";
+            <div style={{ maxHeight: 400, overflowY: "auto" }}>
+              {otaLogs.length === 0 ? (
+                <div style={{ padding: "24px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>No activity yet</div>
+              ) : otaLogs.map((log) => {
+                const actionColor = ACTION_COLORS[log.action] ?? "#64748B";
+                const icon = log.action === "note_added" ? "✎" : log.action === "assigned" ? "◎" : log.action === "metric_updated" ? "◆" : "↻";
                 return (
-                  <div key={task.id} style={{ padding: "10px 20px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <button onClick={() => updateTaskStatus(task.id, isDone ? "open" : "done")}
-                      style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1,
-                        border: `2px solid ${isDone ? "#059669" : "#CBD5E1"}`,
-                        background: isDone ? "#059669" : "#FFF", cursor: "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#FFF", fontSize: 10 }}>
-                      {isDone ? "✓" : ""}
-                    </button>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: isDone ? "#94A3B8" : "#1E293B",
-                        textDecoration: isDone ? "line-through" : "none", lineHeight: 1.4 }}>
-                        {task.title}
-                      </div>
-                      {task.description && (
-                        <div style={{ fontSize: 11, color: "#64748B", marginTop: 2, lineHeight: 1.4 }}>{task.description}</div>
-                      )}
-                      <div style={{ display: "flex", gap: 8, marginTop: 5, flexWrap: "wrap", alignItems: "center" }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 10,
-                          background: priorityColor + "18", color: priorityColor }}>
-                          {task.priority}
-                        </span>
-                        {task.assignedName && (
-                          <span style={{ fontSize: 10, color: "#475569" }}>→ {task.assignedName}</span>
-                        )}
-                        {task.dueDate && (
-                          <span style={{ fontSize: 10, color: new Date(task.dueDate) < new Date() && !isDone ? "#DC2626" : "#64748B" }}>
-                            Due {task.dueDate}
-                          </span>
-                        )}
-                      </div>
+                  <div key={log.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+                      background: actionColor + "18", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: 11, color: actionColor }}>
+                      {icon}
                     </div>
-                    <button onClick={() => deleteTask(task.id)}
-                      style={{ background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 14, padding: "0 2px" }}
-                      title="Delete">×</button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>{log.userName || "System"}</span>
+                          {isPropertyView && log.otaListingId && (() => {
+                            const l = listings.find(x => Number(x.id) === Number(log.otaListingId));
+                            if (!l) return null;
+                            const c = OTA_COLORS[l.ota] ?? "#64748B";
+                            return (
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 8, background: c + "18", color: c }}>
+                                {l.ota}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
+                      </div>
+                      {log.action === "note_added" ? (
+                        <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "#64748B" }}>
+                          <span style={{ fontWeight: 600 }}>{log.field}</span>:{" "}
+                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
+                          {" → "}
+                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
+                        </div>
+                      )}
+                      {log.note && log.action !== "note_added" && (
+                        <div style={{ fontSize: 10, color: "#6366F1", marginTop: 2, fontStyle: "italic" }}>"{log.note}"</div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -998,7 +962,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
 
           </div>
 
-          {/* RIGHT: Activity timeline + Property info */}
+          {/* RIGHT: Property info + Tasks */}
           <div style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
             {/* Property info compact */}
@@ -1043,65 +1007,89 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
               </div>
             </div>
 
-            {/* Activity timeline */}
-            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>Activity</span>
-                <span style={{ fontSize: 10, color: "#94A3B8" }}>{otaLogs.length} entries</span>
+            {/* Tasks panel */}
+            <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>Tasks</span>
+                {tasks.filter((t) => t.status === "open").length > 0 && (
+                  <span style={{ fontSize: 10, fontWeight: 700, background: "#EFF6FF", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 20, padding: "1px 8px" }}>
+                    {tasks.filter((t) => t.status === "open").length} open
+                  </span>
+                )}
               </div>
-              <div style={{ maxHeight: 480, overflowY: "auto" }}>
-                {otaLogs.length === 0 ? (
-                  <div style={{ padding: "24px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>
-                    No activity yet
-                  </div>
-                ) : otaLogs.map((log) => {
-                  const actionColor = ACTION_COLORS[log.action] ?? "#64748B";
-                  const icon = log.action === "note_added" ? "✎" : log.action === "assigned" ? "◎" : log.action === "metric_updated" ? "◆" : "↻";
+              {showTaskForm && (
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input placeholder="Task title *" value={newTask.title}
+                    onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))}
+                    style={{ padding: "7px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12, outline: "none" }} />
+                  <textarea placeholder="Description (optional)" value={newTask.description}
+                    onChange={(e) => setNewTask((p) => ({ ...p, description: e.target.value }))}
+                    rows={2}
+                    style={{ padding: "7px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12, outline: "none", resize: "none", fontFamily: "inherit" }} />
+                  <select value={newTask.priority} onChange={(e) => setNewTask((p) => ({ ...p, priority: e.target.value }))}
+                    style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12, background: "#FFF" }}>
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
+                  </select>
+                  <select value={newTask.assignedTo} onChange={(e) => setNewTask((p) => ({ ...p, assignedTo: e.target.value }))}
+                    style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12, background: "#FFF" }}>
+                    <option value="">Unassigned</option>
+                    {taskUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                  <input type="date" value={newTask.dueDate} onChange={(e) => setNewTask((p) => ({ ...p, dueDate: e.target.value }))}
+                    style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12 }} />
+                  <button onClick={createTask} disabled={!newTask.title.trim() || savingTask}
+                    style={{ padding: "7px 0", borderRadius: 7, border: "none",
+                      background: newTask.title.trim() ? "#2563EB" : "#E2E8F0",
+                      color: newTask.title.trim() ? "#FFF" : "#94A3B8",
+                      fontSize: 12, fontWeight: 700, cursor: newTask.title.trim() ? "pointer" : "not-allowed" }}>
+                    {savingTask ? "Creating…" : "Create Task"}
+                  </button>
+                </div>
+              )}
+              <div style={{ maxHeight: 440, overflowY: "auto", padding: tasks.length === 0 ? "20px 14px" : "4px 0" }}>
+                {tasks.length === 0 ? (
+                  <div style={{ textAlign: "center", color: "#94A3B8", fontSize: 12 }}>No tasks yet</div>
+                ) : tasks.map((task) => {
+                  const priorityColor = task.priority === "high" ? "#DC2626" : task.priority === "medium" ? "#D97706" : "#64748B";
+                  const isDone = task.status === "done";
                   return (
-                    <div key={log.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10 }}>
-                      <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-                        background: actionColor + "18", display: "flex", alignItems: "center",
-                        justifyContent: "center", fontSize: 11, color: actionColor }}>
-                        {icon}
-                      </div>
+                    <div key={task.id} style={{ padding: "9px 14px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <button onClick={() => updateTaskStatus(task.id, isDone ? "open" : "done")}
+                        style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 1,
+                          border: `2px solid ${isDone ? "#059669" : "#CBD5E1"}`,
+                          background: isDone ? "#059669" : "#FFF", cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#FFF", fontSize: 9 }}>
+                        {isDone ? "✓" : ""}
+                      </button>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>{log.userName || "System"}</span>
-                            {isPropertyView && log.otaListingId && (() => {
-                              const l = listings.find(x => Number(x.id) === Number(log.otaListingId));
-                              if (!l) return null;
-                              const c = OTA_COLORS[l.ota] ?? "#64748B";
-                              return (
-                                <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 8, background: c + "18", color: c }}>
-                                  {l.ota}
-                                </span>
-                              );
-                            })()}
-                          </div>
-                          <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: isDone ? "#94A3B8" : "#1E293B",
+                          textDecoration: isDone ? "line-through" : "none", lineHeight: 1.4 }}>
+                          {task.title}
                         </div>
-                        {log.action === "note_added" ? (
-                          <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
-                        ) : log.action === "metric_updated" ? (
-                          <div style={{ fontSize: 11, color: "#64748B" }}>
-                            <span style={{ fontWeight: 600 }}>{log.field}</span>:{" "}
-                            <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                            {" → "}
-                            <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 11, color: "#64748B" }}>
-                            <span style={{ fontWeight: 600 }}>{log.field}</span>:{" "}
-                            <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                            {" → "}
-                            <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                          </div>
+                        {task.description && (
+                          <div style={{ fontSize: 10, color: "#64748B", marginTop: 2, lineHeight: 1.4 }}>{task.description}</div>
                         )}
-                        {log.note && log.action !== "note_added" && (
-                          <div style={{ fontSize: 10, color: "#6366F1", marginTop: 2, fontStyle: "italic" }}>"{log.note}"</div>
-                        )}
+                        <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 10,
+                            background: priorityColor + "18", color: priorityColor }}>
+                            {task.priority}
+                          </span>
+                          {task.assignedName && (
+                            <span style={{ fontSize: 10, color: "#475569" }}>→ {task.assignedName}</span>
+                          )}
+                          {task.dueDate && (
+                            <span style={{ fontSize: 9, color: new Date(task.dueDate) < new Date() && !isDone ? "#DC2626" : "#64748B" }}>
+                              Due {task.dueDate}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <button onClick={() => deleteTask(task.id)}
+                        style={{ background: "none", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 13, padding: "0 2px" }}
+                        title="Delete">×</button>
                     </div>
                   );
                 })}
