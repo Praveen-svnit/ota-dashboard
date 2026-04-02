@@ -2,7 +2,6 @@ import { getSql } from "@/lib/db-postgres";
 import { parseCSV } from "@/lib/sheets";
 import { INV_SHEET_ID, INV_SHEET_TAB } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
-import { NextRequest } from "next/server";
 
 const COL_MAP: Record<string, string> = {
   "property id":     "property_id",
@@ -104,7 +103,7 @@ async function runSync() {
 }
 
 // Manual trigger — admin/head only
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const session = await getSession();
   if (session && session.role !== "admin" && session.role !== "head") {
     return Response.json({ error: "Forbidden" }, { status: 403 });
@@ -124,24 +123,3 @@ export async function POST(_req: NextRequest) {
   }
 }
 
-// Vercel cron trigger — called every hour via vercel.json
-export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const { upserted, skipped } = await runSync();
-    console.log(`[cron] sync-inventory: ${upserted} upserted, ${skipped} skipped`);
-    return Response.json({
-      ok: true,
-      upserted,
-      skipped,
-      message: `Synced ${upserted} properties (${skipped} skipped — no property ID)`,
-    });
-  } catch (err) {
-    console.error("[cron] sync-inventory error:", err);
-    return Response.json({ error: String(err) }, { status: 500 });
-  }
-}
