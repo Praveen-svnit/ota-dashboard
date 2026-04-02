@@ -2,7 +2,6 @@ export async function register() {
   // Only run in Node.js runtime (not edge), and only in the server process
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const { default: cron } = await import("node-cron");
   const { getSql } = await import("@/lib/db-postgres");
   const { parseCSV } = await import("@/lib/sheets");
   const { INV_SHEET_ID, INV_SHEET_TAB } = await import("@/lib/constants");
@@ -106,7 +105,8 @@ export async function register() {
     }
   }
 
-  // Run every hour at minute 0
-  cron.schedule("0 * * * *", syncInventory);
+  // Run immediately on startup, then every hour
+  syncInventory();
+  setInterval(syncInventory, 60 * 60 * 1000);
   console.log("[cron] sync-inventory: scheduled (every hour)");
 }
