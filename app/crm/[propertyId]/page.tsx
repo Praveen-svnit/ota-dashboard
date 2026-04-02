@@ -576,6 +576,14 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                             <span style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
                               {activeListing.status || "—"}
                             </span>
+                            {activeListing.subStatus && (
+                              <>
+                                <span style={{ fontSize: 22, fontWeight: 800, color: "#CBD5E1", lineHeight: 1 }}>·</span>
+                                <span style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+                                  {activeListing.subStatus}
+                                </span>
+                              </>
+                            )}
                             <button onClick={() => {
                               setEditing({ id: activeListing.id, field: "status" });
                               setEditValue(activeListing.status);
@@ -592,52 +600,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                             </button>
                           </div>
                         )}
-
-                        {/* Sub-status row */}
-                        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 11, color: "#94A3B8" }}>Sub-status:</span>
-                          {activeListing.ota === "Agoda" ? (
-                            <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>{activeListing.subStatus || "—"}</span>
-                          ) : isEditing("subStatus") ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 260 }}>
-                              <select value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                                style={{ padding: "6px 8px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 12 }}>
-                                <option value="">—</option>
-                                {getSubStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                              <input value={editNote} onChange={(e) => { setEditNote(e.target.value); setNoteErr(false); }}
-                                placeholder="Reason for change (required)…"
-                                style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
-                                  border: `1px solid ${noteErr ? "#FCA5A5" : "#CBD5E1"}`, outline: "none" }} />
-                              {noteErr && <span style={{ fontSize: 10, color: "#DC2626" }}>Note is required</span>}
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <button onClick={() => saveField(activeListing.id, "subStatus", editValue)} disabled={saving}
-                                  style={{ padding: "6px 14px", borderRadius: 7, border: "none",
-                                    background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                  {saving ? "Saving…" : "Save"}
-                                </button>
-                                <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); }}
-                                  style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid #E2E8F0",
-                                    background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>
-                                {activeListing.subStatus || "—"}
-                              </span>
-                              <button onClick={() => { setEditing({ id: activeListing.id, field: "subStatus" }); setEditValue(activeListing.subStatus ?? ""); setEditNote(""); setNoteErr(false); }}
-                                style={{ fontSize: 10, color: "#94A3B8", background: "none", border: "none",
-                                  cursor: "pointer", padding: "2px 6px", borderRadius: 5 }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "#F1F5F9")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                                ✎
-                              </button>
-                            </>
-                          )}
-                        </div>
                       </div>
 
                       {/* Right: key stats */}
