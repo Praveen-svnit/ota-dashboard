@@ -100,7 +100,7 @@ function TabStrip({ tabs, active, onChange }: {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function StatusConfigPage() {
-  const [tab,       setTab]       = useState<"combos" | "assignment" | "active">("combos");
+  const [tab,       setTab]       = useState<"combos" | "active">("combos");
   const [combos,    setCombos]    = useState<Combo[]>([]);
   const [configs,   setConfigs]   = useState<OtaConfig[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -113,11 +113,12 @@ export default function StatusConfigPage() {
   const [newStatuses,  setNewStatuses]  = useState<string[]>([]);
   const [savingCombo,  setSavingCombo]  = useState(false);
 
-  // OTA assignment state
-  const [selOta,    setSelOta]    = useState(OTAS[0]);
-  const [pending,   setPending]   = useState<Record<string, string[]>>({}); // ota → enabled subStatuses
-  const [savingOta, setSavingOta] = useState<string | null>(null);
-  const [savedOta,  setSavedOta]  = useState<string | null>(null);
+  // Pending OTA sub-status selections (ota → enabled subStatuses)
+  const [pending, setPending] = useState<Record<string, string[]>>({});
+
+  // Inline OTA picker state (Combo Manager tab)
+  const [otaEditFor,      setOtaEditFor]      = useState<string | null>(null); // subStatus row
+  const [savingOtaAssign, setSavingOtaAssign] = useState(false);
 
   async function fetchAll() {
     setLoading(true);
@@ -166,7 +167,25 @@ export default function StatusConfigPage() {
     fetchAll();
   }
 
-  // ── OTA assignment actions ───────────────────────────────────────────────
+  // ── Inline OTA assignment (from Combo Manager) ──────────────────────────
+
+  async function saveOtaAssignments(subStatus: string) {
+    const origOtas = usedBy[subStatus] ?? [];
+    const newOtas  = OTAS.filter(ota => (pending[ota] ?? []).includes(subStatus));
+    const added    = newOtas.filter(o => !origOtas.includes(o));
+    const removed  = origOtas.filter(o => !newOtas.includes(o));
+    if (added.length === 0 && removed.length === 0) { setOtaEditFor(null); return; }
+    setSavingOtaAssign(true);
+    await Promise.all([...new Set([...added, ...removed])].map(ota =>
+      fetch("/api/admin/status-config", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ota, subStatuses: pending[ota] ?? [] }),
+      })
+    ));
+    setSavingOtaAssign(false);
+    setOtaEditFor(null);
+    fetchAll();
+  }
 
   function toggleCombo(ota: string, subStatus: string) {
     setPending(prev => {
@@ -174,29 +193,6 @@ export default function StatusConfigPage() {
       const next = cur.includes(subStatus) ? cur.filter(s => s !== subStatus) : [...cur, subStatus];
       return { ...prev, [ota]: next };
     });
-  }
-
-  async function saveOtaAssignment(ota: string) {
-    setSavingOta(ota);
-    await fetch("/api/admin/status-config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ota, subStatuses: pending[ota] ?? [] }),
-    });
-    setSavingOta(null);
-    setSavedOta(ota);
-    setTimeout(() => setSavedOta(null), 2000);
-    fetchAll();
-  }
-
-  async function resetOta(ota: string) {
-    if (!confirm(`Reset "${ota}" to defaults?`)) return;
-    await fetch("/api/admin/status-config", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ota }),
-    });
-    fetchAll();
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -210,19 +206,13 @@ export default function StatusConfigPage() {
     }
   }
 
-  const selConfig = configs.find(c => c.ota === selOta);
-  const pendingForOta = pending[selOta] ?? [];
-  const isDirty = JSON.stringify([...(pendingForOta)].sort()) !==
-    JSON.stringify([...(selConfig?.subStatuses ?? [])].sort());
-
   if (loading) return (
     <div style={{ padding: 40, textAlign: "center", color: "#94A3B8", fontSize: 14 }}>Loading…</div>
   );
 
   const TABS = [
-    { key: "combos",     label: "Combo Manager" },
-    { key: "assignment", label: "OTA Assignment" },
-    { key: "active",     label: "Active Logic" },
+    { key: "combos", label: "Combo Manager" },
+    { key: "active", label: "Active Logic" },
   ];
 
   return (
@@ -281,18 +271,68 @@ export default function StatusConfigPage() {
                       )}
                     </div>
 
-                    {/* Used by */}
-                    <div style={{ paddingTop: 4 }}>
-                      {(usedBy[combo.subStatus] ?? []).length === 0 ? (
-                        <span style={{ fontSize: 10, color: "#CBD5E1" }}>None</span>
+                    {/* Used by — inline editable */}
+                    <div style={{ paddingTop: 2 }}>
+                      {otaEditFor === combo.subStatus ? (
+                        <div style={{ background: "#F8FAFC", border: "1px solid #CBD5E1",
+                          borderRadius: 8, padding: "8px 10px" }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8",
+                            textTransform: "uppercase", marginBottom: 6, letterSpacing: "0.05em" }}>
+                            Assign OTAs
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            {OTAS.map(ota => {
+                              const active = (pending[ota] ?? []).includes(combo.subStatus);
+                              const col = otaColor(ota);
+                              return (
+                                <label key={ota} style={{ display: "flex", alignItems: "center",
+                                  gap: 6, cursor: "pointer", padding: "2px 4px", borderRadius: 4,
+                                  background: active ? hex2rgba(col, 0.08) : "transparent" }}>
+                                  <input type="checkbox" checked={active}
+                                    onChange={() => toggleCombo(ota, combo.subStatus)}
+                                    style={{ accentColor: col, width: 12, height: 12, cursor: "pointer" }} />
+                                  <span style={{ fontSize: 11, fontWeight: active ? 700 : 400,
+                                    color: active ? col : "#475569" }}>{ota}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
+                            <button onClick={() => saveOtaAssignments(combo.subStatus)}
+                              disabled={savingOtaAssign}
+                              style={{ flex: 1, padding: "4px 0", background: "#4F46E5", color: "#fff",
+                                border: "none", borderRadius: 5, cursor: "pointer",
+                                fontSize: 11, fontWeight: 700 }}>
+                              {savingOtaAssign ? "…" : "Save"}
+                            </button>
+                            <button onClick={() => setOtaEditFor(null)}
+                              style={{ padding: "4px 8px", background: "#E2E8F0", color: "#64748B",
+                                border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11 }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
                       ) : (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                          {(usedBy[combo.subStatus] ?? []).map(ota => (
-                            <span key={ota} style={{ fontSize: 9, fontWeight: 700,
-                              padding: "2px 6px", borderRadius: 10,
-                              background: hex2rgba(otaColor(ota), 0.12),
-                              color: otaColor(ota) }}>{ota}</span>
-                          ))}
+                        <div onClick={() => { setOtaEditFor(combo.subStatus); setEditingCombo(null); }}
+                          title="Click to assign OTAs"
+                          style={{ cursor: "pointer", display: "flex", flexWrap: "wrap",
+                            gap: 3, paddingTop: 2, minHeight: 22 }}>
+                          {(usedBy[combo.subStatus] ?? []).length === 0 ? (
+                            <span style={{ fontSize: 10, color: "#CBD5E1",
+                              borderBottom: "1px dashed #CBD5E1", lineHeight: 1.4 }}>
+                              None
+                            </span>
+                          ) : (
+                            <>
+                              {(usedBy[combo.subStatus] ?? []).map(ota => (
+                                <span key={ota} style={{ fontSize: 9, fontWeight: 700,
+                                  padding: "2px 6px", borderRadius: 10,
+                                  background: hex2rgba(otaColor(ota), 0.12),
+                                  color: otaColor(ota) }}>{ota}</span>
+                              ))}
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: 1 }}>✎</span>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -374,113 +414,7 @@ export default function StatusConfigPage() {
           </div>
         )}
 
-        {/* ── TAB 2: OTA Assignment ── */}
-        {tab === "assignment" && (
-          <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16 }}>
-
-            {/* OTA nav */}
-            <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", alignSelf: "start" }}>
-              {OTAS.map(ota => {
-                const cfg = configs.find(c => c.ota === ota);
-                const col = otaColor(ota);
-                return (
-                  <button key={ota} onClick={() => setSelOta(ota)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "10px 14px", background: selOta === ota ? hex2rgba(col, 0.08) : "transparent",
-                      border: "none", borderLeft: selOta === ota ? `3px solid ${col}` : "3px solid transparent",
-                      cursor: "pointer", transition: "all 0.15s",
-                    }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: selOta === ota ? col : "#374151" }}>{ota}</div>
-                    <div style={{ fontSize: 10, color: "#94A3B8", marginTop: 2 }}>
-                      {cfg?.isDefault ? "Default" : `${cfg?.subStatuses.length ?? 0} combos`}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Combo checklist for selected OTA */}
-            <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
-              {/* Header */}
-              <div style={{ padding: "14px 18px", borderBottom: "1px solid #E2E8F0",
-                display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: otaColor(selOta) }}>{selOta}</div>
-                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>
-                    {pendingForOta.length} of {combos.length} combos active
-                    {selConfig?.isDefault && <span style={{ marginLeft: 8, padding: "1px 6px",
-                      background: "#FEF9C3", color: "#854D0E", borderRadius: 4, fontSize: 9, fontWeight: 700 }}>DEFAULT</span>}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {!selConfig?.isDefault && (
-                    <button onClick={() => resetOta(selOta)}
-                      style={{ padding: "6px 12px", background: "none", border: "1px solid #E2E8F0",
-                        borderRadius: 7, cursor: "pointer", fontSize: 11, color: "#94A3B8" }}>
-                      Reset to default
-                    </button>
-                  )}
-                  <button onClick={() => saveOtaAssignment(selOta)} disabled={!isDirty || savingOta === selOta}
-                    style={{ padding: "6px 16px", borderRadius: 7, border: "none",
-                      background: savedOta === selOta ? "#10B981" : isDirty ? otaColor(selOta) : "#E2E8F0",
-                      color: isDirty ? "#fff" : "#94A3B8",
-                      cursor: isDirty ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700 }}>
-                    {savingOta === selOta ? "Saving…" : savedOta === selOta ? "✓ Saved" : "Save Changes"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Select all / none */}
-              <div style={{ padding: "8px 18px", borderBottom: "1px solid #F1F5F9",
-                display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: "#94A3B8" }}>Quick select:</span>
-                <button onClick={() => setPending(p => ({ ...p, [selOta]: combos.map(c => c.subStatus) }))}
-                  style={{ fontSize: 10, color: "#4F46E5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                  All
-                </button>
-                <button onClick={() => setPending(p => ({ ...p, [selOta]: [] }))}
-                  style={{ fontSize: 10, color: "#64748B", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                  None
-                </button>
-              </div>
-
-              {/* Combo list */}
-              <div style={{ padding: "8px 0" }}>
-                {combos.map(combo => {
-                  const active = pendingForOta.includes(combo.subStatus);
-                  return (
-                    <label key={combo.subStatus}
-                      style={{ display: "flex", alignItems: "center", gap: 12,
-                        padding: "8px 18px", cursor: "pointer",
-                        background: active ? hex2rgba(otaColor(selOta), 0.04) : "transparent",
-                        borderLeft: active ? `2px solid ${otaColor(selOta)}` : "2px solid transparent",
-                        transition: "all 0.1s" }}>
-                      <input type="checkbox" checked={active}
-                        onChange={() => toggleCombo(selOta, combo.subStatus)}
-                        style={{ accentColor: otaColor(selOta), width: 14, height: 14 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: active ? "#1E293B" : "#475569" }}>
-                          {combo.subStatus}
-                        </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3 }}>
-                          {combo.statuses.map(s => (
-                            <span key={s} style={{ fontSize: 9, fontWeight: 500, color: "#64748B",
-                              background: "#F1F5F9", padding: "1px 6px", borderRadius: 4 }}>
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 3: Active Logic ── */}
+        {/* ── TAB 2: Active Logic ── */}
         {tab === "active" && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
             {configs.map(cfg => {
