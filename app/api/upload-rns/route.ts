@@ -91,17 +91,13 @@ export async function POST(req: NextRequest) {
 
       if (table === "stay") {
         await sql`
-          INSERT INTO stay_rns (date, channel, rns, revenue, initial_prop_id, final_prop_id, synced_at)
+          INSERT INTO stay_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
           VALUES (${date}::date, ${rec.channel}, ${rns}, ${revenue}, ${initId}, ${finalId}, NOW())
-          ON CONFLICT (date, channel, initial_prop_id, final_prop_id) DO UPDATE SET
-            rns = EXCLUDED.rns, revenue = EXCLUDED.revenue, synced_at = NOW()
         `;
       } else {
         await sql`
-          INSERT INTO sold_rns (date, channel, rns, revenue, initial_prop_id, final_prop_id, synced_at)
+          INSERT INTO sold_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
           VALUES (${date}::date, ${rec.channel}, ${rns}, ${revenue}, ${initId}, ${finalId}, NOW())
-          ON CONFLICT (date, channel, initial_prop_id, final_prop_id) DO UPDATE SET
-            rns = EXCLUDED.rns, revenue = EXCLUDED.revenue, synced_at = NOW()
         `;
       }
       upserted++;

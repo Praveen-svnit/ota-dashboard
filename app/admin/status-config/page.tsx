@@ -106,12 +106,15 @@ export default function StatusConfigPage() {
   const [loading,   setLoading]   = useState(true);
 
   // Combo manager state
-  const [editingCombo, setEditingCombo] = useState<string | null>(null); // subStatus key
-  const [editStatuses, setEditStatuses] = useState<string[]>([]);
-  const [showAddForm,  setShowAddForm]  = useState(false);
-  const [newSubStatus, setNewSubStatus] = useState("");
-  const [newStatuses,  setNewStatuses]  = useState<string[]>([]);
-  const [savingCombo,  setSavingCombo]  = useState(false);
+  const [editingCombo,    setEditingCombo]    = useState<string | null>(null); // subStatus key
+  const [editStatuses,    setEditStatuses]    = useState<string[]>([]);
+  const [editSubStatusName, setEditSubStatusName] = useState("");
+  const [showAddForm,     setShowAddForm]     = useState(false);
+  const [newSubStatus,    setNewSubStatus]    = useState("");
+  const [newStatuses,     setNewStatuses]     = useState<string[]>([]);
+  const [savingCombo,     setSavingCombo]     = useState(false);
+  const [deleteConfirm,   setDeleteConfirm]   = useState<{ subStatus: string; affectedCount: number } | null>(null);
+  const [deletingCombo,   setDeletingCombo]   = useState(false);
 
   // Pending OTA sub-status selections (ota → enabled subStatuses)
   const [pending, setPending] = useState<Record<string, string[]>>({});
@@ -144,6 +147,16 @@ export default function StatusConfigPage() {
 
   async function saveCombo(subStatus: string, statuses: string[]) {
     setSavingCombo(true);
+    // Rename if sub-status name was changed
+    const newName = editSubStatusName.trim();
+    if (newName && newName !== subStatus) {
+      await fetch("/api/admin/status-config/master", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldSubStatus: subStatus, newSubStatus: newName }),
+      });
+      subStatus = newName;
+    }
     await fetch("/api/admin/status-config/master", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -158,12 +171,31 @@ export default function StatusConfigPage() {
   }
 
   async function deleteCombo(subStatus: string) {
-    if (!confirm(`Delete combo "${subStatus}"? It will be removed from all OTA configs.`)) return;
-    await fetch("/api/admin/status-config/master", {
+    setDeletingCombo(true);
+    const res = await fetch("/api/admin/status-config/master", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subStatus }),
     });
+    const data = await res.json();
+    setDeletingCombo(false);
+    if (data.needsConfirm) {
+      setDeleteConfirm({ subStatus, affectedCount: data.affectedCount });
+    } else {
+      fetchAll();
+    }
+  }
+
+  async function confirmDelete(autoClear: boolean) {
+    if (!deleteConfirm) return;
+    setDeletingCombo(true);
+    await fetch("/api/admin/status-config/master", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subStatus: deleteConfirm.subStatus, confirmed: true, autoClear }),
+    });
+    setDeletingCombo(false);
+    setDeleteConfirm(null);
     fetchAll();
   }
 
@@ -255,9 +287,21 @@ export default function StatusConfigPage() {
                     borderBottom: idx < combos.length - 1 ? "1px solid #F1F5F9" : "none",
                     background: isEditing ? "#F8FAFF" : "transparent",
                   }}>
-                    {/* Sub-status name */}
-                    <div style={{ fontWeight: 600, fontSize: 12, color: "#1E293B", paddingTop: 4 }}>
-                      {combo.subStatus}
+                    {/* Sub-status name — editable when in edit mode */}
+                    <div style={{ paddingTop: 2 }}>
+                      {isEditing ? (
+                        <input
+                          value={editSubStatusName}
+                          onChange={e => setEditSubStatusName(e.target.value)}
+                          style={{ fontWeight: 600, fontSize: 12, color: "#1E293B",
+                            padding: "4px 8px", border: "1px solid #CBD5E1", borderRadius: 5,
+                            width: "100%", outline: "none" }}
+                        />
+                      ) : (
+                        <div style={{ fontWeight: 600, fontSize: 12, color: "#1E293B", paddingTop: 2 }}>
+                          {combo.subStatus}
+                        </div>
+                      )}
                     </div>
 
                     {/* Statuses — edit mode or display */}
@@ -341,7 +385,7 @@ export default function StatusConfigPage() {
                     <div style={{ display: "flex", gap: 6, paddingTop: 2 }}>
                       {isEditing ? (
                         <>
-                          <button onClick={() => saveCombo(combo.subStatus, editStatuses)} disabled={savingCombo}
+                          <button onClick={() => saveCombo(combo.subStatus, editStatuses)} disabled={savingCombo || !editSubStatusName.trim()}
                             style={{ padding: "3px 10px", background: "#4F46E5", color: "#fff", border: "none",
                               borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
                             {savingCombo ? "…" : "Save"}
@@ -354,7 +398,7 @@ export default function StatusConfigPage() {
                         </>
                       ) : (
                         <>
-                          <button onClick={() => { setEditingCombo(combo.subStatus); setEditStatuses([...combo.statuses]); }}
+                          <button onClick={() => { setEditingCombo(combo.subStatus); setEditStatuses([...combo.statuses]); setEditSubStatusName(combo.subStatus); }}
                             style={{ padding: "3px 8px", background: "none", border: "1px solid #E2E8F0",
                               borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#475569" }}>
                             ✎
@@ -479,6 +523,49 @@ export default function StatusConfigPage() {
         )}
 
       </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {deleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px",
+            maxWidth: 420, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#0F172A", marginBottom: 8 }}>
+              Delete "{deleteConfirm.subStatus}"?
+            </div>
+            <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>
+              <span style={{ fontWeight: 700, color: "#DC2626" }}>{deleteConfirm.affectedCount} {deleteConfirm.affectedCount === 1 ? "property" : "properties"}</span>
+              {" "}currently have this sub-status. Choose how to handle them:
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => confirmDelete(true)} disabled={deletingCombo}
+                style={{ padding: "10px 16px", background: "#DC2626", color: "#fff",
+                  border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13,
+                  fontWeight: 700, textAlign: "left", opacity: deletingCombo ? 0.6 : 1 }}>
+                Delete + clear from {deleteConfirm.affectedCount} {deleteConfirm.affectedCount === 1 ? "property" : "properties"}
+                <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.85, marginTop: 2 }}>
+                  Sets sub-status to blank on affected properties
+                </div>
+              </button>
+              <button onClick={() => confirmDelete(false)} disabled={deletingCombo}
+                style={{ padding: "10px 16px", background: "#F1F5F9", color: "#374151",
+                  border: "1px solid #E2E8F0", borderRadius: 7, cursor: "pointer", fontSize: 13,
+                  fontWeight: 600, textAlign: "left", opacity: deletingCombo ? 0.6 : 1 }}>
+                Delete only (keep existing values on properties)
+                <div style={{ fontSize: 10, fontWeight: 400, color: "#94A3B8", marginTop: 2 }}>
+                  Properties keep the old value but it won't appear in dropdowns
+                </div>
+              </button>
+              <button onClick={() => setDeleteConfirm(null)} disabled={deletingCombo}
+                style={{ padding: "7px 16px", background: "none", border: "none",
+                  cursor: "pointer", fontSize: 12, color: "#94A3B8" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

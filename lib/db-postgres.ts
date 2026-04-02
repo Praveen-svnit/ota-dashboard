@@ -45,51 +45,51 @@ export async function initPostgresSchema() {
 
   await sql`
     CREATE TABLE IF NOT EXISTS stay_rns (
-      id               SERIAL PRIMARY KEY,
-      date             DATE NOT NULL,
-      channel          TEXT NOT NULL,
-      rns              INTEGER NOT NULL DEFAULT 0,
-      revenue          NUMERIC(12,2) NOT NULL DEFAULT 0,
-      initial_prop_id  TEXT NOT NULL DEFAULT '',
-      final_prop_id    TEXT NOT NULL DEFAULT '',
-      status           TEXT,
-      synced_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (date, channel, initial_prop_id, final_prop_id)
+      id                      SERIAL PRIMARY KEY,
+      property_id             BIGINT,
+      initial_property_id     BIGINT,
+      booking_id              VARCHAR(64),
+      created_at              DATE,
+      checkin                 DATE,
+      checkout                DATE,
+      guest_status_desc       VARCHAR(128),
+      booking_source_desc     VARCHAR(128),
+      ota_booking_source_desc VARCHAR(128),
+      ota_booking_source      INT,
+      rns                     INT             NOT NULL DEFAULT 0,
+      rev                     NUMERIC(18,4)   NOT NULL DEFAULT 0,
+      zone                    TEXT,
+      synced_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
     )
   `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_date    ON stay_rns(date)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_channel ON stay_rns(channel)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_final   ON stay_rns(final_prop_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_initial ON stay_rns(initial_prop_id)`;
-
-  // Booking-level columns (added for Axisroom export format)
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_id          TEXT`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_created_at  DATE`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS checkout            DATE`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS guest_status_desc   TEXT`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS booking_source_desc TEXT`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS ota_booking_source  INTEGER`;
-  await sql`ALTER TABLE stay_rns ADD COLUMN IF NOT EXISTS zone                TEXT`;
-  await sql`ALTER TABLE stay_rns ALTER COLUMN revenue TYPE NUMERIC(14,4)`;
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_stayrns_booking_id ON stay_rns(booking_id) WHERE booking_id IS NOT NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_checkin  ON stay_rns(checkin)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_ota      ON stay_rns(ota_booking_source_desc)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_property ON stay_rns(property_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_stay_booking_id ON stay_rns(booking_id) WHERE booking_id IS NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS sold_rns (
-      id               SERIAL PRIMARY KEY,
-      date             DATE NOT NULL,
-      channel          TEXT NOT NULL,
-      rns              INTEGER NOT NULL DEFAULT 0,
-      revenue          NUMERIC(12,2) NOT NULL DEFAULT 0,
-      initial_prop_id  TEXT NOT NULL DEFAULT '',
-      final_prop_id    TEXT NOT NULL DEFAULT '',
-      synced_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (date, channel, initial_prop_id, final_prop_id)
+      id                      SERIAL PRIMARY KEY,
+      property_id             BIGINT,
+      initial_property_id     BIGINT,
+      booking_id              VARCHAR(64),
+      created_at              DATE,
+      checkin                 DATE,
+      checkout                DATE,
+      guest_status_desc       VARCHAR(128),
+      booking_source_desc     VARCHAR(128),
+      ota_booking_source_desc VARCHAR(128),
+      ota_booking_source      INT,
+      rns                     INT             NOT NULL DEFAULT 0,
+      rev                     NUMERIC(18,4)   NOT NULL DEFAULT 0,
+      zone                    TEXT,
+      synced_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
     )
   `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_date    ON sold_rns(date)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_channel ON sold_rns(channel)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_final   ON sold_rns(final_prop_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_initial ON sold_rns(initial_prop_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_checkin  ON sold_rns(checkin)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_ota      ON sold_rns(ota_booking_source_desc)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_property ON sold_rns(property_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_booking_id ON sold_rns(booking_id) WHERE booking_id IS NOT NULL`;
 
   // ── Users ──────────────────────────────────────────────────────────────────
   await sql`

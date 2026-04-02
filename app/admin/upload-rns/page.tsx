@@ -74,7 +74,7 @@ export default function UploadRnsPage() {
         Upload RNS Data
       </h1>
       <p style={{ fontSize: 13, color: "#64748B", marginBottom: 24 }}>
-        Upload historical Stay or Sold RNs CSV. Duplicate rows (same date + channel + property IDs) are safely ignored.
+        Upload historical Stay or Sold RNs CSV. Rows missing a date or channel are skipped.
       </p>
 
       <div style={card}>
@@ -121,7 +121,7 @@ export default function UploadRnsPage() {
               }}
             />
             <p style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>
-              Expected columns: Date, Channel, RNs, Revenue, Initial Property ID, Final Property ID
+              Expected columns: Date, Channel, RNs, Rev, Initial Property ID, Final Property ID
             </p>
           </div>
 
@@ -173,12 +173,12 @@ export default function UploadRnsPage() {
           </thead>
           <tbody>
             {[
-              ["Date / Stay Date / Sold Date", "date", "Yes"],
-              ["Channel / OTA", "channel", "Yes"],
+              ["Date / Stay Date / Sold Date / Booking Date", "checkin", "Yes"],
+              ["Channel / OTA", "ota_booking_source_desc", "Yes"],
               ["RNs / Room Nights / Room Nights Sold", "rns", "No (defaults 0)"],
-              ["Revenue / Rev", "revenue", "No (defaults 0)"],
-              ["Initial Property ID / Initial Prop ID", "initial_prop_id", "No (defaults empty)"],
-              ["Final Property ID / Final Prop ID / Property ID", "final_prop_id", "No (defaults empty)"],
+              ["Revenue / Rev", "rev", "No (defaults 0)"],
+              ["Initial Property ID / Initial Prop ID / Initial ID", "initial_property_id", "No (defaults empty)"],
+              ["Final Property ID / Final Prop ID / Property ID / Final ID", "property_id", "No (defaults empty)"],
             ].map(([headers, col, req]) => (
               <tr key={col}>
                 <td style={{ padding: "6px 8px", borderBottom: "1px solid #F1F5F9", color: "#475569" }}>{headers}</td>

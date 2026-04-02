@@ -45,11 +45,11 @@ export async function GET() {
     };
 
     const soldRows = await sql`
-      SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
+      SELECT checkin AS sold_date, ota_booking_source_desc AS ota, SUM(rns) as rns
       FROM sold_rns
-      WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
-      GROUP BY date, channel
-      ORDER BY date ASC
+      WHERE checkin >= ${fmt(start)} AND checkin <= ${fmt(end)}
+      GROUP BY checkin, ota_booking_source_desc
+      ORDER BY checkin ASC
     ` as { sold_date: string; ota: string; rns: number }[];
 
     if (soldRows.length > 0) {
@@ -57,11 +57,11 @@ export async function GET() {
     } else {
       // fallback to stay_rns
       const stayRows = await sql`
-        SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
+        SELECT checkin AS sold_date, ota_booking_source_desc AS ota, SUM(rns) as rns
         FROM stay_rns
-        WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
-        GROUP BY date, channel
-        ORDER BY date ASC
+        WHERE checkin >= ${fmt(start)} AND checkin <= ${fmt(end)}
+        GROUP BY checkin, ota_booking_source_desc
+        ORDER BY checkin ASC
       ` as { sold_date: string; ota: string; rns: number }[];
       populate(stayRows);
     }

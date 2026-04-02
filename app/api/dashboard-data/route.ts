@@ -206,10 +206,10 @@ async function getRnsFromDb(): Promise<RawDataResult | null> {
 
   const now = new Date();
   const rows = await sql`
-    SELECT date::text AS date, channel, rns
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
     FROM stay_rns
-    WHERE UPPER(status) = 'CICO' OR LOWER(guest_status_desc) = 'checkout'
-    ORDER BY date
+    WHERE LOWER(guest_status_desc) = 'checkout'
+    ORDER BY checkin
   ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily, chanDaily } = buildDMap(rows);
@@ -269,9 +269,9 @@ async function getSoldFromDb(): Promise<SoldMonthlyData | null> {
 
   const now = new Date();
   const rows = await sql`
-    SELECT date::text AS date, channel, rns
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
     FROM sold_rns
-    ORDER BY date
+    ORDER BY checkin
   ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily } = buildDMap(rows);
@@ -313,15 +313,15 @@ async function getSoldFromDb(): Promise<SoldMonthlyData | null> {
 /* ── Revenue from DB (stay_rns.revenue, CICO only) ─────────────────────── */
 async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>> | null> {
   const sql = getSql();
-  const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns WHERE revenue > 0`;
+  const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns WHERE rev > 0`;
   if (Number(countRow.n) === 0) return null;
 
   const now = new Date();
   const rows = await sql`
-    SELECT date::text AS date, channel, revenue AS rns
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rev AS rns
     FROM stay_rns
-    WHERE UPPER(status) = 'CICO' OR LOWER(guest_status_desc) = 'checkout'
-    ORDER BY date
+    WHERE LOWER(guest_status_desc) = 'checkout'
+    ORDER BY checkin
   ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily } = buildDMap(rows);

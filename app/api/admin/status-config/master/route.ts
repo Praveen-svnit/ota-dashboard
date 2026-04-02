@@ -115,14 +115,89 @@ export async function POST(req: NextRequest) {
   return Response.json({ ok: true });
 }
 
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session || (session.role !== "admin" && session.role !== "head"))
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+
+  const { oldSubStatus, newSubStatus } = await req.json() as {
+    oldSubStatus: string; newSubStatus: string;
+  };
+  if (!oldSubStatus?.trim() || !newSubStatus?.trim())
+    return Response.json({ error: "Invalid payload" }, { status: 400 });
+  if (oldSubStatus === newSubStatus) return Response.json({ ok: true });
+
+  const sql = getSql();
+
+  // 1. Rename in master (PK update — no FK constraints)
+  await sql.query(
+    `UPDATE status_config_master SET sub_status = $1 WHERE sub_status = $2`,
+    [newSubStatus.trim(), oldSubStatus]
+  );
+
+  // 2. Replace in all OTA config statuses arrays
+  await sql.query(`
+    UPDATE ota_status_config
+    SET statuses = (
+      SELECT jsonb_agg(CASE WHEN s = $1 THEN $2 ELSE s END)
+      FROM jsonb_array_elements_text(statuses) AS s
+    )
+    WHERE statuses @> $3::jsonb
+  `, [oldSubStatus, newSubStatus.trim(), JSON.stringify([oldSubStatus])]);
+
+  // 3. Rename on all properties
+  await sql.query(
+    `UPDATE ota_listing SET sub_status = $1, crm_updated_at = NOW() WHERE sub_status = $2`,
+    [newSubStatus.trim(), oldSubStatus]
+  );
+
+  return Response.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session || (session.role !== "admin" && session.role !== "head"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  const { subStatus } = await req.json() as { subStatus: string };
+  const { subStatus, confirmed, autoClear } = await req.json() as {
+    subStatus: string; confirmed?: boolean; autoClear?: boolean;
+  };
   const sql = getSql();
   await ensureMasterTable(sql);
+
+  // Count affected properties
+  const affected = await sql.query(
+    `SELECT COUNT(*) AS n FROM ota_listing WHERE sub_status = $1`,
+    [subStatus]
+  ) as { n: string }[];
+  const affectedCount = Number(affected[0].n);
+
+  // Return count for UI confirmation if properties are affected and not yet confirmed
+  if (affectedCount > 0 && !confirmed) {
+    return Response.json({ needsConfirm: true, affectedCount });
+  }
+
+  // Delete from master
   await sql.query(`DELETE FROM status_config_master WHERE sub_status = $1`, [subStatus]);
+
+  // Optionally clear from all properties
+  if (autoClear) {
+    await sql.query(
+      `UPDATE ota_listing SET sub_status = NULL, crm_updated_at = NOW() WHERE sub_status = $1`,
+      [subStatus]
+    );
+  }
+
+  // Remove from all OTA configs
+  await sql.query(`
+    UPDATE ota_status_config
+    SET statuses = (
+      SELECT COALESCE(jsonb_agg(s), '[]'::jsonb)
+      FROM jsonb_array_elements_text(statuses) AS s
+      WHERE s <> $1
+    )
+    WHERE statuses @> $2::jsonb
+  `, [subStatus, JSON.stringify([subStatus])]);
+
   return Response.json({ ok: true });
 }
