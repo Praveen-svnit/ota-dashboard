@@ -539,13 +539,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           <span style={{ fontSize: 10, color: "#94A3B8" }}>
                             {activeListing.crmUpdatedAt ? `Updated ${relativeTime(activeListing.crmUpdatedAt)}` : "Not yet updated"}
                           </span>
-                          <div style={{ flex: 1 }} />
-                          <button onClick={() => setShowTaskForm((v) => !v)}
-                            style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 7,
-                              border: "1px solid #E2E8F0", background: showTaskForm ? "#0F172A" : "#F8FAFC",
-                              color: showTaskForm ? "#FFF" : "#374151", cursor: "pointer", whiteSpace: "nowrap" }}>
-                            {showTaskForm ? "Cancel" : "+ Add Task"}
-                          </button>
                         </div>
 
                         {/* Status display / edit */}
@@ -1025,6 +1018,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                     {tasks.filter((t) => t.status === "open").length} open
                   </span>
                 )}
+                <div style={{ flex: 1 }} />
+                <button onClick={() => setShowTaskForm((v) => !v)}
+                  style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 7,
+                    border: "1px solid #E2E8F0", background: showTaskForm ? "#0F172A" : "#F8FAFC",
+                    color: showTaskForm ? "#FFF" : "#374151", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {showTaskForm ? "✕ Cancel" : "+ Add Task"}
+                </button>
               </div>
               {showTaskForm && (
                 <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9", background: "#F8FAFC", display: "flex", flexDirection: "column", gap: 8 }}>
