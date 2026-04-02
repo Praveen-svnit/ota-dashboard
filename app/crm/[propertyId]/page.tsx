@@ -123,6 +123,13 @@ function statusPill(status: string) {
   );
 }
 
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function relativeTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -384,7 +391,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
           </span>
         </div>
         <span style={{ fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap", flexShrink: 0 }}>
-          FH Live: <strong style={{ color: "#475569" }}>{property.fhLiveDate || "—"}</strong>
+          FH Live: <strong style={{ color: "#475569" }}>{fmtDate(property.fhLiveDate)}</strong>
         </span>
       </div>
 
@@ -578,19 +585,32 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                             </div>
                           </div>
                         ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ width: 12, height: 12, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
-                            <span style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            {/* Status badge — colored, editable */}
+                            <span style={{
+                              display: "inline-flex", alignItems: "center", gap: 5,
+                              background: sc.bg, color: sc.color,
+                              padding: "5px 12px", borderRadius: 20,
+                              fontSize: 13, fontWeight: 700, lineHeight: 1,
+                            }}>
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
                               {activeListing.status || "—"}
                             </span>
+
+                            {/* Sub-status tag — neutral, read-only */}
                             {activeListing.subStatus && (
-                              <>
-                                <span style={{ fontSize: 22, fontWeight: 800, color: "#CBD5E1", lineHeight: 1 }}>·</span>
-                                <span style={{ fontSize: 22, fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
-                                  {activeListing.subStatus}
-                                </span>
-                              </>
+                              <span style={{
+                                display: "inline-flex", alignItems: "center",
+                                background: "#F1F5F9", color: "#475569",
+                                padding: "5px 12px", borderRadius: 20,
+                                fontSize: 12, fontWeight: 600, lineHeight: 1,
+                                border: "1px solid #E2E8F0",
+                              }}>
+                                {activeListing.subStatus}
+                              </span>
                             )}
+
+                            {/* Edit status button */}
                             <button onClick={() => {
                               setEditing({ id: activeListing.id, field: "status" });
                               setEditValue(activeListing.status);
@@ -621,7 +641,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                         <div style={{ textAlign: "center", padding: "10px 16px", borderRadius: 10, background: "#F8FAFC", border: "1px solid #F1F5F9" }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>FH LIVE</div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", lineHeight: 1 }}>
-                            {activeListing.liveDate || "—"}
+                            {fmtDate(activeListing.liveDate)}
                           </div>
                         </div>
                       </div>
@@ -965,7 +985,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   { label: "ID",       value: property.id },
                   { label: "City",     value: property.city || "—" },
                   { label: "FH Status",value: property.fhStatus || "—" },
-                  { label: "FH Live",  value: property.fhLiveDate || "—" },
+                  { label: "FH Live",  value: fmtDate(property.fhLiveDate) },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span>
