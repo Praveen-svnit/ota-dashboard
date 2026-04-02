@@ -272,55 +272,50 @@ export default function ListingDashboardPage() {
 
         return (
           <>
-            {/* ── KPI Cards ── */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-
-              {/* Live Props */}
-              <div style={{ ...kpi, flex: "2 1 200px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: T.textSec }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.live }}>Live</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.live, background: T.liveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.live.toLocaleString()}
-                    </span>
-                  </span>
-                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.notLive }}>Sold Out</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.notLive, background: T.notLiveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.soldOut.toLocaleString()}
-                    </span>
-                  </span>
-                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.textSec }}>Total</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 14, fontWeight: 800, color: T.textSec, background: "#F1F5F9", padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.total.toLocaleString()}
-                    </span>
-                  </span>
-                </div>
+          {/* ── KPI Cards ── */}
+          <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+            <div style={{ ...kpi, flex: "1 1 360px", minWidth: 260 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.textMut }}>Live Snapshot</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: liveColor(grandPct).text }}>{grandPct.toFixed(1)}% live</span>
               </div>
-
-              {/* Onboarded */}
-              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: T.orange, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-                  Onboarded · {new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}
-                </div>
-                <span style={{ fontSize: 19, fontWeight: 900, color: T.orange, background: T.orangeL, padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
-                  {data.stats.onboardedThisMonth.toLocaleString()}
-                </span>
-              </div>
-
-              {/* MTD */}
-              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: "3px solid #7C3AED" }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>MTD New Listings</div>
-                <span style={{ fontSize: 19, fontWeight: 900, color: "#7C3AED", background: "#EDE9FE", padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
-                  {data.stats.mtdListings.toLocaleString()}
-                </span>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))", gap: 12, marginTop: 10 }}>
+                {[{
+                  label: "Live",
+                  value: data.stats.live,
+                  color: T.live,
+                  bg: T.liveL,
+                }, {
+                  label: "Sold Out",
+                  value: data.stats.soldOut,
+                  color: T.notLive,
+                  bg: T.notLiveL,
+                }, {
+                  label: "Total",
+                  value: data.stats.total,
+                  color: T.textSec,
+                  bg: "#F1F5F9",
+                }].map(metric => (
+                  <div key={metric.label} style={{ padding: 8, borderRadius: 12, background: "#FFFFFF", border: "1px solid rgba(148, 163, 184, 0.3)" }}>
+                    <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em" }}>{metric.label}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 4, fontSize: 18, fontWeight: 900, color: metric.color, background: metric.bg, padding: "4px 0", borderRadius: 8 }}>{metric.value.toLocaleString()}</span>
+                  </div>
+                ))}
               </div>
             </div>
+            <div style={{ ...kpi, flex: "1 1 220px", minWidth: 220, display: "grid", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em" }}>Onboarded · {new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}</div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: T.orange }}>{data.stats.onboardedThisMonth.toLocaleString()}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", letterSpacing: "0.08em" }}>MTD New Listings</div>
+                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#6366F1" }}>{data.stats.mtdListings.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
 
-            {/* ── OTA Listing Status Table ── */}
+          {/* ── OTA Listing Status Table ── */}
             {(() => {
               const cats       = data.categories;
               const otasSorted = cats.map(r => r.ota);
@@ -333,6 +328,7 @@ export default function ListingDashboardPage() {
                 tatExhausted: acc.tatExhausted + r.tatExhausted,
               }), { live: 0, exception: 0, readyToGoLive: 0, inProcess: 0, tatExhausted: 0 });
               const grandTot = totals.live + totals.exception + totals.readyToGoLive + totals.inProcess + totals.tatExhausted;
+              const overallLivePct = grandTot > 0 ? ((totals.live + totals.exception) / grandTot) * 100 : 0;
 
               const ROWS = [
                 { key: "live",         label: "Live", color: "#166534", bg: "#F2FBF5", accent: "#22C55E" },
@@ -342,50 +338,51 @@ export default function ListingDashboardPage() {
                 { key: "tatExhausted", label: "TAT Exhausted", color: "#B42318", bg: "#FFF4F2", accent: "#F97066" },
               ] as const;
               const TABLE_THEME = {
-                shellBg: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
-                shellBorder: "#D6E0EB",
-                headerBg: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)",
-                headerBorder: "#D8E4EE",
-                title: "#0F172A",
-                subtitle: "#64748B",
-                badgeBg: "#EEF7F6",
-                badgeText: "#0F766E",
-                sectionBg: "#F6FAFD",
-                sectionBorder: "#DCE6EF",
-                stickyBg: "#FFFFFF",
-                stickyMutedBg: "#F4F9F8",
-                gridSoft: "#E2EAF2",
-                totalRowBg: "#EDF7F5",
-                totalCellBg: "#E4F3EF",
-                totalText: "#0F766E",
-                mutedText: "#64748B",
-                headerText: "#4A5E75",
+                shellBg: "linear-gradient(180deg, #0B1220 0%, #101828 100%)",
+                shellBorder: "rgba(148, 163, 184, 0.25)",
+                headerBg: "rgba(15, 118, 110, 0.08)",
+                headerBorder: "rgba(15, 118, 110, 0.25)",
+                title: "#E2E8F0",
+                subtitle: "#94A3B8",
+                badgeBg: "rgba(59, 130, 246, 0.14)",
+                badgeText: "#60A5FA",
+                sectionBg: "#0F172A",
+                sectionBorder: "rgba(148, 163, 184, 0.2)",
+                stickyBg: "#0F172A",
+                stickyMutedBg: "#111827",
+                gridSoft: "rgba(148, 163, 184, 0.25)",
+                totalRowBg: "#0A1120",
+                totalCellBg: "#0F172A",
+                totalText: "#38BDF8",
+                mutedText: "#94A3B8",
+                headerText: "#E2E8F0",
               };
 
               const TH_STICKY: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 2,
-                padding: "9px 14px", textAlign: "left", fontSize: 10, fontWeight: 700,
-                color: TABLE_THEME.headerText, background: TABLE_THEME.sectionBg,
-                borderBottom: `1px solid ${TABLE_THEME.sectionBorder}`, borderRight: `1px solid ${TABLE_THEME.sectionBorder}`,
+                padding: "11px 14px", textAlign: "left", fontSize: 10, fontWeight: 700,
+                color: TABLE_THEME.headerText, background: TABLE_THEME.stickyBg,
+                borderBottom: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
                 whiteSpace: "nowrap", minWidth: 130,
               };
               const TH_CELL: React.CSSProperties = {
                 padding: "9px 10px", textAlign: "center", fontSize: 10, fontWeight: 700,
                 color: TABLE_THEME.headerText, background: TABLE_THEME.sectionBg,
-                borderBottom: `1px solid ${TABLE_THEME.sectionBorder}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`, whiteSpace: "nowrap", minWidth: 76,
+                borderBottom: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`, whiteSpace: "nowrap", minWidth: 86,
               };
               const TD_STICKY: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 1,
                 padding: "9px 14px", fontSize: 11, fontWeight: 600,
-                background: TABLE_THEME.stickyBg, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
+                background: TABLE_THEME.stickyMutedBg, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
                 whiteSpace: "nowrap", minWidth: 220,
               };
               const TD_CELL: React.CSSProperties = {
                 padding: "9px 10px", textAlign: "center", borderTop: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
+                background: TABLE_THEME.sectionBg,
               };
               const INLINE_WRAP: React.CSSProperties = {
                 padding: "12px 14px",
-                background: "#FCFCFD",
+                background: "#0A1120",
                 borderTop: `1px solid ${TABLE_THEME.gridSoft}`,
                 borderBottom: `1px solid ${TABLE_THEME.gridSoft}`,
               };
@@ -394,7 +391,8 @@ export default function ListingDashboardPage() {
                 textAlign: "center",
                 fontWeight: 700,
                 border: `1px solid ${TABLE_THEME.gridSoft}`,
-                background: "#F8FAFC",
+                background: "#0A1120",
+                color: TABLE_THEME.headerText,
                 whiteSpace: "nowrap",
               };
               const INLINE_TD: React.CSSProperties = {
@@ -412,26 +410,27 @@ export default function ListingDashboardPage() {
               ] as const;
 
               return (
-                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
+                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 20px 40px rgba(15, 23, 42, 0.25)", padding: 0 }}>
 
                   {/* Header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 5px #D6F5EF" }} />
-                      <div style={{ fontSize: 14, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.01em" }}>OTA Listing Status</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: TABLE_THEME.badgeText, background: TABLE_THEME.badgeBg, padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid rgba(15, 118, 110, 0.12)" }}>
-                        {grandTot.toLocaleString()} listings
-                      </span>
-                      <span style={{ fontSize: 10, color: "#166534", background: "#ECFDF3", padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid #D1FADF" }}>
-                        {(grandTot > 0 ? ((totals.live + totals.exception) / grandTot) * 100 : 0).toFixed(1)}% live rate
-                      </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 6px rgba(16, 185, 129, 0.22)" }} />
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.02em" }}>OTA Listing Status</div>
+                      <div style={{ fontSize: 11, color: TABLE_THEME.subtitle, letterSpacing: "0.08em" }}>Category health across OTAs</div>
                     </div>
                   </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: TABLE_THEME.title }}>{grandTot.toLocaleString()} listings</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: liveColor(overallLivePct).text }}>
+                      {overallLivePct.toFixed(1)}% live rate
+                    </span>
+                  </div>
+                </div>
 
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                    <div style={{ overflowX: "auto", padding: "0 16px 16px" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", minWidth: 860, color: TABLE_THEME.headerText }}>
                       <thead>
                         <tr style={{ background: TABLE_THEME.sectionBg }}>
                           <th style={{ ...TH_STICKY }}>
@@ -459,12 +458,9 @@ export default function ListingDashboardPage() {
 
                         {/* Live % row */}
                         <tr style={{ background: TABLE_THEME.sectionBg, borderBottom: `2px solid ${TABLE_THEME.sectionBorder}` }}>
-                          <td style={{ ...TD_STICKY, background: TABLE_THEME.stickyMutedBg, color: "#5B708A" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
-                                <span style={{ fontSize: 12 }}>%</span> Live Rate
-                              </span>
-                              <span style={{ fontSize: 9, color: TABLE_THEME.mutedText }}>Live + exception as share of total</span>
+                          <td style={{ ...TD_STICKY, background: TABLE_THEME.stickyMutedBg, color: TABLE_THEME.headerText }}>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>Live Rate</span>
                             </div>
                           </td>
                           {otasSorted.map(ota => {
@@ -506,7 +502,7 @@ export default function ListingDashboardPage() {
                               <span style={{ display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
                                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: row.accent, flexShrink: 0 }} />
                                 {row.label}
-                                {(isLiveRow || isTatRow) && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", fontSize: 10, lineHeight: 1, color: row.color, background: row.bg, border: `1px solid ${row.accent}40`, flexShrink: 0 }}>{expanded ? "v" : ">"}</span>}
+                                {(isLiveRow || isTatRow) && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", fontSize: 12, lineHeight: 1, color: row.color, background: row.bg, border: `1px solid ${row.accent}40`, flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span>}
                               </span>
                             </td>
                             {otasSorted.map(ota => {
@@ -1232,11 +1228,12 @@ function actionBtn(bg: string, color: string, disabled: boolean): React.CSSPrope
 }
 
 const kpi: React.CSSProperties = {
-  background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
-  border: "1px solid #D8E1EC",
-  borderRadius: 16,
-  padding: "8px 10px",
-  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
+  background: "#0F172A",
+  border: "1px solid rgba(148, 163, 184, 0.35)",
+  borderRadius: 18,
+  padding: "14px 18px",
+  boxShadow: "0 20px 40px rgba(2, 6, 23, 0.45)",
+  color: "#E2E8F0",
 };
 
 const TH_STICKY: React.CSSProperties = {
