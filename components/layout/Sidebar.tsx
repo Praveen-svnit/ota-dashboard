@@ -182,6 +182,18 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
         <NavLink icon="◈" label="OTA Analytics"        href="/ota-analytics" />
 
+        {/* OTAs */}
+        <SectionHeader label="OTAs" />
+        <NavLink icon="•" label="GoMMT"         href="/ota/gommt"         indent />
+        <NavLink icon="•" label="Booking.com"   href="/ota/booking-com"   indent />
+        <NavLink icon="•" label="Agoda"         href="/ota/agoda"         indent />
+        <NavLink icon="•" label="Expedia"       href="/ota/expedia"       indent />
+        <NavLink icon="•" label="Cleartrip"     href="/ota/cleartrip"     indent />
+        <NavLink icon="•" label="EaseMyTrip"    href="/ota/easemytrip"    indent />
+        <NavLink icon="•" label="Yatra"         href="/ota/yatra"         indent />
+        <NavLink icon="•" label="Ixigo"         href="/ota/ixigo"         indent />
+        <NavLink icon="•" label="Akbar Travels" href="/ota/akbar-travels" indent />
+
         {/* Listings */}
         <SectionHeader label="Listings" />
         <NavLink icon="≡" label="Property Status" href="/listings" />
