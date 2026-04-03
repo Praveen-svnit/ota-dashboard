@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { RNS_SHEET_ID } from "@/lib/constants";
-import { CHANNEL_TO_OTA } from "@/lib/rns-sheet-parser";
+import { CHANNEL_TO_OTA } from "@/lib/constants";
 
 // Raw_data column positions (0-based)
 const dC = 7;  // Col H — date

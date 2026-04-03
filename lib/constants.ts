@@ -39,6 +39,41 @@ export const RNS_OTAS = [
   "Akbar Travels",
 ];
 
+// Maps every DB ota_booking_source_desc value → canonical OTA display name.
+// null = skip that channel.
+export const CHANNEL_TO_OTA: Record<string, string | null> = {
+  "Booking.com":   "Booking.com",
+  "Agoda":         "Agoda",
+  "AgodaYCS":      "Agoda",
+  "AgodaB2B":      "Agoda",
+  "Expedia":       "Expedia",
+  "Cleartrip":     "Cleartrip",
+  "EaseMyTrip":    "EaseMyTrip",
+  "Goibibo":       "GoMMT",
+  "MakeMyTrip":    "GoMMT",
+  "Goibibo / MMT": "GoMMT",
+  "MyBiz":         "GoMMT",
+  "Yatra":         "Yatra",
+  "YatraB2B":      "Yatra",
+  "Travelguru":    "Yatra",
+  "Ixigo":         "Ixigo",
+  "ixigo":         "Ixigo",
+  "Akbar Travels": "Akbar Travels",
+  "AkbarTravel":   "Akbar Travels",
+  // skip
+  "RoomsTonite":   null,
+  "Other":         null,
+};
+
+// Sub-channels to show when a canonical OTA is expanded.
+export const OTA_CHANNELS: Record<string, string[]> = {
+  "GoMMT":         ["Goibibo", "MakeMyTrip", "Goibibo / MMT", "MyBiz"],
+  "Agoda":         ["Agoda", "AgodaYCS", "AgodaB2B"],
+  "Yatra":         ["Yatra", "YatraB2B", "Travelguru"],
+  "Ixigo":         ["Ixigo", "ixigo"],
+  "Akbar Travels": ["Akbar Travels", "AkbarTravel"],
+};
+
 export const TEAM_COLORS = ["#6366F1", "#E83F6F", "#F59E0B", "#10B981", "#8B5CF6"];
 
 export const SHEET_ID     = "1VkFA4keBAT3tG5NkZwmSNRbLZJgx2neOhZ7Zuj2z_98";

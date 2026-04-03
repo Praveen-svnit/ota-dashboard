@@ -1,30 +1,8 @@
 import { getSql } from "@/lib/db";
-import {
-  parseDoDStay, parseMoMStay, getMoMStayCmTotal, parseRawDataRNS,
-  CHANNEL_TO_OTA, OTA_CHANNELS, RawDataResult,
-} from "@/lib/rns-sheet-parser";
-import { RNS_SHEET_ID, OTAS } from "@/lib/constants";
+import { CHANNEL_TO_OTA, OTA_CHANNELS, OTAS } from "@/lib/constants";
 import {
   OTA_STATUS, MTD_LISTINGS, L12M_OTA_LIVE, L12M_MONTHS, L12M_ONBOARDED, FH_PLATFORM_LIVE
 } from "@/lib/data";
-
-/* ── RNS sheet cache (refreshes once after 11 AM each day) ─────────────── */
-let rnsCache: { data: unknown; fetchedAt: Date } | null = null;
-
-function rnsNeedsRefresh(now: Date): boolean {
-  if (!rnsCache) return true;
-  const eleven = new Date(now);
-  eleven.setHours(11, 0, 0, 0);
-  return now >= eleven && rnsCache.fetchedAt < eleven;
-}
-
-function fetchRnsSheet(tab: string) {
-  const url = `https://docs.google.com/spreadsheets/d/${RNS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
-  return fetch(url, { cache: "no-store" }).then((r) => {
-    if (!r.ok) throw new Error(`RNS sheet "${tab}": ${r.status}`);
-    return r.text();
-  });
-}
 
 /* ── Month key helpers ─────────────────────────────────────────────────── */
 const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -199,7 +177,8 @@ function sumDMap(map: DMap, y: number, m: number, maxDay: number): Record<string
 function daysInYM(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 
 /* ── Stay RNS from DB (stay_rns, CICO only) ────────────────────────────── */
-async function getRnsFromDb(): Promise<RawDataResult | null> {
+type RnsResult = { monthlyData: Record<string, Record<string, any>>; totalCmMtd: number };
+async function getRnsFromDb(): Promise<RnsResult | null> {
   const sql = getSql();
   const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns`;
   if (Number(countRow.n) === 0) return null;
@@ -208,7 +187,7 @@ async function getRnsFromDb(): Promise<RawDataResult | null> {
   const rows = await sql`
     SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
     FROM stay_rns
-    WHERE LOWER(guest_status_desc) = 'checkout'
+    WHERE guest_status_desc IN ('Checkin', 'Checkout')
     ORDER BY checkin
   ` as Array<{ date: string; channel: string; rns: number }>;
 
@@ -219,7 +198,7 @@ async function getRnsFromDb(): Promise<RawDataResult | null> {
   for (const y of Object.keys(daily))
     for (const m of Object.keys(daily[Number(y)])) seen.add(`${y}:${m}`);
 
-  const monthlyData: RawDataResult["monthlyData"] = {};
+  const monthlyData: Record<string, Record<string, any>> = {};
   let totalCmMtd = 0;
   const todayYear = now.getFullYear(), todayMonth = now.getMonth(), todayDay = now.getDate();
 
@@ -428,77 +407,11 @@ async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: nu
 }
 
 export async function GET(req: Request) {
-  const force = new URL(req.url).searchParams.has("force");
-  const now   = new Date();
-
+  const now        = new URL(req.url).searchParams.has("force") ? new Date() : new Date();
   const cmMonthKey = toMonthKey(now.getFullYear(), now.getMonth());
   const d1Days     = Math.max(now.getDate() - 1, 1);
 
-  // Try DB first; fall back to Google Sheets if not yet synced
-  let rawParsed = await getRnsFromDb();
-  let momStay: ReturnType<typeof parseMoMStay> | null = null;
-
-  if (!rawParsed || force) {
-    // Fetch RNS sheets (cached)
-    let dodResult: PromiseSettledResult<string> | null = null;
-    let momResult: PromiseSettledResult<string> | null = null;
-    let rawResult: PromiseSettledResult<string> | null = null;
-
-    if (force || rnsNeedsRefresh(now)) {
-      [dodResult, momResult, rawResult] = await Promise.allSettled([
-        fetchRnsSheet("DoD Summary"),
-        fetchRnsSheet("MoM Summary"),
-        fetchRnsSheet("Raw_data"),
-      ]);
-      if (rawResult.status === "rejected") {
-        console.error("[dashboard-data] Raw_data fetch failed:", rawResult.reason);
-      }
-      rnsCache = { data: { dodResult, momResult, rawResult }, fetchedAt: now };
-    } else if (rnsCache) {
-      const cached = rnsCache.data as {
-        dodResult: PromiseSettledResult<string>;
-        momResult: PromiseSettledResult<string>;
-        rawResult: PromiseSettledResult<string>;
-      };
-      dodResult = cached.dodResult;
-      momResult = cached.momResult;
-      rawResult = cached.rawResult;
-    }
-
-    if (!rawParsed) {
-      rawParsed = rawResult?.status === "fulfilled" ? parseRawDataRNS(rawResult.value) : null;
-    }
-    momStay = momResult?.status === "fulfilled" ? parseMoMStay(momResult.value) : null;
-
-    // Fallback to DoD sheet if raw data unavailable
-    if (!rawParsed && dodResult?.status === "fulfilled") {
-      const dodStay = parseDoDStay(dodResult.value);
-      const rnpdFallback = Object.fromEntries(
-        Object.entries(dodStay).map(([ota, e]) => [ota, {
-          cmRNs: e.cmRNs, lmSameDayRNs: e.lmSameDayRNs, lmTotalRNs: e.lmTotalRNs, channels: e.channels,
-        }])
-      );
-      const rnsPerDayCmAvgFallback = (() => {
-        const t = momResult?.status === "fulfilled" ? getMoMStayCmTotal(momResult.value) : null;
-        return t !== null ? Math.round(t / d1Days) : null;
-      })();
-      const listingData = await getListingDataFromDb();
-      if (!listingData) {
-        return Response.json({
-          fhLiveCount: FH_PLATFORM_LIVE, fhTotalProps: 1877, fhSoldOutCount: 0, fhOnboardedThisMonth: 0,
-          rnpdLive: rnpdFallback, momStay, rnsPerDayCmAvg: rnsPerDayCmAvgFallback, rnsLiveMonthly: null,
-          otaStatus: OTA_STATUS, mtdListings: MTD_LISTINGS,
-          l12mOtaLive: L12M_OTA_LIVE, l12mMonths: L12M_MONTHS, l12mOnboarded: L12M_ONBOARDED,
-          source: "seed", fetchedAt: now.toISOString(), error: "No data — click Sync to DB first",
-        });
-      }
-      return Response.json({
-        ...listingData, rnpdLive: rnpdFallback, momStay,
-        rnsPerDayCmAvg: rnsPerDayCmAvgFallback, rnsLiveMonthly: null,
-        source: "db", fetchedAt: now.toISOString(),
-      });
-    }
-  }
+  const rawParsed = await getRnsFromDb();
 
   const rnsLiveMonthly = rawParsed?.monthlyData ?? null;
 
@@ -543,7 +456,7 @@ export async function GET(req: Request) {
       fhSoldOutCount:       0,
       fhOnboardedThisMonth: 0,
       rnpdLive,
-      momStay,
+
       rnsPerDayCmAvg,
       rnsLiveMonthly,
       rnsSoldMonthly,

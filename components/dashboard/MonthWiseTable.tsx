@@ -2,15 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { autoMonthKey, daysInMonth, daysDoneInMonth } from "@/lib/utils";
-import { RNS_OTAS, OTA_COLORS } from "@/lib/constants";
-
-const OTA_GROUPS: Record<string, string[]> = {
-  "GoMMT":         ["MakeMyTrip", "Goibibo", "Goibibo / MMT", "MyBiz"],
-  "Agoda":         ["Agoda", "AgodaYCS", "AgodaB2B"],
-  "Yatra":         ["Yatra", "YatraB2B", "Travelguru"],
-  "Ixigo":         ["Ixigo", "ixigo"],
-  "Akbar Travels": ["Akbar Travels", "AkbarTravel"],
-};
+import { RNS_OTAS, OTA_COLORS, OTA_CHANNELS } from "@/lib/constants";
 
 type MonthEntry  = { cmMTD: number; lmMTD?: number; lmTotal?: number };
 type MonthlyData = Record<string, Record<string, MonthEntry>>;
@@ -77,8 +69,8 @@ export default function MonthWiseTable({ title, stayData, soldData, occupiedData
   const otaRows = RNS_OTAS.map((ota) => ({
     ota,
     vals:     months.map((m) => applyMetric((monthlyData[m]?.[ota] as any)?.cmMTD ?? 0, m)),
-    channels: OTA_GROUPS[ota]
-      ? OTA_GROUPS[ota].map((ch) => ({
+    channels: OTA_CHANNELS[ota]
+      ? OTA_CHANNELS[ota].map((ch) => ({
           name: ch,
           vals: months.map((m) =>
             applyMetric((monthlyData[m]?.[ota] as any)?.channels?.[ch]?.cmMTD ?? 0, m)
