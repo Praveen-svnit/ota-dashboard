@@ -91,6 +91,7 @@ export default function ClassicProductionDashboard({
             title="RNS - Month-wise"
             stayData={data.rnsLiveMonthly}
             soldData={data.rnsSoldMonthly}
+            occupiedData={(data as any).rnsOccupiedMonthly ?? null}
             revStayData={data.revLiveMonthly}
             accent="#2563EB"
           />

@@ -310,6 +310,70 @@ async function getSoldFromDb(): Promise<SoldMonthlyData | null> {
   return soldMonthly;
 }
 
+/* ── Occupied RNS from DB (stay_rns, expanded per night via generate_series) */
+async function getOccupiedFromDb(): Promise<SoldMonthlyData | null> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      d::date::text AS date,
+      ota_booking_source_desc AS channel,
+      ROUND(SUM(rns::numeric / NULLIF(checkout::date - checkin::date, 0)))::int AS rns
+    FROM stay_rns,
+      LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
+    WHERE guest_status_desc IN ('Checkin', 'Checkout')
+    GROUP BY d::date, ota_booking_source_desc
+    ORDER BY d::date ASC
+  ` as Array<{ date: string; channel: string; rns: number }>;
+
+  if (rows.length === 0) return null;
+
+  const { daily, chanDaily } = buildDMap(rows);
+  const allOtas = [...new Set(Object.values(CHANNEL_TO_OTA).filter((v): v is string => v !== null))];
+  const now = new Date();
+
+  const seen = new Set<string>();
+  for (const y of Object.keys(daily))
+    for (const m of Object.keys(daily[Number(y)])) seen.add(`${y}:${m}`);
+
+  const occupiedMonthly: Record<string, Record<string, any>> = {};
+  const todayYear = now.getFullYear(), todayMonth = now.getMonth(), todayDay = now.getDate();
+
+  for (const ym of seen) {
+    const [yStr, mStr] = ym.split(":");
+    const year = Number(yStr), month0 = Number(mStr);
+    const isCurrent = year === todayYear && month0 === todayMonth;
+    const cmCutoff  = isCurrent ? Math.max(todayDay - 1, 1) : daysInYM(year, month0);
+    const lmMonth0  = month0 === 0 ? 11 : month0 - 1;
+    const lmYear    = month0 === 0 ? year - 1 : year;
+    const lmCutoff  = daysInYM(lmYear, lmMonth0);
+
+    const cmSums     = sumDMap(daily,     year,   month0,   cmCutoff);
+    const lmSameSums = sumDMap(daily,     lmYear, lmMonth0, cmCutoff);
+    const lmFullSums = sumDMap(daily,     lmYear, lmMonth0, lmCutoff);
+    const chCmSums   = sumDMap(chanDaily, year,   month0,   cmCutoff);
+    const chLmSums   = sumDMap(chanDaily, lmYear, lmMonth0, cmCutoff);
+    const chLmFull   = sumDMap(chanDaily, lmYear, lmMonth0, lmCutoff);
+
+    const key = toMonthKey(year, month0);
+    occupiedMonthly[key] = {};
+    for (const ota of allOtas) {
+      const entry: any = {
+        cmMTD:   cmSums[ota]     ?? 0,
+        lmMTD:   lmSameSums[ota] ?? 0,
+        lmTotal: lmFullSums[ota] ?? 0,
+      };
+      const chNames = OTA_CHANNELS[ota];
+      if (chNames) {
+        entry.channels = Object.fromEntries(
+          chNames.map((ch) => [ch, { cmMTD: chCmSums[ch] ?? 0, lmMTD: chLmSums[ch] ?? 0, lmTotal: chLmFull[ch] ?? 0 }])
+        );
+      }
+      occupiedMonthly[key][ota] = entry;
+    }
+  }
+  return occupiedMonthly as SoldMonthlyData;
+}
+
 /* ── Revenue from DB (stay_rns.revenue, CICO only) ─────────────────────── */
 async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>> | null> {
   const sql = getSql();
@@ -463,10 +527,11 @@ export async function GET(req: Request) {
     : null;
 
   // Get listing + sold + revenue data from DB in parallel
-  const [listingData, rnsSoldMonthly, revLiveMonthly] = await Promise.all([
+  const [listingData, rnsSoldMonthly, revLiveMonthly, rnsOccupiedMonthly] = await Promise.all([
     getListingDataFromDb(),
     getSoldFromDb(),
     getRevFromDb(),
+    getOccupiedFromDb(),
   ]);
 
   const fetchedAt = now.toISOString();
@@ -482,6 +547,7 @@ export async function GET(req: Request) {
       rnsPerDayCmAvg,
       rnsLiveMonthly,
       rnsSoldMonthly,
+      rnsOccupiedMonthly,
       revLiveMonthly,
       otaStatus:     OTA_STATUS,
       mtdListings:   MTD_LISTINGS,
@@ -501,6 +567,7 @@ export async function GET(req: Request) {
     rnsPerDayCmAvg,
     rnsLiveMonthly,
     rnsSoldMonthly,
+    rnsOccupiedMonthly,
     revLiveMonthly,
     source:   "db",
     fetchedAt,
