@@ -84,10 +84,10 @@ export async function GET(req: Request) {
       ` as { day: string; ota: string; rns: number }[];
       populate(rows);
     } else {
-      // Sold: bookings created on each day
+      // Sold: bookings created on each day — from sold_rns table
       const rows = await sql`
         SELECT created_at::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
-        FROM stay_rns
+        FROM sold_rns
         WHERE created_at >= ${fmt(start)} AND created_at <= ${fmt(end)}
           AND guest_status_desc IN ('Checkin', 'Checkout')
         GROUP BY created_at, ota_booking_source_desc
