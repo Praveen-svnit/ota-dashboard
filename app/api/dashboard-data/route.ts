@@ -476,7 +476,6 @@ export async function GET(req: Request) {
   return Response.json({
     ...listingData,
     rnpdLive,
-    momStay,
     rnsPerDayCmAvg,
     rnsLiveMonthly,
     rnsSoldMonthly,
