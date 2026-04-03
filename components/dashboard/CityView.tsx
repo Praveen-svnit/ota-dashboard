@@ -12,6 +12,13 @@ interface CityData {
 
 const ACCENT = "#2563EB";
 
+type ViewType = "occupied" | "stay" | "sold";
+const VIEW_LABELS: Record<ViewType, string> = {
+  sold:     "Sold",
+  stay:     "Stay (Checkin)",
+  occupied: "Stay (Occupied)",
+};
+
 // Generate last 12 months as options
 function getMonthOptions() {
   const options: { value: string; label: string }[] = [
@@ -34,21 +41,21 @@ export default function CityView() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
   const [search,     setSearch]     = useState("");
+  const [view,          setView]          = useState<ViewType>("occupied");
   const [selectedOta,   setSelectedOta]   = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
 
   useEffect(() => {
     setLoading(true);
     setData(null);
-    const url = selectedMonth
-      ? `/api/city-production?month=${selectedMonth}`
-      : "/api/city-production";
-    fetch(url)
+    const params = new URLSearchParams({ type: view });
+    if (selectedMonth) params.set("month", selectedMonth);
+    fetch(`/api/city-production?${params}`)
       .then((r) => r.json())
       .then((d) => { if (d.error) setError(d.error); else setData(d); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [selectedMonth]);
+  }, [view, selectedMonth]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -85,6 +92,25 @@ export default function CityView() {
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {/* View tab strip */}
+          <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 8, padding: 3, gap: 2 }}>
+            {(["sold", "stay", "occupied"] as ViewType[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                style={{
+                  padding: "4px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
+                  borderRadius: 6, transition: "all 0.15s", whiteSpace: "nowrap",
+                  background: view === v ? "#FFFFFF" : "transparent",
+                  color:      view === v ? ACCENT : "#64748B",
+                  boxShadow:  view === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                }}
+              >
+                {VIEW_LABELS[v]}
+              </button>
+            ))}
+          </div>
+
           {/* OTA filter */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             <button
