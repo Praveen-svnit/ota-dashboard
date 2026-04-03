@@ -176,18 +176,27 @@ function sumDMap(map: DMap, y: number, m: number, maxDay: number): Record<string
 
 function daysInYM(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 
-/* ── Stay RNS from DB (stay_rns, CICO only) ────────────────────────────── */
+/* ── Module-level cache (refreshes once per hour) ──────────────────────── */
 type RnsResult = { monthlyData: Record<string, Record<string, any>>; totalCmMtd: number };
+type RnsCache  = { checkin: RnsResult | null; occupied: SoldMonthlyData | null; ts: number };
+let rnsCache: RnsCache | null = null;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/* ── Stay RNS from DB (stay_rns, CICO, last 13 months by checkin) ──────── */
 async function getRnsFromDb(): Promise<RnsResult | null> {
   const sql = getSql();
   const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns`;
   if (Number(countRow.n) === 0) return null;
 
-  const now = new Date();
+  const now   = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+  const fmt   = (d: Date) => d.toISOString().split("T")[0];
+
   const rows = await sql`
     SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
     FROM stay_rns
     WHERE guest_status_desc IN ('Checkin', 'Checkout')
+      AND checkin >= ${fmt(start)}::date
     ORDER BY checkin
   ` as Array<{ date: string; channel: string; rns: number }>;
 
@@ -291,7 +300,12 @@ async function getSoldFromDb(): Promise<SoldMonthlyData | null> {
 
 /* ── Occupied RNS from DB (stay_rns, expanded per night via generate_series) */
 async function getOccupiedFromDb(): Promise<SoldMonthlyData | null> {
-  const sql = getSql();
+  const sql   = getSql();
+  const now   = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+  const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0); // end of current month
+  const fmt   = (d: Date) => d.toISOString().split("T")[0];
+
   const rows = await sql`
     SELECT
       d::date::text AS date,
@@ -300,6 +314,10 @@ async function getOccupiedFromDb(): Promise<SoldMonthlyData | null> {
     FROM stay_rns,
       LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
     WHERE guest_status_desc IN ('Checkin', 'Checkout')
+      AND checkin  <= ${fmt(end)}::date
+      AND checkout >  ${fmt(start)}::date
+      AND d::date  >= ${fmt(start)}::date
+      AND d::date  <= ${fmt(end)}::date
     GROUP BY d::date, ota_booking_source_desc
     ORDER BY d::date ASC
   ` as Array<{ date: string; channel: string; rns: number }>;
@@ -308,7 +326,6 @@ async function getOccupiedFromDb(): Promise<SoldMonthlyData | null> {
 
   const { daily, chanDaily } = buildDMap(rows);
   const allOtas = [...new Set(Object.values(CHANNEL_TO_OTA).filter((v): v is string => v !== null))];
-  const now = new Date();
 
   const seen = new Set<string>();
   for (const y of Object.keys(daily))
@@ -407,11 +424,19 @@ async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: nu
 }
 
 export async function GET(req: Request) {
-  const now        = new URL(req.url).searchParams.has("force") ? new Date() : new Date();
+  const force      = new URL(req.url).searchParams.has("force");
+  const now        = new Date();
   const cmMonthKey = toMonthKey(now.getFullYear(), now.getMonth());
   const d1Days     = Math.max(now.getDate() - 1, 1);
 
-  const rawParsed = await getRnsFromDb();
+  // Refresh cache if stale or force-requested
+  if (force || !rnsCache || Date.now() - rnsCache.ts > CACHE_TTL_MS) {
+    const [checkin, occupied] = await Promise.all([getRnsFromDb(), getOccupiedFromDb()]);
+    rnsCache = { checkin, occupied, ts: Date.now() };
+  }
+
+  const rawParsed          = rnsCache.checkin;
+  const rnsOccupiedMonthly = rnsCache.occupied;
 
   const rnsLiveMonthly = rawParsed?.monthlyData ?? null;
 
@@ -440,11 +465,10 @@ export async function GET(req: Request) {
     : null;
 
   // Get listing + sold + revenue data from DB in parallel
-  const [listingData, rnsSoldMonthly, revLiveMonthly, rnsOccupiedMonthly] = await Promise.all([
+  const [listingData, rnsSoldMonthly, revLiveMonthly] = await Promise.all([
     getListingDataFromDb(),
     getSoldFromDb(),
     getRevFromDb(),
-    getOccupiedFromDb(),
   ]);
 
   const fetchedAt = now.toISOString();
