@@ -49,7 +49,7 @@ export async function GET(req: Request) {
         const canonical = DB_TO_OTA[row.ota];
         if (!canonical) continue;
         const day = dayMap.get(row.day);
-        if (day) day[canonical] = (day[canonical] ?? 0) + row.rns;
+        if (day) day[canonical] = (day[canonical] ?? 0) + Number(row.rns);
       }
     };
 
