@@ -53,19 +53,23 @@ export async function GET(req: Request) {
 
     // Both views query stay_rns — Sold uses created_at (booking date), Stay uses checkin
     if (type === "stay") {
+      // Stay: guests checking in on each day — only Checkin / Checkout statuses
       const rows = await sql`
         SELECT checkin::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns
         WHERE checkin >= ${fmt(start)} AND checkin <= ${fmt(end)}
+          AND guest_status_desc IN ('Checkin', 'Checkout')
         GROUP BY checkin, ota_booking_source_desc
         ORDER BY checkin ASC
       ` as { day: string; ota: string; rns: number }[];
       populate(rows);
     } else {
+      // Sold: bookings created on each day — only Checkin / Checkout statuses
       const rows = await sql`
         SELECT created_at::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns
         WHERE created_at >= ${fmt(start)} AND created_at <= ${fmt(end)}
+          AND guest_status_desc IN ('Checkin', 'Checkout')
         GROUP BY created_at, ota_booking_source_desc
         ORDER BY created_at ASC
       ` as { day: string; ota: string; rns: number }[];
