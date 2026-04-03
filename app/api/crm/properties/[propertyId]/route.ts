@@ -1,4 +1,5 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
+import { getSql as getSqlPg } from "@/lib/db-postgres";
 import { getSession } from "@/lib/auth";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ propertyId: string }> }) {
@@ -6,83 +7,100 @@ export async function GET(_req: Request, { params }: { params: Promise<{ propert
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { propertyId } = await params;
-  const db = getDb();
+  const sql = getSql();
 
-  const property = db.prepare(`
-    SELECT id, name, city, fhStatus, fhLiveDate FROM Property WHERE id = ?
-  `).get(propertyId) as { id: string; name: string; city: string; fhStatus: string; fhLiveDate: string } | undefined;
+  // Fetch property from inventory
+  const propRows = await sql`
+    SELECT
+      property_id   AS id,
+      property_name AS name,
+      city,
+      fh_status     AS "fhStatus",
+      fh_live_date  AS "fhLiveDate"
+    FROM inventory
+    WHERE property_id = ${propertyId}
+  ` as { id: string; name: string; city: string; fhStatus: string; fhLiveDate: string }[];
 
-  if (!property) return Response.json({ error: "Not found" }, { status: 404 });
+  if (propRows.length === 0) return Response.json({ error: "Not found" }, { status: 404 });
+  const property = propRows[0];
 
-  // Auto-create OtaListing for GMB if GmbTracker has data and no listing exists yet
-  const gmb = db.prepare(`
-    SELECT gmbStatus, gmbSubStatus, listingType, number, reviewLinkTracker,
-           gmbRating, gmbReviewCount, prePost, syncedAt
-    FROM GmbTracker WHERE propertyId = ?
-  `).get(propertyId) as {
-    gmbStatus: string; gmbSubStatus: string; listingType: string; number: string;
-    reviewLinkTracker: string; gmbRating: string; gmbReviewCount: string;
-    prePost: string; syncedAt: string;
-  } | undefined;
+  // Fetch listings and logs in parallel
+  const [listings, logs] = await Promise.all([
+    sql`
+      SELECT
+        ol.id,
+        ol.ota,
+        ol.status,
+        ol.sub_status      AS "subStatus",
+        ol.live_date       AS "liveDate",
+        ol.tat,
+        ol.tat_error       AS "tatError",
+        ol.ota_id          AS "otaId",
+        ol.assigned_to     AS "assignedTo",
+        ol.crm_note        AS "crmNote",
+        ol.crm_updated_at  AS "crmUpdatedAt",
+        ol.pre_post        AS "prePost",
+        ol.listing_link    AS "listingLink",
+        u.name             AS "assignedName"
+      FROM ota_listing ol
+      LEFT JOIN users u ON u.id = ol.assigned_to
+      WHERE ol.property_id = ${propertyId}
+      ORDER BY ol.ota ASC
+    `,
 
-  if (gmb) {
-    const existingGmb = db.prepare(
-      "SELECT id FROM OtaListing WHERE propertyId = ? AND ota = 'GMB'"
-    ).get(propertyId);
-
-    if (!existingGmb) {
-      db.prepare(`
-        INSERT INTO OtaListing (propertyId, ota, status, subStatus, syncedAt)
-        VALUES (?, 'GMB', ?, ?, ?)
-      `).run(propertyId, gmb.gmbStatus ?? null, gmb.gmbSubStatus ?? null, gmb.syncedAt);
-
-      // Seed GMB-specific metrics
-      const now = new Date().toISOString();
-      const seeds: Array<{ key: string; value: string | null }> = [
-        { key: "listing_type",       value: gmb.listingType },
-        { key: "review_link_status", value: gmb.reviewLinkTracker },
-        { key: "gmb_rating",         value: gmb.gmbRating },
-        { key: "gmb_review_count",   value: gmb.gmbReviewCount },
-      ];
-      for (const { key, value } of seeds) {
-        if (value) {
-          db.prepare(`
-            INSERT OR IGNORE INTO OtaMetrics (propertyId, ota, metricKey, metricValue, updatedAt)
-            VALUES (?, 'GMB', ?, ?, ?)
-          `).run(propertyId, key, value, now);
-        }
-      }
-    }
-  }
-
-  const listings = db.prepare(`
-    SELECT ol.id, ol.ota, ol.status, ol.subStatus, ol.liveDate, ol.tat, ol.tatError,
-           ol.otaId, ol.assignedTo, ol.crmNote, ol.crmUpdatedAt, ol.prePost, ol.listingLink,
-           u.name AS assignedName
-    FROM OtaListing ol
-    LEFT JOIN Users u ON u.id = ol.assignedTo
-    WHERE ol.propertyId = ?
-    ORDER BY ol.ota ASC
-  `).all(propertyId) as Array<{
-    id: number; ota: string; status: string; subStatus: string; liveDate: string;
-    tat: number; tatError: number; otaId: string; assignedTo: string;
-    crmNote: string; crmUpdatedAt: string; assignedName: string; prePost: string; listingLink: string;
-  }>;
-
-  const logs = db.prepare(`
-    SELECT pl.id, pl.otaListingId, pl.action, pl.field, pl.oldValue, pl.newValue,
-           pl.note, pl.createdAt,
-           u.name AS userName, u.role AS userRole
-    FROM PropertyLog pl
-    LEFT JOIN Users u ON u.id = pl.userId
-    WHERE pl.propertyId = ?
-    ORDER BY pl.createdAt DESC
-    LIMIT 100
-  `).all(propertyId) as Array<{
-    id: number; otaListingId: number; action: string; field: string;
-    oldValue: string; newValue: string; note: string; createdAt: string;
-    userName: string; userRole: string;
-  }>;
+    sql`
+      SELECT
+        pl.id,
+        pl.ota_listing_id  AS "otaListingId",
+        pl.action,
+        pl.field,
+        pl.old_value       AS "oldValue",
+        pl.new_value       AS "newValue",
+        pl.note,
+        pl.created_at      AS "createdAt",
+        u.name             AS "userName",
+        u.role             AS "userRole"
+      FROM property_log pl
+      LEFT JOIN users u ON u.id = pl.user_id
+      WHERE pl.property_id = ${propertyId}
+      ORDER BY pl.created_at DESC
+      LIMIT 100
+    `,
+  ]);
 
   return Response.json({ property, listings, logs });
+}
+
+export async function POST(req: Request, { params }: { params: Promise<{ propertyId: string }> }) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { propertyId } = await params;
+  const { ota } = await req.json() as { ota: string };
+  if (!ota) return Response.json({ error: "ota required" }, { status: 400 });
+
+  const sql = getSqlPg();
+
+  await sql.query(
+    `INSERT INTO ota_listing (property_id, ota, synced_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (property_id, ota) DO NOTHING`,
+    [propertyId, ota]
+  );
+
+  // Return the newly created (or existing) listing row
+  const rows = await sql.query(
+    `SELECT ol.id, ol.ota, ol.status, ol.sub_status AS "subStatus",
+            ol.live_date AS "liveDate", ol.tat, ol.tat_error AS "tatError",
+            ol.ota_id AS "otaId", ol.assigned_to AS "assignedTo",
+            ol.crm_note AS "crmNote", ol.crm_updated_at AS "crmUpdatedAt",
+            ol.pre_post AS "prePost", ol.listing_link AS "listingLink",
+            u.name AS "assignedName"
+     FROM ota_listing ol
+     LEFT JOIN users u ON u.id = ol.assigned_to
+     WHERE ol.property_id = $1 AND ol.ota = $2`,
+    [propertyId, ota]
+  ) as { id: number }[];
+
+  return Response.json({ listing: rows[0] });
 }

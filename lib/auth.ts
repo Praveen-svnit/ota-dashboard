@@ -12,7 +12,7 @@ export interface SessionUser {
   id:       string;
   username: string;
   name:     string;
-  role:     "admin" | "tl" | "intern";
+  role:     "admin" | "head" | "tl" | "intern";
   ota:      string | null;
   teamLead: string | null;
 }

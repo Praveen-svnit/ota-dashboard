@@ -2,6 +2,7 @@
 
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
+import GlobalDashboardTaskShell from "@/components/tasks/GlobalDashboardTaskShell";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
 import { usePathname } from "next/navigation";
 
@@ -15,6 +16,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <div style={{ display: "flex", minHeight: "100vh", background: "#F8FAFC" }}>
       <Sidebar lastRefreshed={lastRefreshed} />
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+        <GlobalDashboardTaskShell />
         {children}
       </main>
     </div>

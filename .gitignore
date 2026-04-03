@@ -1,9 +1,13 @@
 node_modules
 # Keep environment variables out of version control
 .env
+.env.local
+.env*.local
 .next
 .claude
 *.tsbuildinfo
 prisma/dev.db
+*.db-shm
+*.db-wal
 
 /lib/generated/prisma

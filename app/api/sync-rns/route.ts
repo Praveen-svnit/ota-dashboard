@@ -1,88 +1,161 @@
-import { getDb } from "@/lib/db";
-import { RNS_SHEET_ID } from "@/lib/constants";
-import { CHANNEL_TO_OTA } from "@/lib/rns-sheet-parser";
+import { getSql } from "@/lib/db-postgres";
+import { parseCSV } from "@/lib/sheets";
+import { RNS_RAW_SHEET_ID, RNS_RAW_TAB } from "@/lib/constants";
+import { getSession } from "@/lib/auth";
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (const ch of line) {
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === "," && !inQ) { result.push(cur.trim()); cur = ""; }
-    else { cur += ch; }
+// Column index ranges within the sheet
+// Sold RNS: cols A–F → indices 0–5
+// Stay RNS: cols H–N → indices 7–13 (G is separator)
+const SOLD_COLS = { start: 0, end: 5 };   // A B C D E F
+const STAY_COLS = { start: 7, end: 13 };  // H I J K L M N
+
+// Header → DB field mapping (case-insensitive)
+const COL_MAP: Record<string, string> = {
+  "date":                "date",
+  "stay date":           "date",
+  "sold date":           "date",
+  "booking date":        "date",
+  "channel":             "channel",
+  "ota":                 "channel",
+  "rns":                 "rns",
+  "room nights":         "rns",
+  "room nights sold":    "rns",
+  "revenue":             "revenue",
+  "rev":                 "revenue",
+  "initial property id": "initial_prop_id",
+  "initial prop id":     "initial_prop_id",
+  "initial id":          "initial_prop_id",
+  "final property id":   "final_prop_id",
+  "final prop id":       "final_prop_id",
+  "final id":            "final_prop_id",
+  "property id":         "final_prop_id",
+  "status":              "status",
+  "guest status":        "status",
+  "booking status":      "status",
+};
+
+function normalize(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9]/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function parseDate(raw: string): string | null {
+  if (!raw) return null;
+  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return null;
+}
+
+interface RnsRow { date: string; channel: string; rns: number; revenue: number; initId: string; finalId: string; status: string | null; }
+
+function extractSection(
+  headerRow: string[],
+  dataRows: string[][],
+  colStart: number,
+  colEnd: number,
+  label: string,
+): RnsRow[] {
+  // Map absolute column indices to DB fields using the header row
+  const fieldMap: Record<number, string> = {};
+  for (let i = colStart; i <= colEnd; i++) {
+    const h = headerRow[i] ?? "";
+    const key = normalize(h);
+    if (COL_MAP[key]) fieldMap[i] = COL_MAP[key];
   }
-  result.push(cur.trim());
+
+  const fields = Object.values(fieldMap);
+  if (!fields.includes("date"))
+    throw new Error(`${label}: no 'date' header found in cols ${colStart}–${colEnd}. Found: ${headerRow.slice(colStart, colEnd + 1).join(", ")}`);
+  if (!fields.includes("channel"))
+    throw new Error(`${label}: no 'channel' header found in cols ${colStart}–${colEnd}. Found: ${headerRow.slice(colStart, colEnd + 1).join(", ")}`);
+
+  const result: RnsRow[] = [];
+  for (const row of dataRows) {
+    const rec: Record<string, string | null> = {
+      date: null, channel: null, rns: null, revenue: null,
+      initial_prop_id: null, final_prop_id: null, status: null,
+    };
+    for (const [i, field] of Object.entries(fieldMap)) {
+      rec[field] = row[Number(i)]?.trim() || null;
+    }
+    const date = parseDate(rec.date ?? "");
+    if (!date || !rec.channel) continue;
+    result.push({
+      date,
+      channel: rec.channel,
+      rns:     parseInt(rec.rns ?? "0") || 0,
+      revenue: parseFloat(rec.revenue ?? "0") || 0,
+      initId:  rec.initial_prop_id ?? "",
+      finalId: rec.final_prop_id ?? "",
+      status:  rec.status ?? null,
+    });
+  }
   return result;
 }
 
-const CHANNEL_LOOKUP = new Map<string, string | null>(
-  Object.entries(CHANNEL_TO_OTA).map(([k, v]) => [k.toLowerCase().trim(), v])
-);
-
-function lookupOta(raw: string): string | null | undefined {
-  if (raw in CHANNEL_TO_OTA) return CHANNEL_TO_OTA[raw];
-  return CHANNEL_LOOKUP.get(raw.toLowerCase().trim());
-}
-
 export async function POST() {
-  const url = `https://docs.google.com/spreadsheets/d/${RNS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent("Raw_data")}`;
+  const session = await getSession();
+  if (session && session.role !== "admin" && session.role !== "head") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  let csv: string;
   try {
+    const url = `https://docs.google.com/spreadsheets/d/${RNS_RAW_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(RNS_RAW_TAB)}`;
     const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`Sheet fetch failed: ${res.status}`);
-    csv = await res.text();
-  } catch (err: unknown) {
-    return Response.json({ error: String(err) }, { status: 502 });
+    if (!res.ok) throw new Error(`Failed to fetch ${RNS_RAW_TAB}: ${res.status}`);
+    const csv = await res.text();
+
+    const { cols: row1, rows: allRows } = parseCSV(csv);
+
+    // Row 1 has merged section titles (SOLD / STAY); actual column headers are in row 2
+    // Detect which row is the real header row: find the first row that contains a date-like field
+    const COL_HEADER_KEYS = new Set(Object.keys(COL_MAP));
+    let headerRow: string[] = row1;
+    let dataRows: string[][] = allRows;
+    if (allRows.length > 0) {
+      const firstDataRow = allRows[0];
+      const hasHeaders = firstDataRow.some((h) => COL_HEADER_KEYS.has(normalize(h)));
+      if (hasHeaders) {
+        headerRow = firstDataRow;
+        dataRows  = allRows.slice(1);
+      }
+    }
+
+    const soldRows = extractSection(headerRow, dataRows, SOLD_COLS.start, SOLD_COLS.end, "Sold RNS (A–F)");
+    const stayRows = extractSection(headerRow, dataRows, STAY_COLS.start, STAY_COLS.end, "Stay RNS (H–N)");
+
+    const sql = getSql();
+
+    // Delete last 7 days from both tables, then re-insert fresh data
+    await sql`DELETE FROM sold_rns WHERE checkin >= NOW()::DATE - INTERVAL '7 days'`;
+    await sql`DELETE FROM stay_rns WHERE checkin >= NOW()::DATE - INTERVAL '7 days'`;
+
+    let soldCount = 0;
+    for (const r of soldRows) {
+      await sql`
+        INSERT INTO sold_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
+        VALUES (${r.date}::date, ${r.channel}, ${r.rns}, ${r.revenue}, ${r.initId}, ${r.finalId}, NOW())
+      `;
+      soldCount++;
+    }
+
+    let stayCount = 0;
+    for (const r of stayRows) {
+      await sql`
+        INSERT INTO stay_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
+        VALUES (${r.date}::date, ${r.channel}, ${r.rns}, ${r.revenue}, ${r.initId}, ${r.finalId}, NOW())
+      `;
+      stayCount++;
+    }
+
+    return Response.json({
+      ok: true,
+      sold: { upserted: soldCount, message: `Synced ${soldCount} sold RNS rows` },
+      stay: { upserted: stayCount, message: `Synced ${stayCount} stay RNS rows` },
+    });
+
+  } catch (err) {
+    console.error("sync-rns error:", err);
+    return Response.json({ error: String(err) }, { status: 500 });
   }
-
-  const rows = csv.trim().split("\n").map(parseCsvLine);
-  // Raw_data columns (0-based): H=7 date, I=8 channel, J=9 status, K=10 rns
-  const dC = 7, cC = 8, sC = 9, rC = 10;
-
-  const now = new Date().toISOString();
-  const db  = getDb();
-
-  const upsert = db.prepare(`
-    INSERT INTO RnsStay (stay_date, ota, guest_status, rns, revenue, syncedAt)
-    VALUES (?, ?, ?, ?, 0, ?)
-    ON CONFLICT (stay_date, ota, guest_status) DO UPDATE
-      SET rns = excluded.rns, syncedAt = excluded.syncedAt
-  `);
-
-  type Row = { date: string; channel: string; ota: string; rns: number };
-  const valid: Row[] = [];
-
-  for (let i = 1; i < rows.length; i++) {
-    const row    = rows[i];
-    const status = row[sC]?.trim();
-    if (!status || status.toUpperCase() !== "CICO") continue;
-
-    const channel = row[cC]?.trim();
-    if (!channel) continue;
-
-    const ota = lookupOta(channel);
-    if (!ota) continue;
-
-    const dateStr = row[dC]?.trim();
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) continue;
-    const date = d.toISOString().split("T")[0];
-
-    const rns = Math.round(parseFloat((row[rC] ?? "").replace(/,/g, "")) || 0);
-    // Use canonical channel casing from CHANNEL_TO_OTA keys
-    const canonicalChannel = Object.keys(CHANNEL_TO_OTA).find(
-      (k) => k.toLowerCase().trim() === channel.toLowerCase().trim()
-    ) ?? channel;
-
-    valid.push({ date, channel: canonicalChannel, ota, rns });
-  }
-
-  const insertMany = db.transaction((rns: Row[]) => {
-    for (const r of rns) upsert.run(r.date, r.ota, r.channel, r.rns, now);
-    return rns.length;
-  });
-
-  const count = insertMany(valid);
-  return Response.json({ ok: true, rows: count, syncedAt: now });
 }

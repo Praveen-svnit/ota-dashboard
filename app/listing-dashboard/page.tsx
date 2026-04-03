@@ -3,13 +3,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import OtaDetailView from "@/components/dashboard/OtaDetailView";
+import GmbTab from "@/components/dashboard/GmbTab";
 
 const OTA_SLUG_MAP: Record<string, string> = {
   "GoMMT":"gommt","Booking.com":"booking-com","Agoda":"agoda","Expedia":"expedia",
   "Cleartrip":"cleartrip","Yatra":"yatra","Ixigo":"ixigo","Akbar Travels":"akbar-travels","EaseMyTrip":"easemytrip",
+  "Indigo":"indigo",
 };
 
-const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip"];
+const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo"];
 
 const T = {
   pageBg:   "#F4F7FB",
@@ -39,11 +41,13 @@ const OTA_COLORS: Record<string, string> = {
   "Ixigo":         "#FB923C",
   "Akbar Travels": "#38BDF8",
   "EaseMyTrip":    "#06B6D4",
+  "Indigo":        "#6B2FA0",
 };
 
 const OTA_SHORT: Record<string, string> = {
   "GoMMT":"GoMMT","Booking.com":"Booking.com","Agoda":"Agoda","Expedia":"Expedia",
   "Cleartrip":"Cleartrip","Yatra":"Yatra","Ixigo":"Ixigo","Akbar Travels":"Akbar Travels","EaseMyTrip":"EaseMyTrip",
+  "Indigo":"Indigo",
 };
 
 const OTA_LOGO_STYLE: Record<string, { mark: string; bg: string; text: string; ring: string }> = {
@@ -56,6 +60,7 @@ const OTA_LOGO_STYLE: Record<string, { mark: string; bg: string; text: string; r
   "Ixigo":         { mark: "ix", bg: "#FFF3E8", text: "#D46B08", ring: "#F7D1A6" },
   "Akbar Travels": { mark: "at", bg: "#E8F7FF", text: "#0369A1", ring: "#BAE6FD" },
   "EaseMyTrip":    { mark: "em", bg: "#E6FFFB", text: "#0F766E", ring: "#99F6E4" },
+  "Indigo":        { mark: "6E", bg: "#F0EBFF", text: "#6B2FA0", ring: "#D4B8FF" },
 };
 
 const SS_COLOR: Record<string, { text: string; bg: string }> = {
@@ -93,7 +98,7 @@ interface DashData { pivot: Record<string, Record<string, number>>; columns: str
 
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [view,        setView]        = useState<"overview" | "ota">("overview");
+  const [view,        setView]        = useState<"overview" | "gmb" | "ota">("overview");
   const [selectedOta, setSelectedOta] = useState<string | null>(null);
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -180,14 +185,18 @@ export default function ListingDashboardPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
           </div>
         </div>
-        {/* View toggle — Overview / OTA Wise */}
+        {/* View toggle — Overview / GMB / OTA Wise */}
         <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-          {(["overview", "ota"] as const).map(v => {
-            const active = view === v;
+          {([
+            { key: "overview", label: "Overview" },
+            { key: "gmb",      label: "GMB" },
+            { key: "ota",      label: "OTA Wise" },
+          ] as { key: "overview" | "gmb" | "ota"; label: string }[]).map(({ key, label }) => {
+            const active = view === key;
             return (
               <button
-                key={v}
-                onClick={() => setView(v)}
+                key={key}
+                onClick={() => setView(key)}
                 style={{
                   padding: "7px 18px", fontSize: 11, fontWeight: 700,
                   borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit",
@@ -197,14 +206,16 @@ export default function ListingDashboardPage() {
                   transition: "all 0.13s ease",
                 }}
               >
-                {v === "overview" ? "Overview" : "OTA Wise"}
+                {label}
               </button>
             );
           })}
         </div>
       </div>
 
-      {view === "ota" ? (
+      {view === "gmb" ? (
+        <GmbTab />
+      ) : view === "ota" ? (
         /* ── OTA Wise view ── */
         <div>
           {/* OTA filter row */}
@@ -465,7 +476,7 @@ export default function ListingDashboardPage() {
                           </td>
                           {otasSorted.map(ota => {
                             const r   = catMap[ota];
-                            const tot = r.live + r.exception + r.inProcess + r.tatExhausted;
+                            const tot = r.live + r.exception + (r.readyToGoLive ?? 0) + r.inProcess + r.tatExhausted;
                             const pct = tot > 0 ? ((r.live + r.exception) / tot) * 100 : 0;
                             const { text, bar } = liveColor(pct);
                             return (
@@ -626,7 +637,7 @@ export default function ListingDashboardPage() {
                           </td>
                           {otasSorted.map(ota => {
                             const r = catMap[ota];
-                            const t = r.live + r.exception + r.inProcess + r.tatExhausted;
+                            const t = r.live + r.exception + (r.readyToGoLive ?? 0) + r.inProcess + r.tatExhausted;
                             return (
                               <td key={ota} style={{ ...TD_CELL, background: TABLE_THEME.totalRowBg }}>
                                 <span style={{ fontWeight: 800, color: TABLE_THEME.totalText, fontSize: 12 }}>{t.toLocaleString()}</span>
@@ -739,7 +750,7 @@ export default function ListingDashboardPage() {
                       const ota = popup.ota;
                       const cat = catMap2[ota];
                       const ts  = data.tatStats[ota];
-                      const tot = cat ? cat.live + cat.exception + cat.inProcess + cat.tatExhausted : 0;
+                      const tot = cat ? cat.live + cat.exception + (cat.readyToGoLive ?? 0) + cat.inProcess + cat.tatExhausted : 0;
                       const livePct = tot > 0 ? ((cat.live + cat.exception) / tot * 100).toFixed(1) : "0.0";
                       return (
                         <div>

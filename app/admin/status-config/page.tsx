@@ -1,0 +1,571 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import { OTA_COLORS, OTAS } from "@/lib/constants";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type Combo = { subStatus: string; statuses: string[]; sortOrder: number };
+type OtaConfig = {
+  ota: string; subStatuses: string[]; statusMap: Record<string, string[]>;
+  updatedAt: string | null; updatedBy: string | null; isDefault: boolean;
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function otaColor(ota: string) { return OTA_COLORS[ota] ?? "#64748B"; }
+function hex2rgba(hex: string, a: number) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function timeSince(iso: string) {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return d === 0 ? "today" : d === 1 ? "yesterday" : `${d}d ago`;
+}
+
+// Small chip component
+function Chip({ label, onRemove, accent }: { label: string; onRemove?: () => void; accent?: string }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600,
+      background: accent ? hex2rgba(accent, 0.12) : "#EEF2FF",
+      color: accent ?? "#4F46E5",
+    }}>
+      {label}
+      {onRemove && (
+        <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer",
+          color: "inherit", padding: 0, lineHeight: 1, opacity: 0.7, fontSize: 10 }}>×</button>
+      )}
+    </span>
+  );
+}
+
+// Inline tag input for adding statuses to a combo
+function StatusTagInput({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const ref = useRef<HTMLInputElement>(null);
+  function add() {
+    const v = input.trim();
+    if (!v || value.includes(v)) { setInput(""); return; }
+    onChange([...value, v]);
+    setInput("");
+    ref.current?.focus();
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center",
+      padding: "5px 8px", border: "1px solid #CBD5E1", borderRadius: 7, minHeight: 34,
+      background: "#F8FAFC" }}>
+      {value.map(s => (
+        <Chip key={s} label={s} onRemove={() => onChange(value.filter(x => x !== s))} />
+      ))}
+      <input ref={ref} value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(); } }}
+        placeholder={value.length ? "Add status…" : "Type a status, press Enter…"}
+        style={{ border: "none", outline: "none", fontSize: 11, background: "transparent",
+          color: "#374151", minWidth: 120, flex: 1 }} />
+      {input.trim() && (
+        <button onClick={add}
+          style={{ padding: "2px 8px", background: "#4F46E5", color: "#fff", border: "none",
+            borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>+ Add</button>
+      )}
+    </div>
+  );
+}
+
+// ── Tab strip ──────────────────────────────────────────────────────────────
+
+function TabStrip({ tabs, active, onChange }: {
+  tabs: { key: string; label: string }[]; active: string; onChange: (k: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #E2E8F0", marginBottom: 20 }}>
+      {tabs.map(t => (
+        <button key={t.key} onClick={() => onChange(t.key)}
+          style={{
+            padding: "8px 20px", background: "none", border: "none", cursor: "pointer",
+            fontSize: 12, fontWeight: active === t.key ? 700 : 500,
+            color: active === t.key ? "#4F46E5" : "#64748B",
+            borderBottom: active === t.key ? "2px solid #4F46E5" : "2px solid transparent",
+            marginBottom: -2,
+          }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+
+export default function StatusConfigPage() {
+  const [tab,       setTab]       = useState<"combos" | "active">("combos");
+  const [combos,    setCombos]    = useState<Combo[]>([]);
+  const [configs,   setConfigs]   = useState<OtaConfig[]>([]);
+  const [loading,   setLoading]   = useState(true);
+
+  // Combo manager state
+  const [editingCombo,    setEditingCombo]    = useState<string | null>(null); // subStatus key
+  const [editStatuses,    setEditStatuses]    = useState<string[]>([]);
+  const [editSubStatusName, setEditSubStatusName] = useState("");
+  const [showAddForm,     setShowAddForm]     = useState(false);
+  const [newSubStatus,    setNewSubStatus]    = useState("");
+  const [newStatuses,     setNewStatuses]     = useState<string[]>([]);
+  const [savingCombo,     setSavingCombo]     = useState(false);
+  const [deleteConfirm,   setDeleteConfirm]   = useState<{ subStatus: string; affectedCount: number } | null>(null);
+  const [deletingCombo,   setDeletingCombo]   = useState(false);
+
+  // Pending OTA sub-status selections (ota → enabled subStatuses)
+  const [pending, setPending] = useState<Record<string, string[]>>({});
+
+  // Inline OTA picker state (Combo Manager tab)
+  const [otaEditFor,      setOtaEditFor]      = useState<string | null>(null); // subStatus row
+  const [savingOtaAssign, setSavingOtaAssign] = useState(false);
+
+  async function fetchAll() {
+    setLoading(true);
+    const [masterRes, configRes] = await Promise.all([
+      fetch("/api/admin/status-config/master").then(r => r.json()),
+      fetch("/api/admin/status-config").then(r => r.json()),
+    ]);
+    setCombos(masterRes.combos ?? []);
+    setConfigs(configRes.configs ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchAll(); }, []);
+
+  // When configs load, initialise pending selections
+  useEffect(() => {
+    const init: Record<string, string[]> = {};
+    for (const cfg of configs) init[cfg.ota] = [...cfg.subStatuses];
+    setPending(init);
+  }, [configs]);
+
+  // ── Combo manager actions ────────────────────────────────────────────────
+
+  async function saveCombo(subStatus: string, statuses: string[]) {
+    setSavingCombo(true);
+    // Rename if sub-status name was changed
+    const newName = editSubStatusName.trim();
+    if (newName && newName !== subStatus) {
+      await fetch("/api/admin/status-config/master", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldSubStatus: subStatus, newSubStatus: newName }),
+      });
+      subStatus = newName;
+    }
+    await fetch("/api/admin/status-config/master", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subStatus, statuses }),
+    });
+    setSavingCombo(false);
+    setEditingCombo(null);
+    setShowAddForm(false);
+    setNewSubStatus("");
+    setNewStatuses([]);
+    fetchAll();
+  }
+
+  async function deleteCombo(subStatus: string) {
+    setDeletingCombo(true);
+    const res = await fetch("/api/admin/status-config/master", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subStatus }),
+    });
+    const data = await res.json();
+    setDeletingCombo(false);
+    if (data.needsConfirm) {
+      setDeleteConfirm({ subStatus, affectedCount: data.affectedCount });
+    } else {
+      fetchAll();
+    }
+  }
+
+  async function confirmDelete(autoClear: boolean) {
+    if (!deleteConfirm) return;
+    setDeletingCombo(true);
+    await fetch("/api/admin/status-config/master", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subStatus: deleteConfirm.subStatus, confirmed: true, autoClear }),
+    });
+    setDeletingCombo(false);
+    setDeleteConfirm(null);
+    fetchAll();
+  }
+
+  // ── Inline OTA assignment (from Combo Manager) ──────────────────────────
+
+  async function saveOtaAssignments(subStatus: string) {
+    const origOtas = usedBy[subStatus] ?? [];
+    const newOtas  = OTAS.filter(ota => (pending[ota] ?? []).includes(subStatus));
+    const added    = newOtas.filter(o => !origOtas.includes(o));
+    const removed  = origOtas.filter(o => !newOtas.includes(o));
+    if (added.length === 0 && removed.length === 0) { setOtaEditFor(null); return; }
+    setSavingOtaAssign(true);
+    await Promise.all([...new Set([...added, ...removed])].map(ota =>
+      fetch("/api/admin/status-config", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ota, subStatuses: pending[ota] ?? [] }),
+      })
+    ));
+    setSavingOtaAssign(false);
+    setOtaEditFor(null);
+    fetchAll();
+  }
+
+  function toggleCombo(ota: string, subStatus: string) {
+    setPending(prev => {
+      const cur = prev[ota] ?? [];
+      const next = cur.includes(subStatus) ? cur.filter(s => s !== subStatus) : [...cur, subStatus];
+      return { ...prev, [ota]: next };
+    });
+  }
+
+  // ── Derived ──────────────────────────────────────────────────────────────
+
+  // For each sub_status in master, which OTAs currently use it?
+  const usedBy: Record<string, string[]> = {};
+  for (const combo of combos) usedBy[combo.subStatus] = [];
+  for (const cfg of configs) {
+    for (const ss of cfg.subStatuses) {
+      if (usedBy[ss]) usedBy[ss].push(cfg.ota);
+    }
+  }
+
+  if (loading) return (
+    <div style={{ padding: 40, textAlign: "center", color: "#94A3B8", fontSize: 14 }}>Loading…</div>
+  );
+
+  const TABS = [
+    { key: "combos", label: "Combo Manager" },
+    { key: "active", label: "Active Logic" },
+  ];
+
+  return (
+    <div style={{ padding: "20px 24px", background: "#F8FAFC", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Status & Sub-Status Logic</div>
+          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 3 }}>
+            Define canonical sub-status → status combos, then assign them per OTA.
+          </div>
+        </div>
+
+        <TabStrip tabs={TABS} active={tab} onChange={k => setTab(k as typeof tab)} />
+
+        {/* ── TAB 1: Combo Manager ── */}
+        {tab === "combos" && (
+          <div>
+            <div style={{ fontSize: 12, color: "#64748B", marginBottom: 14 }}>
+              Master list of all sub-status → status mappings. OTAs pick from these combos — no free-form entries allowed per OTA.
+            </div>
+
+            <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
+              {/* Table header */}
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 160px 80px",
+                padding: "10px 16px", background: "#F8FAFC",
+                borderBottom: "1px solid #E2E8F0", gap: 12 }}>
+                {["Sub-Status", "Maps to Statuses", "Used by OTAs", "Actions"].map(h => (
+                  <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase" }}>{h}</div>
+                ))}
+              </div>
+
+              {combos.map((combo, idx) => {
+                const isEditing = editingCombo === combo.subStatus;
+                return (
+                  <div key={combo.subStatus} style={{
+                    display: "grid", gridTemplateColumns: "200px 1fr 160px 80px",
+                    padding: "10px 16px", gap: 12, alignItems: "start",
+                    borderBottom: idx < combos.length - 1 ? "1px solid #F1F5F9" : "none",
+                    background: isEditing ? "#F8FAFF" : "transparent",
+                  }}>
+                    {/* Sub-status name — editable when in edit mode */}
+                    <div style={{ paddingTop: 2 }}>
+                      {isEditing ? (
+                        <input
+                          value={editSubStatusName}
+                          onChange={e => setEditSubStatusName(e.target.value)}
+                          style={{ fontWeight: 600, fontSize: 12, color: "#1E293B",
+                            padding: "4px 8px", border: "1px solid #CBD5E1", borderRadius: 5,
+                            width: "100%", outline: "none" }}
+                        />
+                      ) : (
+                        <div style={{ fontWeight: 600, fontSize: 12, color: "#1E293B", paddingTop: 2 }}>
+                          {combo.subStatus}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Statuses — edit mode or display */}
+                    <div>
+                      {isEditing ? (
+                        <StatusTagInput value={editStatuses} onChange={setEditStatuses} />
+                      ) : (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 2 }}>
+                          {combo.statuses.map(s => <Chip key={s} label={s} />)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Used by — inline editable */}
+                    <div style={{ paddingTop: 2 }}>
+                      {otaEditFor === combo.subStatus ? (
+                        <div style={{ background: "#F8FAFC", border: "1px solid #CBD5E1",
+                          borderRadius: 8, padding: "8px 10px" }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8",
+                            textTransform: "uppercase", marginBottom: 6, letterSpacing: "0.05em" }}>
+                            Assign OTAs
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            {OTAS.map(ota => {
+                              const active = (pending[ota] ?? []).includes(combo.subStatus);
+                              const col = otaColor(ota);
+                              return (
+                                <label key={ota} style={{ display: "flex", alignItems: "center",
+                                  gap: 6, cursor: "pointer", padding: "2px 4px", borderRadius: 4,
+                                  background: active ? hex2rgba(col, 0.08) : "transparent" }}>
+                                  <input type="checkbox" checked={active}
+                                    onChange={() => toggleCombo(ota, combo.subStatus)}
+                                    style={{ accentColor: col, width: 12, height: 12, cursor: "pointer" }} />
+                                  <span style={{ fontSize: 11, fontWeight: active ? 700 : 400,
+                                    color: active ? col : "#475569" }}>{ota}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <div style={{ display: "flex", gap: 5, marginTop: 8 }}>
+                            <button onClick={() => saveOtaAssignments(combo.subStatus)}
+                              disabled={savingOtaAssign}
+                              style={{ flex: 1, padding: "4px 0", background: "#4F46E5", color: "#fff",
+                                border: "none", borderRadius: 5, cursor: "pointer",
+                                fontSize: 11, fontWeight: 700 }}>
+                              {savingOtaAssign ? "…" : "Save"}
+                            </button>
+                            <button onClick={() => setOtaEditFor(null)}
+                              style={{ padding: "4px 8px", background: "#E2E8F0", color: "#64748B",
+                                border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11 }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div onClick={() => { setOtaEditFor(combo.subStatus); setEditingCombo(null); }}
+                          title="Click to assign OTAs"
+                          style={{ cursor: "pointer", display: "flex", flexWrap: "wrap",
+                            gap: 3, paddingTop: 2, minHeight: 22 }}>
+                          {(usedBy[combo.subStatus] ?? []).length === 0 ? (
+                            <span style={{ fontSize: 10, color: "#CBD5E1",
+                              borderBottom: "1px dashed #CBD5E1", lineHeight: 1.4 }}>
+                              None
+                            </span>
+                          ) : (
+                            <>
+                              {(usedBy[combo.subStatus] ?? []).map(ota => (
+                                <span key={ota} style={{ fontSize: 9, fontWeight: 700,
+                                  padding: "2px 6px", borderRadius: 10,
+                                  background: hex2rgba(otaColor(ota), 0.12),
+                                  color: otaColor(ota) }}>{ota}</span>
+                              ))}
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: 1 }}>✎</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: 6, paddingTop: 2 }}>
+                      {isEditing ? (
+                        <>
+                          <button onClick={() => saveCombo(combo.subStatus, editStatuses)} disabled={savingCombo || !editSubStatusName.trim()}
+                            style={{ padding: "3px 10px", background: "#4F46E5", color: "#fff", border: "none",
+                              borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
+                            {savingCombo ? "…" : "Save"}
+                          </button>
+                          <button onClick={() => setEditingCombo(null)}
+                            style={{ padding: "3px 8px", background: "#F1F5F9", color: "#64748B",
+                              border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11 }}>
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setEditingCombo(combo.subStatus); setEditStatuses([...combo.statuses]); setEditSubStatusName(combo.subStatus); }}
+                            style={{ padding: "3px 8px", background: "none", border: "1px solid #E2E8F0",
+                              borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#475569" }}>
+                            ✎
+                          </button>
+                          <button onClick={() => deleteCombo(combo.subStatus)}
+                            style={{ padding: "3px 8px", background: "none", border: "1px solid #FCA5A5",
+                              borderRadius: 5, cursor: "pointer", fontSize: 11, color: "#DC2626" }}>
+                            ✕
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Add new combo row */}
+              {showAddForm ? (
+                <div style={{ padding: "12px 16px", borderTop: "1px dashed #E2E8F0",
+                  display: "grid", gridTemplateColumns: "200px 1fr auto", gap: 12, alignItems: "start",
+                  background: "#FAFBFF" }}>
+                  <input
+                    autoFocus
+                    value={newSubStatus}
+                    onChange={e => setNewSubStatus(e.target.value)}
+                    placeholder="Sub-status name…"
+                    style={{ padding: "6px 10px", border: "1px solid #CBD5E1", borderRadius: 7,
+                      fontSize: 12, outline: "none", color: "#1E293B" }}
+                  />
+                  <StatusTagInput value={newStatuses} onChange={setNewStatuses} />
+                  <div style={{ display: "flex", gap: 6, paddingTop: 2 }}>
+                    <button
+                      onClick={() => { if (newSubStatus.trim()) saveCombo(newSubStatus.trim(), newStatuses); }}
+                      disabled={!newSubStatus.trim() || savingCombo}
+                      style={{ padding: "6px 14px", background: "#4F46E5", color: "#fff",
+                        border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 700,
+                        opacity: !newSubStatus.trim() ? 0.5 : 1 }}>
+                      {savingCombo ? "Saving…" : "Add"}
+                    </button>
+                    <button onClick={() => { setShowAddForm(false); setNewSubStatus(""); setNewStatuses([]); }}
+                      style={{ padding: "6px 10px", background: "#F1F5F9", color: "#64748B",
+                        border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12 }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "10px 16px", borderTop: "1px dashed #E2E8F0" }}>
+                  <button onClick={() => setShowAddForm(true)}
+                    style={{ padding: "6px 14px", background: "none", border: "1px dashed #4F46E5",
+                      borderRadius: 7, cursor: "pointer", fontSize: 12, color: "#4F46E5", fontWeight: 600 }}>
+                    + New Combo
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: Active Logic ── */}
+        {tab === "active" && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+            {configs.map(cfg => {
+              const col = otaColor(cfg.ota);
+              return (
+                <div key={cfg.ota} style={{ background: "#fff", border: "1px solid #E2E8F0",
+                  borderRadius: 10, overflow: "hidden" }}>
+                  {/* Card header */}
+                  <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9",
+                    background: hex2rgba(col, 0.05), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: col }}>{cfg.ota}</div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      {cfg.isDefault && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px",
+                          background: "#FEF9C3", color: "#854D0E", borderRadius: 10 }}>DEFAULT</span>
+                      )}
+                      <span style={{ fontSize: 10, color: "#94A3B8" }}>
+                        {cfg.subStatuses.length} sub-statuses
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Combo rows */}
+                  <div style={{ padding: "8px 0" }}>
+                    {cfg.subStatuses.map(ss => {
+                      const mapped = cfg.statusMap[ss] ?? [];
+                      return (
+                        <div key={ss} style={{ padding: "6px 16px", display: "flex",
+                          alignItems: "center", gap: 10,
+                          borderBottom: "1px solid #F8FAFC" }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#374151",
+                            minWidth: 130, flexShrink: 0 }}>{ss}</div>
+                          <div style={{ fontSize: 9, color: "#94A3B8", flexShrink: 0 }}>→</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                            {mapped.length > 0 ? mapped.map(s => (
+                              <span key={s} style={{ fontSize: 9, padding: "1px 6px",
+                                background: hex2rgba(col, 0.1), color: col,
+                                borderRadius: 4, fontWeight: 600 }}>{s}</span>
+                            )) : (
+                              <span style={{ fontSize: 9, color: "#CBD5E1" }}>—</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {cfg.subStatuses.length === 0 && (
+                      <div style={{ padding: "12px 16px", fontSize: 11, color: "#CBD5E1" }}>No combos assigned</div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  {!cfg.isDefault && cfg.updatedBy && (
+                    <div style={{ padding: "8px 16px", borderTop: "1px solid #F1F5F9",
+                      fontSize: 10, color: "#94A3B8" }}>
+                      Updated by {cfg.updatedBy}{cfg.updatedAt ? ` · ${timeSince(cfg.updatedAt)}` : ""}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {deleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px",
+            maxWidth: 420, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#0F172A", marginBottom: 8 }}>
+              Delete "{deleteConfirm.subStatus}"?
+            </div>
+            <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>
+              <span style={{ fontWeight: 700, color: "#DC2626" }}>{deleteConfirm.affectedCount} {deleteConfirm.affectedCount === 1 ? "property" : "properties"}</span>
+              {" "}currently have this sub-status. Choose how to handle them:
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={() => confirmDelete(true)} disabled={deletingCombo}
+                style={{ padding: "10px 16px", background: "#DC2626", color: "#fff",
+                  border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13,
+                  fontWeight: 700, textAlign: "left", opacity: deletingCombo ? 0.6 : 1 }}>
+                Delete + clear from {deleteConfirm.affectedCount} {deleteConfirm.affectedCount === 1 ? "property" : "properties"}
+                <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.85, marginTop: 2 }}>
+                  Sets sub-status to blank on affected properties
+                </div>
+              </button>
+              <button onClick={() => confirmDelete(false)} disabled={deletingCombo}
+                style={{ padding: "10px 16px", background: "#F1F5F9", color: "#374151",
+                  border: "1px solid #E2E8F0", borderRadius: 7, cursor: "pointer", fontSize: 13,
+                  fontWeight: 600, textAlign: "left", opacity: deletingCombo ? 0.6 : 1 }}>
+                Delete only (keep existing values on properties)
+                <div style={{ fontSize: 10, fontWeight: 400, color: "#94A3B8", marginTop: 2 }}>
+                  Properties keep the old value but it won't appear in dropdowns
+                </div>
+              </button>
+              <button onClick={() => setDeleteConfirm(null)} disabled={deletingCombo}
+                style={{ padding: "7px 16px", background: "none", border: "none",
+                  cursor: "pointer", fontSize: 12, color: "#94A3B8" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

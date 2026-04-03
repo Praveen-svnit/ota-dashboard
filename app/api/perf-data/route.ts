@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import { OTAS } from "@/lib/constants";
 
 function firstOfMonth(now: Date): string {
@@ -19,38 +19,108 @@ function dodWindow(now: Date): { labels: string[]; dates: string[] } {
 
 export async function GET() {
   try {
-    const db  = getDb();
+    const sql = getSql();
     const now = new Date();
 
-    const count = (db.prepare("SELECT COUNT(*) as n FROM Property").get() as { n: number }).n;
+    const count = Number((await sql`SELECT COUNT(*) AS n FROM inventory`)[0].n);
     if (count === 0) {
       return Response.json({ error: "No data — click Sync to DB in the topbar first" });
     }
 
-    // FH live count — Live + SoldOut (active properties)
-    const fhLive = (
-      db.prepare("SELECT COUNT(*) as n FROM Property WHERE LOWER(fhStatus) IN ('live', 'soldout')").get() as { n: number }
-    ).n;
-
     const firstOfMon = firstOfMonth(now);
-
-    // Exception OTAs: count 'ready to go live' as live (OTAs not yet formally signed)
     const EXCEPTION_OTAS = ["Ixigo", "Akbar Travels"];
 
-    // Per-OTA metrics — only for active FH properties, using subStatus='live' as canonical signal
-    const otaRows = db.prepare(`
-      SELECT o.ota,
-        SUM(CASE WHEN LOWER(o.subStatus) = 'live' THEN 1 ELSE 0 END) AS otaLiveCnt,
-        SUM(CASE WHEN LOWER(o.subStatus) = 'live' THEN 1 ELSE 0 END) AS trackerLiveCnt,
-        SUM(CASE WHEN o.liveDate IS NOT NULL AND o.liveDate >= ? THEN 1 ELSE 0 END) AS trackerMtdCnt,
-        SUM(CASE WHEN LOWER(o.subStatus) IN ('live', 'ready to go live') THEN 1 ELSE 0 END) AS adjustedLiveCnt
-      FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
-      WHERE LOWER(p.fhStatus) IN ('live', 'soldout')
-      GROUP BY o.ota
-    `).all(firstOfMon) as Array<{
-      ota: string; otaLiveCnt: number; trackerLiveCnt: number; trackerMtdCnt: number; adjustedLiveCnt: number;
-    }>;
+    const { labels: dodLabels, dates: refDates } = dodWindow(now);
+    const cutoff15 = refDates[0];
+
+    const l12mCutoff = new Date(now);
+    l12mCutoff.setMonth(l12mCutoff.getMonth() - 11);
+    const l12mCutoffStr = `${l12mCutoff.getFullYear()}-${String(l12mCutoff.getMonth() + 1).padStart(2, "0")}-01`;
+
+    // Run all independent queries in parallel
+    const [
+      fhLiveRows,
+      otaRows,
+      dodRows,
+      tatCountRows,
+      rtglRows,
+      tatMonthlyRows,
+      tatRows,
+      dodFullRows,
+    ] = await Promise.all([
+      sql`
+        SELECT COUNT(*) AS n FROM inventory WHERE LOWER(fh_status) IN ('live', 'soldout')
+      ` as Promise<Array<{ n: number }>>,
+
+      sql`
+        SELECT ol.ota,
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS "otaLiveCnt",
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' THEN 1 ELSE 0 END) AS "trackerLiveCnt",
+          SUM(CASE WHEN ol.live_date IS NOT NULL AND ol.live_date::date >= ${firstOfMon}::date THEN 1 ELSE 0 END) AS "trackerMtdCnt",
+          SUM(CASE WHEN LOWER(ol.sub_status) IN ('live', 'ready to go live') THEN 1 ELSE 0 END) AS "adjustedLiveCnt"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+        WHERE LOWER(inv.fh_status) IN ('live', 'soldout')
+        GROUP BY ol.ota
+      ` as Promise<Array<{ ota: string; otaLiveCnt: number; trackerLiveCnt: number; trackerMtdCnt: number; adjustedLiveCnt: number }>>,
+
+      sql`
+        SELECT ota, live_date::date AS d, COUNT(*) AS cnt
+        FROM ota_listing
+        WHERE live_date IS NOT NULL AND live_date::date >= ${cutoff15}::date
+        GROUP BY ota, live_date::date
+      ` as Promise<Array<{ ota: string; d: string; cnt: number }>>,
+
+      sql`
+        SELECT ol.ota,
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' AND ol.tat <= 15 AND ol.tat_error = 0 THEN 1 ELSE 0 END) AS "inTatCnt",
+          SUM(CASE WHEN LOWER(ol.sub_status) = 'live' AND ol.tat > 15 THEN 1 ELSE 0 END) AS "afterTatCnt",
+          ROUND(AVG(CASE WHEN LOWER(ol.sub_status) = 'live' AND ol.tat_error = 0 THEN ol.tat END)) AS "avgTat"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+        WHERE LOWER(inv.fh_status) IN ('live', 'soldout')
+        GROUP BY ol.ota
+      ` as Promise<Array<{ ota: string; inTatCnt: number; afterTatCnt: number; avgTat: number | null }>>,
+
+      sql`
+        SELECT ol.ota, COUNT(*) AS cnt
+        FROM ota_listing ol
+        WHERE LOWER(ol.status) IN ('ready to go live', 'ready to go live ')
+        GROUP BY ol.ota
+      ` as Promise<Array<{ ota: string; cnt: number }>>,
+
+      sql`
+        SELECT ol.ota,
+          TO_CHAR(ol.live_date::date, 'YYYY-MM') AS month,
+          SUM(CASE WHEN ol.tat <= 15 AND ol.tat_error = 0 THEN 1 ELSE 0 END) AS "inTatCnt",
+          SUM(CASE WHEN ol.tat > 15 THEN 1 ELSE 0 END) AS "afterTatCnt"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+        WHERE LOWER(inv.fh_status) IN ('live', 'soldout')
+          AND ol.live_date IS NOT NULL
+          AND ol.live_date::date >= ${l12mCutoffStr}::date
+        GROUP BY ol.ota, TO_CHAR(ol.live_date::date, 'YYYY-MM')
+      ` as Promise<Array<{ ota: string; month: string; inTatCnt: number; afterTatCnt: number }>>,
+
+      sql`
+        SELECT ol.ota,
+          ROUND(AVG((ol.live_date::date - inv.fh_live_date::date))) AS "avgTat"
+        FROM ota_listing ol
+        JOIN inventory inv ON inv.property_id = ol.property_id
+        WHERE ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL
+          AND ol.live_date::date >= inv.fh_live_date::date
+        GROUP BY ol.ota
+      ` as Promise<Array<{ ota: string; avgTat: number | null }>>,
+
+      sql`
+        SELECT ota, live_date::date AS d, COUNT(*) AS cnt
+        FROM ota_listing
+        WHERE live_date IS NOT NULL AND live_date::date >= ${l12mCutoffStr}::date
+        GROUP BY ota, live_date::date
+      ` as Promise<Array<{ ota: string; d: string; cnt: number }>>,
+    ]);
+
+    const fhLive = Number(fhLiveRows[0].n);
 
     const otaLive:         Record<string, number> = {};
     const adjustedOtaLive: Record<string, number> = {};
@@ -58,113 +128,51 @@ export async function GET() {
     const trackerMtd:      Record<string, number> = {};
     for (const ota of OTAS) { otaLive[ota] = 0; adjustedOtaLive[ota] = 0; trackerLive[ota] = 0; trackerMtd[ota] = 0; }
     for (const r of otaRows) {
-      otaLive[r.ota]          = r.otaLiveCnt;
-      adjustedOtaLive[r.ota]  = EXCEPTION_OTAS.includes(r.ota) ? r.adjustedLiveCnt : r.otaLiveCnt;
-      trackerLive[r.ota]      = r.trackerLiveCnt;
-      trackerMtd[r.ota]       = r.trackerMtdCnt;
+      otaLive[r.ota]          = Number(r.otaLiveCnt);
+      adjustedOtaLive[r.ota]  = EXCEPTION_OTAS.includes(r.ota) ? Number(r.adjustedLiveCnt) : Number(r.otaLiveCnt);
+      trackerLive[r.ota]      = Number(r.trackerLiveCnt);
+      trackerMtd[r.ota]       = Number(r.trackerMtdCnt);
     }
-
-    // DoD — last 15 days per OTA
-    const { labels: dodLabels, dates: refDates } = dodWindow(now);
-    const cutoff15 = refDates[0];
-
-    const dodRows = db.prepare(`
-      SELECT ota, DATE(liveDate) AS d, COUNT(*) AS cnt
-      FROM OtaListing
-      WHERE liveDate IS NOT NULL AND DATE(liveDate) >= ?
-      GROUP BY ota, DATE(liveDate)
-    `).all(cutoff15) as Array<{ ota: string; d: string; cnt: number }>;
 
     const dodByOta: Record<string, number[]> = {};
     for (const ota of OTAS) dodByOta[ota] = new Array(15).fill(0);
     for (const row of dodRows) {
-      const idx = refDates.indexOf(row.d);
-      if (idx !== -1 && dodByOta[row.ota]) dodByOta[row.ota][idx] = row.cnt;
+      const d = typeof row.d === "string" ? row.d : (row.d as Date).toISOString().slice(0, 10);
+      const idx = refDates.indexOf(d);
+      if (idx !== -1 && dodByOta[row.ota]) dodByOta[row.ota][idx] = Number(row.cnt);
     }
-
-    // In-TAT / After-TAT counts + avg TAT per OTA (threshold = 15 days, live listings only)
-    const tatCountRows = db.prepare(`
-      SELECT o.ota,
-        SUM(CASE WHEN LOWER(o.subStatus) = 'live' AND o.tat <= 15 AND o.tatError = 0 THEN 1 ELSE 0 END) AS inTatCnt,
-        SUM(CASE WHEN LOWER(o.subStatus) = 'live' AND o.tat > 15 THEN 1 ELSE 0 END) AS afterTatCnt,
-        ROUND(AVG(CASE WHEN LOWER(o.subStatus) = 'live' AND o.tatError = 0 THEN o.tat END)) AS avgTat
-      FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
-      WHERE LOWER(p.fhStatus) IN ('live', 'soldout')
-      GROUP BY o.ota
-    `).all() as Array<{ ota: string; inTatCnt: number; afterTatCnt: number; avgTat: number | null }>;
 
     const tatCounts: Record<string, { inTat: number; afterTat: number; avgTat: number | null }> = {};
     for (const ota of OTAS) tatCounts[ota] = { inTat: 0, afterTat: 0, avgTat: null };
     for (const r of tatCountRows) {
-      tatCounts[r.ota] = { inTat: r.inTatCnt, afterTat: r.afterTatCnt, avgTat: r.avgTat ?? null };
+      tatCounts[r.ota] = {
+        inTat: Number(r.inTatCnt),
+        afterTat: Number(r.afterTatCnt),
+        avgTat: r.avgTat !== null ? Math.round(Number(r.avgTat)) : null,
+      };
     }
 
-    // Ready-to-go-live count per OTA (no fhStatus filter — RTGL can predate FH live)
-    const rtglRows = db.prepare(`
-      SELECT o.ota, COUNT(*) AS cnt
-      FROM OtaListing o
-      WHERE LOWER(o.status) IN ('ready to go live', 'ready to go live ')
-      GROUP BY o.ota
-    `).all() as Array<{ ota: string; cnt: number }>;
-
     const rtglCounts: Record<string, number> = {};
-    for (const r of rtglRows) rtglCounts[r.ota] = r.cnt;
-
-    // Monthly in-TAT / after-TAT breakdown per OTA (L12M)
-    const l12mCutoff = new Date(now);
-    l12mCutoff.setMonth(l12mCutoff.getMonth() - 11);
-    const l12mCutoffStr = `${l12mCutoff.getFullYear()}-${String(l12mCutoff.getMonth() + 1).padStart(2, "0")}-01`;
-
-    const tatMonthlyRows = db.prepare(`
-      SELECT o.ota,
-        strftime('%Y-%m', o.liveDate) AS month,
-        SUM(CASE WHEN o.tat <= 15 AND o.tatError = 0 THEN 1 ELSE 0 END) AS inTatCnt,
-        SUM(CASE WHEN o.tat > 15 THEN 1 ELSE 0 END) AS afterTatCnt
-      FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
-      WHERE LOWER(p.fhStatus) IN ('live', 'soldout')
-        AND o.liveDate IS NOT NULL
-        AND o.liveDate >= ?
-      GROUP BY o.ota, strftime('%Y-%m', o.liveDate)
-    `).all(l12mCutoffStr) as Array<{ ota: string; month: string; inTatCnt: number; afterTatCnt: number }>;
+    for (const r of rtglRows) rtglCounts[r.ota] = Number(r.cnt);
 
     const tatMonthly: Record<string, Record<string, { inTat: number; afterTat: number }>> = {};
     for (const ota of OTAS) tatMonthly[ota] = {};
     for (const r of tatMonthlyRows) {
       if (!tatMonthly[r.ota]) tatMonthly[r.ota] = {};
-      tatMonthly[r.ota][r.month] = { inTat: r.inTatCnt, afterTat: r.afterTatCnt };
+      tatMonthly[r.ota][r.month] = { inTat: Number(r.inTatCnt), afterTat: Number(r.afterTatCnt) };
     }
-
-    // TAT per OTA
-    const tatRows = db.prepare(`
-      SELECT o.ota,
-        ROUND(AVG(julianday(o.liveDate) - julianday(p.fhLiveDate))) AS avgTat
-      FROM OtaListing o
-      JOIN Property p ON p.id = o.propertyId
-      WHERE o.liveDate IS NOT NULL AND p.fhLiveDate IS NOT NULL
-        AND julianday(o.liveDate) >= julianday(p.fhLiveDate)
-      GROUP BY o.ota
-    `).all() as Array<{ ota: string; avgTat: number | null }>;
 
     const tatByOta: Record<string, number | null> = {};
     for (const ota of OTAS) tatByOta[ota] = null;
     for (const row of tatRows) {
-      tatByOta[row.ota] = row.avgTat !== null ? Math.round(row.avgTat) : null;
+      tatByOta[row.ota] = row.avgTat !== null ? Math.round(Number(row.avgTat)) : null;
     }
-
-    // Full daily DOD for L12M — used for month×day matrix in individual tab
-    const dodFullRows = db.prepare(`
-      SELECT ota, DATE(liveDate) AS d, COUNT(*) AS cnt
-      FROM OtaListing
-      WHERE liveDate IS NOT NULL AND liveDate >= ?
-      GROUP BY ota, DATE(liveDate)
-    `).all(l12mCutoffStr) as Array<{ ota: string; d: string; cnt: number }>;
 
     const dodFull: Record<string, Record<string, number>> = {};
     for (const r of dodFullRows) {
+      const d = typeof r.d === "string" ? r.d : (r.d as Date).toISOString().slice(0, 10);
       if (!dodFull[r.ota]) dodFull[r.ota] = {};
-      dodFull[r.ota][r.d] = r.cnt;
+      dodFull[r.ota][d] = Number(r.cnt);
     }
 
     return Response.json({

@@ -111,6 +111,36 @@ function scoreMeta(score: number): { color: string; bg: string } {
   return               { color: "#EF4444", bg: "#FEF2F2" };
 }
 
+/* ── TL Score (out of 5, 0.5 steps) ─────────────────────────────────────
+   1. Portfolio Live Rate   → base 0–3
+   2. TAT Compliance %      → qual 0–1.5
+   3. Total Per Day (CM)    → pace 0–1.5
+   ──────────────────────────────────────────────────────────────────────── */
+function computeTLScore(portfolioLiveRate: number | null, inTatPct: number | null, totalPerDay: number | null): number {
+  let base = 0;
+  if (portfolioLiveRate != null) {
+    if      (portfolioLiveRate >= 85) base = 3.0;
+    else if (portfolioLiveRate >= 75) base = 2.5;
+    else if (portfolioLiveRate >= 65) base = 2.0;
+    else if (portfolioLiveRate >= 55) base = 1.5;
+    else if (portfolioLiveRate >= 45) base = 1.0;
+    else if (portfolioLiveRate >= 30) base = 0.5;
+  }
+  let qual = 0;
+  if (inTatPct != null) {
+    if      (inTatPct >= 80) qual = 1.5;
+    else if (inTatPct >= 65) qual = 1.0;
+    else if (inTatPct >= 50) qual = 0.5;
+  }
+  let pace = 0;
+  if (totalPerDay !== null) {
+    if      (totalPerDay >= 20) pace = 1.5;
+    else if (totalPerDay >= 12) pace = 1.0;
+    else if (totalPerDay >= 6)  pace = 0.5;
+  }
+  return Math.min(5, Math.round((base + qual + pace) * 2) / 2);
+}
+
 /* ── Shared cell style helpers ──────────────────────────────────────────── */
 const TD: React.CSSProperties = { padding: "7px 12px", whiteSpace: "nowrap", verticalAlign: "middle" };
 const TH_BASE: React.CSSProperties = {
@@ -153,11 +183,17 @@ export default function PerformancePage() {
   const [dod,          setDod]          = useState<{ labels: string[]; byOta: Record<string, number[]> }>({ labels: [], byOta: {} });
   const [loading,      setLoading]      = useState(true);
   const [activeTeam,   setActiveTeam]   = useState("all");
+  const [sessionUser,  setSessionUser]  = useState<{ name: string; role: string; ota: string | null } | null>(null);
   const [showL3mDetail,  setShowL3mDetail]  = useState(false);
   const [formulaHover,   setFormulaHover]   = useState(false);
   const [listingView,    setListingView]    = useState<"mom" | "dod">("mom");
-  const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | "reports1" | "reports2">("summary");
+  const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | "reports1" | "reports2" | "tl">("summary");
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  const [showTlFormula,  setShowTlFormula]  = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setSessionUser(d.user ?? null));
+  }, []);
 
   useEffect(() => {
     let done = 0;
@@ -209,21 +245,97 @@ export default function PerformancePage() {
   };
   const last3Labels = l12m.months.slice(-4, -1); // [LM-2, LM-1, LM]
 
-  const visibleTeams = TEAMS.filter((t) => activeTeam === "all" || t.name === activeTeam);
+  // Role-based team filtering
+  const roleFilteredTeams = (() => {
+    if (!sessionUser) return TEAMS;
+    if (sessionUser.role === "tl") {
+      return TEAMS.filter(t => t.name.toLowerCase() === sessionUser.name.toLowerCase());
+    }
+    if (sessionUser.role === "intern") {
+      // Show only the team that contains this intern (matched by OTA or name)
+      return TEAMS.filter(t => t.members.some(m =>
+        m.name.toLowerCase() === sessionUser.name.toLowerCase() ||
+        (m.ota && sessionUser.ota && m.ota === sessionUser.ota)
+      ));
+    }
+    return TEAMS; // head / admin: all
+  })();
+
+  const visibleTeams = roleFilteredTeams.filter((t) => activeTeam === "all" || t.name === activeTeam);
+
+  /* ── TL Performance tab: per-TL aggregates ───────────────────────────── */
+  const tlVisibleTeams = (sessionUser?.role === "tl")
+    ? TEAMS.filter(t => t.type === "ota" && t.name.toLowerCase() === sessionUser.name.toLowerCase())
+    : TEAMS.filter(t => t.type === "ota");
+
+  const tlRows = tlVisibleTeams.map((team) => {
+    const otaMembers = team.members.filter((m) => m.ota);
+    const liveRates: number[] = [];
+    let totalLive = 0, totalNotLive = 0, totalMtd = 0, totalInTat = 0, totalAfterTat = 0;
+    const tatAvgs: number[] = [];
+    for (const m of otaMembers) {
+      const live = (adjustedOtaLive[m.ota!] ?? otaLive[m.ota!]) ?? 0;
+      if (fhLive > 0 && !UNSIGNED_OTAS.has(m.ota!)) {
+        liveRates.push((live / fhLive) * 100);
+        totalLive    += live;
+        totalNotLive += Math.max(0, fhLive - live);
+      }
+      const mtd = mtdByOta[m.ota!];
+      if (mtd) totalMtd += mtd.cmMTD;
+      const tc = tatCounts[m.ota!];
+      if (tc) {
+        totalInTat    += tc.inTat;
+        totalAfterTat += tc.afterTat;
+        if (tc.avgTat != null) tatAvgs.push(tc.avgTat);
+      }
+    }
+    const portfolioLiveRate = liveRates.length ? liveRates.reduce((s, v) => s + v, 0) / liveRates.length : null;
+    const totalPerDay  = daysDone > 0 ? +(totalMtd / daysDone).toFixed(1) : null;
+    const avgPerMember = otaMembers.length > 0 && totalPerDay != null ? +(totalPerDay / otaMembers.length).toFixed(1) : null;
+    const notLive      = fhLive > 0 ? totalNotLive : null;
+    const avgTat       = tatAvgs.length ? Math.round(tatAvgs.reduce((s, v) => s + v, 0) / tatAvgs.length) : null;
+    const totalTatDone = totalInTat + totalAfterTat;
+    const inTatPct     = totalTatDone > 0 ? (totalInTat / totalTatDone) * 100 : null;
+    const score        = computeTLScore(portfolioLiveRate, inTatPct, totalPerDay);
+    return { team, otaMembers, portfolioLiveRate, totalPerDay, avgPerMember, totalLive: liveRates.length > 0 ? totalLive : null, notLive, totalMtd, avgTat, totalInTat, totalAfterTat, inTatPct, score };
+  });
+  const tlRanked = [...tlRows].sort((a, b) => b.score - a.score);
 
   return (
     <div style={{ padding: "24px 28px", background: "#F8FAFC", minHeight: "100vh" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>IC Performance</span>
-        {/* Tab toggle */}
-        <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
+      <div style={{ marginBottom: 16 }}>
+        {/* Row 1: title + nav strip */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>Team Performance</span>
+            {loading && <span style={{ fontSize: 10, color: "#94A3B8" }}>Loading…</span>}
+          </div>
+          {/* Nav tab strip — right side */}
+          <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+            {([
+              ["CRM",          "/crm",         false],
+              ["Task Manager", "/tasks",        false],
+              ["Performance",  "/performance",  true ],
+            ] as [string, string, boolean][]).map(([label, href, active]) => (
+              <a key={label} href={href} style={{
+                padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                textDecoration: "none", whiteSpace: "nowrap", display: "inline-block",
+                background: active ? "#0F172A" : "transparent",
+                color: active ? "#FFFFFF" : "#64748B",
+              }}>{label}</a>
+            ))}
+          </div>
+        </div>
+        {/* Row 2: unified tab strip */}
+        <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 10, padding: 3, width: "fit-content", marginBottom: 10 }}>
           {([
             { key: "summary",    label: "Team Summary"          },
             { key: "individual", label: "Individual Performance" },
             { key: "reports1",   label: "Reports 1"             },
             { key: "reports2",   label: "Reports 2"             },
+            { key: "tl",         label: "TL Performance"        },
           ] as const).map(({ key, label }) => {
             const active = perfTab === key;
             return (
@@ -240,14 +352,14 @@ export default function PerformancePage() {
             );
           })}
         </div>
-        {loading && <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>Loading…</span>}
-      </div>
-
-      {perfTab === "summary" && (<>
-
-      {/* Team filter */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-        {["all", ...TEAMS.map((t) => t.name)].map((t) => {
+        {/* Row 2: team filter — always rendered to keep height stable */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
+          opacity: perfTab === "summary" ? 1 : 0,
+          pointerEvents: perfTab === "summary" ? "auto" : "none",
+          height: perfTab === "summary" ? undefined : 0, overflow: "hidden",
+          transition: "opacity 0.15s",
+        }}>
+        {(sessionUser?.role === "tl" || sessionUser?.role === "intern" ? [] : ["all"]).concat(roleFilteredTeams.map((t) => t.name)).map((t) => {
           const team  = TEAMS.find((x) => x.name === t);
           const color = team?.color ?? "#6366F1";
           const active = activeTeam === t;
@@ -393,8 +505,10 @@ export default function PerformancePage() {
             </button>
           );
         })}
-      </div>
+        </div>{/* end team filter / row 2 */}
+      </div>{/* end header */}
 
+      {perfTab === "summary" && (<>
       {/* ── Member Table ───────────────────────────────────────────────── */}
       <div style={{
         background: "#FFF", border: "1px solid #E2E8F0",
@@ -1169,6 +1283,178 @@ export default function PerformancePage() {
           </div>
         );
       })()}
+
+      {/* ── TL Performance Tab ─────────────────────────────────────────── */}
+      {perfTab === "tl" && (
+        <div>
+          {/* Sub-header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#8B5CF6", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 20, padding: "2px 10px" }}>
+              {tlVisibleTeams.length} Team Lead{tlVisibleTeams.length !== 1 ? "s" : ""} · Portfolio View
+            </span>
+          </div>
+
+          {/* Scoring Formula */}
+          <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
+            <button onClick={() => setShowTlFormula(o => !o)} style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "9px 14px", background: "none", border: "none", cursor: "pointer",
+              fontSize: 11, fontWeight: 700, color: "#0F172A",
+            }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#8B5CF6", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 20, padding: "2px 8px", letterSpacing: "0.04em" }}>TL SCORING FORMULA</span>
+                Score / 5 · 0.5 steps · Live Rate (max 3) + TAT Compliance (max 1.5) + Total Per Day CM (max 1.5)
+              </span>
+              <span style={{ color: "#94A3B8", fontSize: 12 }}>{showTlFormula ? "▲" : "▼"}</span>
+            </button>
+            {showTlFormula && (
+              <div style={{ borderTop: "1px solid #F1F5F9", padding: "12px 16px 14px", background: "#FAFBFF" }}>
+                <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#8B5CF6", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Portfolio Live Rate → Base (max 3)</div>
+                    <table style={{ borderCollapse: "collapse", fontSize: 10 }}>
+                      <thead><tr>{["Live Rate", "Base"].map(h => <th key={h} style={{ padding: "3px 10px", background: "#F5F3FF", color: "#8B5CF6", fontWeight: 700, fontSize: 9, textAlign: "left", border: "1px solid #DDD6FE" }}>{h}</th>)}</tr></thead>
+                      <tbody>{[["≥ 85%","3.0"],["≥ 75%","2.5"],["≥ 65%","2.0"],["≥ 55%","1.5"],["≥ 45%","1.0"],["≥ 30%","0.5"],["< 30%","0"]].map(([lr, b]) => (
+                        <tr key={lr}><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", color: "#374151" }}>{lr}</td><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", fontWeight: 700, color: "#8B5CF6", textAlign: "center" }}>{b}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>TAT Compliance % → Quality (max +1.5)</div>
+                    <table style={{ borderCollapse: "collapse", fontSize: 10 }}>
+                      <thead><tr>{["In-TAT %", "Bonus"].map(h => <th key={h} style={{ padding: "3px 10px", background: "#D1FAE5", color: "#10B981", fontWeight: 700, fontSize: 9, textAlign: "left", border: "1px solid #6EE7B7" }}>{h}</th>)}</tr></thead>
+                      <tbody>{[["≥ 80%","+1.5"],["≥ 65%","+1.0"],["≥ 50%","+0.5"],["< 50%","+0"]].map(([pct, b]) => (
+                        <tr key={pct}><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", color: "#374151" }}>{pct}</td><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", fontWeight: 700, color: "#10B981", textAlign: "center" }}>{b}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Per Day (CM) → Pace (max +1.5)</div>
+                    <table style={{ borderCollapse: "collapse", fontSize: 10 }}>
+                      <thead><tr>{["Per Day (team)", "Bonus"].map(h => <th key={h} style={{ padding: "3px 10px", background: "#FEF3C7", color: "#F59E0B", fontWeight: 700, fontSize: 9, textAlign: "left", border: "1px solid #FDE68A" }}>{h}</th>)}</tr></thead>
+                      <tbody>{[["≥ 20/day","+1.5"],["≥ 12/day","+1.0"],["≥ 6/day","+0.5"],["< 6/day","+0"]].map(([pd, b]) => (
+                        <tr key={pd}><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", color: "#374151" }}>{pd}</td><td style={{ padding: "3px 10px", border: "1px solid #F1F5F9", fontWeight: 700, color: "#F59E0B", textAlign: "center" }}>{b}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <div style={{ alignSelf: "flex-end", fontSize: 10, color: "#94A3B8", maxWidth: 220, lineHeight: 1.6 }}>
+                    <b style={{ color: "#64748B" }}>Note:</b> Final = Base + Quality + Pace, capped at 5.0, rounded to nearest 0.5.<br />
+                    TAT Compliance = In TAT ÷ (In TAT + After TAT) × 100.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* TL Summary Table */}
+          <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ padding: "9px 14px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#0F172A" }}>Team Lead Summary</span>
+              <span style={{ fontSize: 9, color: "#94A3B8" }}>Portfolio metrics aggregated across each TL&apos;s OTA-assigned members</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH_BASE, textAlign: "left" }}>Rank</th>
+                    <th style={{ ...TH_BASE, textAlign: "left" }}>Team Lead</th>
+                    <th style={{ ...TH_BASE, textAlign: "left" }}>Members</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Portfolio Live Rate</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Total Per Day (CM)</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Avg / Day / Member</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Total Live</th>
+                    <th style={{ ...TH_BASE, textAlign: "center", color: "#10B981" }}>In TAT</th>
+                    <th style={{ ...TH_BASE, textAlign: "center", color: "#EF4444" }}>After TAT</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Not Live</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Avg TAT (days)</th>
+                    <th style={{ ...TH_BASE, textAlign: "center" }}>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tlRanked.map((row, rank) => {
+                    const { team, otaMembers, portfolioLiveRate, totalPerDay, avgPerMember, totalLive, notLive, totalMtd, avgTat, totalInTat, totalAfterTat, inTatPct, score } = row;
+                    const perf    = scoreMeta(score);
+                    const lrColor = portfolioLiveRate == null ? "#CBD5E1"
+                      : portfolioLiveRate >= 95 ? "#6366F1"
+                      : portfolioLiveRate >= 75 ? "#10B981"
+                      : portfolioLiveRate >= 50 ? "#F59E0B"
+                      : "#EF4444";
+                    return (
+                      <tr key={team.name} style={{ borderBottom: rank < tlRanked.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+                        <td style={{ ...TD, textAlign: "center", width: 48 }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: "50%", background: rank === 0 ? "#FEF3C7" : rank === 1 ? "#F1F5F9" : rank === 2 ? "#FEF0E8" : "#F8FAFC", color: rank === 0 ? "#B45309" : rank === 1 ? "#475569" : rank === 2 ? "#92400E" : "#94A3B8", fontWeight: 800, fontSize: 11 }}>{rank + 1}</span>
+                        </td>
+                        <td style={{ ...TD, borderLeft: `3px solid ${team.color}`, background: team.color + "07" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, background: team.color, color: "#FFF", fontSize: 10, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 5px ${team.color}50` }}>{team.name[0]}</span>
+                            <div>
+                              <div style={{ fontWeight: 700, color: "#0F172A", fontSize: 12 }}>{team.name}</div>
+                              <div style={{ fontSize: 8, fontWeight: 700, color: team.color, textTransform: "uppercase", letterSpacing: "0.04em" }}>{otaMembers.length} OTA member{otaMembers.length !== 1 ? "s" : ""}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ ...TD }}>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", maxWidth: 220 }}>
+                            {otaMembers.map((m) => (
+                              <span key={m.name} style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: team.color + "15", color: team.color, border: `1px solid ${team.color}30`, whiteSpace: "nowrap" }}>{m.name}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading || portfolioLiveRate == null ? "#CBD5E1" : lrColor }}>
+                            {loading ? "—" : portfolioLiveRate != null ? portfolioLiveRate.toFixed(1) + "%" : "—"}
+                          </span>
+                          {!loading && portfolioLiveRate != null && fhLive > 0 && (
+                            <div style={{ fontSize: 8, color: "#94A3B8", marginTop: 1 }}>
+                              {(() => {
+                                const signedCnt   = otaMembers.filter(m => !UNSIGNED_OTAS.has(m.ota!)).length;
+                                const unsignedCnt = otaMembers.length - signedCnt;
+                                return unsignedCnt > 0 ? `avg of ${signedCnt} OTAs · ${unsignedCnt} unsigned excl.` : `avg of ${signedCnt} OTAs`;
+                              })()}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading ? "#CBD5E1" : team.color }}>{loading ? "—" : (totalPerDay ?? "—")}</span>
+                          {!loading && totalMtd > 0 && <div style={{ fontSize: 8, color: "#94A3B8", marginTop: 1 }}>{totalMtd} in {daysDone}d</div>}
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading ? "#CBD5E1" : "#374151" }}>{loading ? "—" : (avgPerMember ?? "—")}</span>
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading || totalLive == null ? "#CBD5E1" : "#6366F1" }}>{loading || totalLive == null ? "—" : totalLive}</span>
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading ? "#CBD5E1" : "#10B981" }}>{loading ? "—" : totalInTat}</span>
+                          {!loading && inTatPct != null && <div style={{ fontSize: 8, color: "#10B981", marginTop: 1, fontWeight: 700 }}>{inTatPct.toFixed(0)}% compliance</div>}
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading ? "#CBD5E1" : totalAfterTat > 0 ? "#EF4444" : "#94A3B8" }}>{loading ? "—" : totalAfterTat}</span>
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading || notLive == null ? "#CBD5E1" : "#EF4444" }}>{loading || notLive == null ? "—" : notLive}</span>
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: loading || avgTat == null ? "#CBD5E1" : avgTat <= 7 ? "#10B981" : avgTat <= 14 ? "#F59E0B" : "#EF4444" }}>{loading || avgTat == null ? "—" : avgTat}</span>
+                          {!loading && avgTat != null && <div style={{ fontSize: 8, color: "#94A3B8", marginTop: 1 }}>days avg</div>}
+                        </td>
+                        <td style={{ ...TD, textAlign: "center" }}>
+                          {loading
+                            ? <span style={{ color: "#CBD5E1" }}>—</span>
+                            : <span style={{ fontSize: 12, fontWeight: 800, padding: "4px 14px", borderRadius: 20, background: perf.bg, color: perf.color, border: `1px solid ${perf.color}25`, letterSpacing: "0.01em" }}>
+                                {score.toFixed(1)}<span style={{ fontSize: 9, fontWeight: 600, opacity: 0.7 }}> /5</span>
+                              </span>
+                          }
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

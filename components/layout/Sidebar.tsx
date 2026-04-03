@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 
 interface SessionUser { id: string; username: string; name: string; role: string; ota: string | null; }
 
@@ -17,8 +17,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
   const [collapsed,  setCollapsed]  = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
-  const [refreshing, setRefreshing] = useState(false);
-
   useEffect(() => {
     fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => d && setSessionUser(d.user));
   }, []);
@@ -26,50 +24,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
-  }
-
-  const [syncing,   setSyncing]   = useState(false);
-  const [syncLog,   setSyncLog]   = useState<string | null>(null);
-  const [syncError, setSyncError] = useState(false);
-  const [logOpen,   setLogOpen]   = useState(false);
-  const [copied,    setCopied]    = useState(false);
-  const logRef = useRef<HTMLPreElement>(null);
-
-  async function runRefresh() {
-    setRefreshing(true);
-    router.refresh();
-    setTimeout(() => setRefreshing(false), 1500);
-  }
-
-  async function runSync() {
-    setSyncing(true);
-    setSyncLog(null);
-    setSyncError(false);
-    try {
-      const res  = await fetch("/api/run-sync", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        setSyncLog(json.error ?? "Unknown error");
-        setSyncError(true);
-      } else {
-        setSyncLog(json.log ?? "Sync complete.");
-        setSyncError(false);
-      }
-    } catch (e: unknown) {
-      setSyncLog(e instanceof Error ? e.message : "Network error");
-      setSyncError(true);
-    } finally {
-      setSyncing(false);
-      setLogOpen(true);
-    }
-  }
-
-  function copyLog() {
-    if (!syncLog) return;
-    navigator.clipboard.writeText(syncLog).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
   }
 
   function NavLink({ icon, label, href, indent = false }: { icon: string; label: string; href: string; indent?: boolean }) {
@@ -156,96 +110,38 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-        <NavLink icon="📍" label="GMB Tracker"          href="/gmb-tracker" />
-        {/* Listings */}
-        <SectionHeader label="Listings" />
-        <NavLink icon="≡" label="Property Status" href="/listings" />
 
-        {/* CRM */}
-        <SectionHeader label="CRM" />
-        <NavLink icon="◈" label="Property CRM"   href="/crm" />
+        {/* Property Manager */}
+        <SectionHeader label="Property Manager" />
+        <NavLink icon="≡" label="Property Status" href="/listings" />
+        <NavLink icon="◈" label="Property CRM"    href="/crm" />
 
         {/* Team */}
-        <SectionHeader label="Team & Workflow" />
-        <NavLink icon="◉" label="Team"             href="/team" />
-        <NavLink icon="◧" label="Workflow"          href="/workflow" />
-        <NavLink icon="◎" label="IC Performance"   href="/performance" />
-        <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
+        {(sessionUser?.role === "admin" || sessionUser?.role === "head" || sessionUser?.role === "tl") && (<>
+          <SectionHeader label="Team & Workflow" />
+          <NavLink icon="◉" label="Team"             href="/team" />
+          <NavLink icon="◎" label="Team Performance"  href="/performance" />
+        </>)}
+
+        {/* Admin */}
+        {(sessionUser?.role === "admin" || sessionUser?.role === "head") && (<>
+          <SectionHeader label="Admin" />
+          <NavLink icon="⇡" label="Upload RNS Data"    href="/admin/upload-rns" />
+          <NavLink icon="⟳" label="OTA Migration"      href="/admin/migration" />
+          <NavLink icon="◈" label="Status Logic"        href="/admin/status-config" />
+        </>)}
 
         {/* Reports */}
         <SectionHeader label="Reports" />
-        <NavLink icon="•" label="Summary" href="/reports/summary" />
-        <NavLink icon="◔" label="Monthly TAT" href="/reports/monthly-tat" />
-        <NavLink icon="⚠" label="Incomplete Data" href="/incomplete" />
-        <NavLink icon="★" label="BDC Genius"       href="/reports/genius" />
-        <NavLink icon="✦" label="BDC Hygiene"     href="/reports/hygiene" />
+        <NavLink icon="◉" label="OTA Analytics"         href="/ota-analytics" />
+        <NavLink icon="✦" label="Today's Assigned Tasks" href="/todays-assigned-tasks" />
+        <NavLink icon="⚠" label="Incomplete Data"        href="/incomplete" />
+        <NavLink icon="★" label="BDC Genius"             href="/reports/genius" />
+        <NavLink icon="✦" label="BDC Hygiene"            href="/reports/hygiene" />
       </nav>
 
       {/* Footer */}
       <div style={{ padding: collapsed ? "10px 6px" : "10px 10px 14px", borderTop: "1px solid #F1F5F9" }}>
-
-        {/* Sync App button */}
-        <button
-          onClick={runRefresh}
-          disabled={refreshing}
-          title="Reload page data from DB"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
-            gap: 7, width: "100%",
-            padding: collapsed ? "8px 0" : "8px 10px",
-            borderRadius: 7, border: "none", cursor: refreshing ? "default" : "pointer",
-            background: refreshing ? "#F1F5F9" : "#F0FDF4",
-            color: refreshing ? "#94A3B8" : "#16A34A",
-            fontSize: 12, fontWeight: 600,
-            opacity: refreshing ? 0.7 : 1,
-            transition: "background 0.15s",
-            marginBottom: 5,
-          }}
-        >
-          <span style={{ fontSize: 14, animation: refreshing ? "spin 1s linear infinite" : "none" }}>
-            {refreshing ? "⟳" : "↻"}
-          </span>
-          {!collapsed && (refreshing ? "Refreshing…" : "Sync App")}
-        </button>
-
-        {/* Sync button */}
-        <button
-          onClick={runSync}
-          disabled={syncing}
-          title="Sync all tables from Sheets to DB"
-          style={{
-            display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start",
-            gap: 7, width: "100%",
-            padding: collapsed ? "8px 0" : "8px 10px",
-            borderRadius: 7, border: "none", cursor: syncing ? "default" : "pointer",
-            background: syncing ? "#F1F5F9" : "#EFF6FF",
-            color: syncing ? "#94A3B8" : "#2563EB",
-            fontSize: 12, fontWeight: 600,
-            opacity: syncing ? 0.7 : 1,
-            transition: "background 0.15s",
-          }}
-        >
-          <span style={{ fontSize: 14, animation: syncing ? "spin 1s linear infinite" : "none" }}>
-            {syncing ? "⟳" : "⇅"}
-          </span>
-          {!collapsed && (syncing ? "Syncing…" : "Sync to DB")}
-        </button>
-
-        {/* Show logs button — only when a log exists */}
-        {!collapsed && syncLog && (
-          <button
-            onClick={() => setLogOpen(true)}
-            style={{
-              marginTop: 5, width: "100%", padding: "5px 10px",
-              borderRadius: 6, border: "1px solid #E2E8F0",
-              background: "#FAFAFA", color: syncError ? "#DC2626" : "#64748B",
-              fontSize: 11, cursor: "pointer", textAlign: "left",
-              fontWeight: 500,
-            }}
-          >
-            {syncError ? "⚠ View error log" : "✓ View sync log"}
-          </button>
-        )}
 
         {!collapsed && (
           <div style={{ marginTop: 6, fontSize: 10, color: "#94A3B8" }}>
@@ -289,85 +185,9 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         )}
       </div>
 
-      {/* Log viewer modal */}
-      {logOpen && syncLog && (
-        <div
-          onClick={() => setLogOpen(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 999,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex", alignItems: "flex-end", justifyContent: "flex-start",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              margin: "0 0 0 0",
-              width: "min(680px, 96vw)",
-              maxHeight: "70vh",
-              background: "#0F172A",
-              borderRadius: "0 12px 0 0",
-              display: "flex", flexDirection: "column",
-              boxShadow: "4px -4px 24px rgba(0,0,0,0.4)",
-            }}
-          >
-            {/* Modal header */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "10px 14px", borderBottom: "1px solid #1E293B",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: syncError ? "#F87171" : "#34D399" }}>
-                {syncError ? "⚠ Sync Error" : "✓ Sync Complete"} — Log
-              </span>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  onClick={copyLog}
-                  style={{
-                    padding: "4px 10px", borderRadius: 5,
-                    border: "1px solid #334155",
-                    background: copied ? "#065F46" : "#1E293B",
-                    color: copied ? "#6EE7B7" : "#94A3B8",
-                    fontSize: 11, cursor: "pointer", fontWeight: 600,
-                  }}
-                >
-                  {copied ? "✓ Copied" : "Copy"}
-                </button>
-                <button
-                  onClick={() => setLogOpen(false)}
-                  style={{
-                    padding: "4px 10px", borderRadius: 5,
-                    border: "1px solid #334155",
-                    background: "#1E293B", color: "#94A3B8",
-                    fontSize: 11, cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* Log content */}
-            <pre
-              ref={logRef}
-              style={{
-                margin: 0, padding: "12px 14px",
-                overflowY: "auto", flex: 1,
-                fontSize: 11, lineHeight: 1.6,
-                color: syncError ? "#FCA5A5" : "#CBD5E1",
-                fontFamily: "ui-monospace, monospace",
-                whiteSpace: "pre-wrap", wordBreak: "break-word",
-              }}
-            >
-              {syncLog}
-            </pre>
-          </div>
-        </div>
-      )}
-
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </aside>
   );
 }
-

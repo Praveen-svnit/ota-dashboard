@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getSql } from "@/lib/db";
 import {
   parseDoDStay, parseMoMStay, getMoMStayCmTotal, parseRawDataRNS,
   CHANNEL_TO_OTA, OTA_CHANNELS, RawDataResult,
@@ -39,12 +39,12 @@ function monthKeyToYM(key: string): { year: number; month0: number } {
 }
 
 /* ── DB queries for listing data ───────────────────────────────────────── */
-function getListingDataFromDb() {
-  const db = getDb();
+async function getListingDataFromDb() {
+  const sql = getSql();
   const now = new Date();
 
-  const totalProps = (db.prepare("SELECT COUNT(*) as n FROM Property").get() as { n: number }).n;
-  if (totalProps === 0) return null;
+  const [totalRow] = await sql`SELECT COUNT(*) AS n FROM inventory`;
+  if (Number(totalRow.n) === 0) return null;
 
   // Generate last 12 months dynamically
   const l12mMonths: string[] = [];
@@ -53,76 +53,87 @@ function getListingDataFromDb() {
     l12mMonths.push(`${MONTH_ABBR[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`);
   }
 
-  // Property counts
-  const fhLiveCount = (
-    db.prepare("SELECT COUNT(*) as n FROM Property WHERE LOWER(fhStatus) = 'live'").get() as { n: number }
-  ).n;
-  const fhSoldOutCount = (
-    db.prepare("SELECT COUNT(*) as n FROM Property WHERE LOWER(fhStatus) = 'soldout'").get() as { n: number }
-  ).n;
-  const fhTotalProps = fhLiveCount + fhSoldOutCount;
-
-  const cmStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const fhOnboardedThisMonth = (
-    db.prepare("SELECT COUNT(*) as n FROM Property WHERE fhLiveDate IS NOT NULL AND fhLiveDate >= ?")
-      .get(cmStart) as { n: number }
-  ).n;
-
-  // OTA status: live = subStatus='live'; notLive = everything else with a record
-  const otaStatusRows = db.prepare(`
-    SELECT ota,
-      SUM(CASE WHEN LOWER(subStatus) = 'live' THEN 1 ELSE 0 END) AS live,
-      COUNT(*) AS total
-    FROM OtaListing
-    GROUP BY ota
-  `).all() as Array<{ ota: string; live: number; total: number }>;
-
-  const otaStatusMap = new Map(otaStatusRows.map((r) => [r.ota, r]));
-  const otaStatus = OTA_STATUS.map(({ ota }) => {
-    const r = otaStatusMap.get(ota);
-    return r
-      ? { ota, live: r.live, notLive: r.total - r.live }
-      : { ota, live: 0, notLive: 0 };
-  });
-
-  // MTD listings: current month + last month same-day + last month total
-  const lmDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lmStart = `${lmDate.getFullYear()}-${String(lmDate.getMonth() + 1).padStart(2, "0")}-01`;
-  const lmEnd   = cmStart; // exclusive
+  const cmStart  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const lmDate   = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lmStart  = `${lmDate.getFullYear()}-${String(lmDate.getMonth() + 1).padStart(2, "0")}-01`;
+  const lmEnd    = cmStart;
   const daysDone = now.getDate();
-
-  const mtdRows = db.prepare(`
-    SELECT ota,
-      SUM(CASE WHEN liveDate >= ? THEN 1 ELSE 0 END) AS cmMTD,
-      SUM(CASE WHEN liveDate >= ? AND liveDate < ? AND CAST(strftime('%d', liveDate) AS INTEGER) <= ? THEN 1 ELSE 0 END) AS lmSameDay,
-      SUM(CASE WHEN liveDate >= ? AND liveDate < ? THEN 1 ELSE 0 END) AS lmTotal
-    FROM OtaListing
-    WHERE liveDate IS NOT NULL
-    GROUP BY ota
-  `).all(cmStart, lmStart, lmEnd, daysDone, lmStart, lmEnd) as Array<{
-    ota: string; cmMTD: number; lmSameDay: number; lmTotal: number;
-  }>;
-
-  const mtdMap = new Map(mtdRows.map((r) => [r.ota, r]));
-  const mtdListings = MTD_LISTINGS.map(({ ota }) => {
-    const r = mtdMap.get(ota);
-    return r
-      ? { ota, cmMTD: r.cmMTD, lmSameDay: r.lmSameDay, lmTotal: r.lmTotal }
-      : { ota, cmMTD: 0, lmSameDay: 0, lmTotal: 0 };
-  });
-
-  // L12M OTA live: counts by month for last 12 months
   const { year: l12mY0, month0: l12mM0 } = monthKeyToYM(l12mMonths[0]);
   const l12mStart = `${l12mY0}-${String(l12mM0 + 1).padStart(2, "0")}-01`;
 
-  const l12mRows = db.prepare(`
-    SELECT ota, strftime('%Y-%m', liveDate) AS ym, COUNT(*) AS cnt
-    FROM OtaListing
-    WHERE liveDate IS NOT NULL AND liveDate >= ?
-    GROUP BY ota, strftime('%Y-%m', liveDate)
-  `).all(l12mStart) as Array<{ ota: string; ym: string; cnt: number }>;
+  const [
+    [fhLiveRow],
+    [fhSoldOutRow],
+    [fhOnboardedRow],
+    otaStatusRows,
+    mtdRows,
+    l12mRows,
+    onboardedRows,
+  ] = await Promise.all([
+    sql`SELECT COUNT(*) AS n FROM inventory WHERE LOWER(fh_status) = 'live'`,
+    sql`SELECT COUNT(*) AS n FROM inventory WHERE LOWER(fh_status) = 'soldout'`,
+    sql`SELECT COUNT(*) AS n FROM inventory WHERE fh_live_date IS NOT NULL AND fh_live_date::date >= ${cmStart}::date`,
+    sql`
+      SELECT ota,
+        SUM(CASE WHEN LOWER(sub_status) = 'live' THEN 1 ELSE 0 END) AS live,
+        COUNT(*) AS total
+      FROM ota_listing
+      GROUP BY ota
+    `,
+    sql`
+      SELECT ota,
+        SUM(CASE WHEN live_date::date >= ${cmStart}::date THEN 1 ELSE 0 END) AS "cmMTD",
+        SUM(CASE WHEN live_date::date >= ${lmStart}::date AND live_date::date < ${lmEnd}::date
+                  AND EXTRACT(day FROM live_date::date) <= ${daysDone}
+             THEN 1 ELSE 0 END) AS "lmSameDay",
+        SUM(CASE WHEN live_date::date >= ${lmStart}::date AND live_date::date < ${lmEnd}::date
+             THEN 1 ELSE 0 END) AS "lmTotal"
+      FROM ota_listing
+      WHERE live_date IS NOT NULL
+      GROUP BY ota
+    `,
+    sql`
+      SELECT ota, TO_CHAR(live_date::date, 'YYYY-MM') AS ym, COUNT(*) AS cnt
+      FROM ota_listing
+      WHERE live_date IS NOT NULL AND live_date::date >= ${l12mStart}::date
+      GROUP BY ota, TO_CHAR(live_date::date, 'YYYY-MM')
+    `,
+    sql`
+      SELECT TO_CHAR(fh_live_date::date, 'YYYY-MM') AS ym, COUNT(*) AS cnt
+      FROM inventory
+      WHERE fh_live_date IS NOT NULL AND fh_live_date::date >= ${l12mStart}::date
+      GROUP BY TO_CHAR(fh_live_date::date, 'YYYY-MM')
+    `,
+  ]);
 
-  // Build ym → month key mapping
+  const fhLiveCount          = Number(fhLiveRow.n);
+  const fhSoldOutCount       = Number(fhSoldOutRow.n);
+  const fhTotalProps         = fhLiveCount + fhSoldOutCount;
+  const fhOnboardedThisMonth = Number(fhOnboardedRow.n);
+
+  // OTA status
+  const otaStatusMap = new Map(
+    (otaStatusRows as Array<{ ota: string; live: unknown; total: unknown }>).map((r) => [r.ota, r])
+  );
+  const otaStatus = OTA_STATUS.map(({ ota }) => {
+    const r = otaStatusMap.get(ota);
+    return r
+      ? { ota, live: Number(r.live), notLive: Number(r.total) - Number(r.live) }
+      : { ota, live: 0, notLive: 0 };
+  });
+
+  // MTD listings
+  const mtdMap = new Map(
+    (mtdRows as Array<{ ota: string; cmMTD: unknown; lmSameDay: unknown; lmTotal: unknown }>).map((r) => [r.ota, r])
+  );
+  const mtdListings = MTD_LISTINGS.map(({ ota }) => {
+    const r = mtdMap.get(ota);
+    return r
+      ? { ota, cmMTD: Number(r.cmMTD), lmSameDay: Number(r.lmSameDay), lmTotal: Number(r.lmTotal) }
+      : { ota, cmMTD: 0, lmSameDay: 0, lmTotal: 0 };
+  });
+
+  // L12M OTA live
   const ymToIdx = new Map(
     l12mMonths.map((key, i) => {
       const { year, month0 } = monthKeyToYM(key);
@@ -131,29 +142,20 @@ function getListingDataFromDb() {
   );
 
   const l12mOtaLive: Record<string, number[]> = {};
-  for (const ota of OTAS) {
-    l12mOtaLive[ota] = new Array(l12mMonths.length).fill(0);
-  }
-  for (const row of l12mRows) {
+  for (const ota of OTAS) l12mOtaLive[ota] = new Array(l12mMonths.length).fill(0);
+  for (const row of l12mRows as Array<{ ota: string; ym: string; cnt: unknown }>) {
     const idx = ymToIdx.get(row.ym);
     if (idx !== undefined) {
       if (!l12mOtaLive[row.ota]) l12mOtaLive[row.ota] = new Array(l12mMonths.length).fill(0);
-      l12mOtaLive[row.ota][idx] = row.cnt;
+      l12mOtaLive[row.ota][idx] = Number(row.cnt);
     }
   }
 
-  // L12M onboarded: new properties by fhLiveDate per month
-  const onboardedRows = db.prepare(`
-    SELECT strftime('%Y-%m', fhLiveDate) AS ym, COUNT(*) AS cnt
-    FROM Property
-    WHERE fhLiveDate IS NOT NULL AND fhLiveDate >= ?
-    GROUP BY strftime('%Y-%m', fhLiveDate)
-  `).all(l12mStart) as Array<{ ym: string; cnt: number }>;
-
+  // L12M onboarded
   const l12mOnboarded = new Array(l12mMonths.length).fill(0);
-  for (const row of onboardedRows) {
+  for (const row of onboardedRows as Array<{ ym: string; cnt: unknown }>) {
     const idx = ymToIdx.get(row.ym);
-    if (idx !== undefined) l12mOnboarded[idx] = row.cnt;
+    if (idx !== undefined) l12mOnboarded[idx] = Number(row.cnt);
   }
 
   return {
@@ -171,8 +173,9 @@ function buildDMap(rows: Array<{ date: string; channel: string; rns: number }>):
   const chanDaily: DMap = {};
   for (const row of rows) {
     const mappedOta = CHANNEL_TO_OTA[row.channel] ?? null;
-    if (!mappedOta) continue;                              // skip unmapped channels (Desiya, Other, etc.)
-    const d  = new Date(row.date + "T00:00:00");
+    if (!mappedOta) continue;
+    const rawDate = typeof row.date === "string" ? row.date : (row.date as unknown as Date).toISOString().slice(0, 10);
+    const d  = new Date(rawDate + "T00:00:00");
     const y  = d.getFullYear(), m = d.getMonth(), dy = d.getDate();
     daily[y] ??= {};    daily[y][m] ??= {};    daily[y][m][dy] ??= {};
     daily[y][m][dy][mappedOta] = (daily[y][m][dy][mappedOta] ?? 0) + row.rns;
@@ -195,16 +198,19 @@ function sumDMap(map: DMap, y: number, m: number, maxDay: number): Record<string
 
 function daysInYM(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 
-/* ── Stay RNS from DB (RnsStay, CICO only) ─────────────────────────────── */
-function getRnsFromDb(): RawDataResult | null {
-  const db = getDb();
-  const count = (db.prepare("SELECT COUNT(*) as n FROM RnsStay").get() as { n: number }).n;
-  if (count === 0) return null;
+/* ── Stay RNS from DB (stay_rns, CICO only) ────────────────────────────── */
+async function getRnsFromDb(): Promise<RawDataResult | null> {
+  const sql = getSql();
+  const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns`;
+  if (Number(countRow.n) === 0) return null;
 
   const now = new Date();
-  const rows = db.prepare(
-    "SELECT stay_date AS date, ota AS channel, rns FROM RnsStay WHERE UPPER(guest_status) = 'CICO' ORDER BY stay_date"
-  ).all() as Array<{ date: string; channel: string; rns: number }>;
+  const rows = await sql`
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
+    FROM stay_rns
+    WHERE LOWER(guest_status_desc) = 'checkout'
+    ORDER BY checkin
+  ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily, chanDaily } = buildDMap(rows);
   const allOtas = [...new Set(Object.values(CHANNEL_TO_OTA).filter((v): v is string => v !== null))];
@@ -239,7 +245,6 @@ function getRnsFromDb(): RawDataResult | null {
     monthlyData[key] = {};
 
     for (const ota of allOtas) {
-
       const entry: any = { cmMTD: cmSums[ota] ?? 0, cmTotal: cmTotSums[ota] ?? 0, lmMTD: lmSameSums[ota] ?? 0, lmTotal: lmFullSums[ota] ?? 0 };
       const chNames = OTA_CHANNELS[ota];
       if (chNames) {
@@ -254,18 +259,20 @@ function getRnsFromDb(): RawDataResult | null {
   return { monthlyData, totalCmMtd };
 }
 
-/* ── Sold RNS from DB (RnsSold) ────────────────────────────────────────── */
+/* ── Sold RNS from DB (sold_rns) ───────────────────────────────────────── */
 export type SoldMonthlyData = Record<string, Record<string, { cmMTD: number; lmMTD: number; lmTotal: number }>>;
 
-function getSoldFromDb(): SoldMonthlyData | null {
-  const db = getDb();
-  const count = (db.prepare("SELECT COUNT(*) as n FROM RnsSold").get() as { n: number }).n;
-  if (count === 0) return null;
+async function getSoldFromDb(): Promise<SoldMonthlyData | null> {
+  const sql = getSql();
+  const [countRow] = await sql`SELECT COUNT(*) AS n FROM sold_rns`;
+  if (Number(countRow.n) === 0) return null;
 
   const now = new Date();
-  const rows = db.prepare(
-    "SELECT sold_date AS date, ota AS channel, rns FROM RnsSold ORDER BY sold_date"
-  ).all() as Array<{ date: string; channel: string; rns: number }>;
+  const rows = await sql`
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rns
+    FROM sold_rns
+    ORDER BY checkin
+  ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily } = buildDMap(rows);
   const allOtas = [...new Set(Object.values(CHANNEL_TO_OTA).filter((v): v is string => v !== null))];
@@ -303,16 +310,19 @@ function getSoldFromDb(): SoldMonthlyData | null {
   return soldMonthly;
 }
 
-/* ── Revenue from DB (RnsStay.revenue, CICO only) ─────────────────────── */
-function getRevFromDb(): Record<string, Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>> | null {
-  const db = getDb();
-  const count = (db.prepare("SELECT COUNT(*) as n FROM RnsStay WHERE revenue > 0").get() as { n: number }).n;
-  if (count === 0) return null;
+/* ── Revenue from DB (stay_rns.revenue, CICO only) ─────────────────────── */
+async function getRevFromDb(): Promise<Record<string, Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>> | null> {
+  const sql = getSql();
+  const [countRow] = await sql`SELECT COUNT(*) AS n FROM stay_rns WHERE rev > 0`;
+  if (Number(countRow.n) === 0) return null;
 
   const now = new Date();
-  const rows = db.prepare(
-    "SELECT stay_date AS date, ota AS channel, revenue AS rns FROM RnsStay WHERE UPPER(guest_status) = 'CICO' ORDER BY stay_date"
-  ).all() as Array<{ date: string; channel: string; rns: number }>;
+  const rows = await sql`
+    SELECT checkin::text AS date, ota_booking_source_desc AS channel, rev AS rns
+    FROM stay_rns
+    WHERE LOWER(guest_status_desc) = 'checkout'
+    ORDER BY checkin
+  ` as Array<{ date: string; channel: string; rns: number }>;
 
   const { daily } = buildDMap(rows);
   const allOtas = [...new Set(Object.values(CHANNEL_TO_OTA).filter((v): v is string => v !== null))];
@@ -361,7 +371,7 @@ export async function GET(req: Request) {
   const d1Days     = Math.max(now.getDate() - 1, 1);
 
   // Try DB first; fall back to Google Sheets if not yet synced
-  let rawParsed = getRnsFromDb();
+  let rawParsed = await getRnsFromDb();
   let momStay: ReturnType<typeof parseMoMStay> | null = null;
 
   if (!rawParsed || force) {
@@ -396,10 +406,9 @@ export async function GET(req: Request) {
     }
     momStay = momResult?.status === "fulfilled" ? parseMoMStay(momResult.value) : null;
 
-    // rnpdLive fallback to DoD sheet if raw data unavailable
+    // Fallback to DoD sheet if raw data unavailable
     if (!rawParsed && dodResult?.status === "fulfilled") {
       const dodStay = parseDoDStay(dodResult.value);
-      // store as minimal rnpdLive only (no monthlyData)
       const rnpdFallback = Object.fromEntries(
         Object.entries(dodStay).map(([ota, e]) => [ota, {
           cmRNs: e.cmRNs, lmSameDayRNs: e.lmSameDayRNs, lmTotalRNs: e.lmTotalRNs, channels: e.channels,
@@ -409,7 +418,7 @@ export async function GET(req: Request) {
         const t = momResult?.status === "fulfilled" ? getMoMStayCmTotal(momResult.value) : null;
         return t !== null ? Math.round(t / d1Days) : null;
       })();
-      const listingData = getListingDataFromDb();
+      const listingData = await getListingDataFromDb();
       if (!listingData) {
         return Response.json({
           fhLiveCount: FH_PLATFORM_LIVE, fhTotalProps: 1877, fhSoldOutCount: 0, fhOnboardedThisMonth: 0,
@@ -434,13 +443,11 @@ export async function GET(req: Request) {
     if (!rawMonth) return null;
     return Object.fromEntries(
       Object.entries(rawMonth).map(([ota, d]) => {
-  
         const entry = d as any;
         return [ota, {
           cmRNs: entry.cmMTD, lmSameDayRNs: entry.lmMTD, lmTotalRNs: entry.lmTotal,
           channels: entry.channels
             ? Object.fromEntries(
-          
                 Object.entries(entry.channels).map(([ch, c]: [string, any]) => [ch, {
                   cmRNs: c.cmMTD, lmSameDayRNs: c.lmMTD, lmTotalRNs: c.lmTotal,
                 }])
@@ -455,10 +462,12 @@ export async function GET(req: Request) {
     ? Math.round(rawParsed.totalCmMtd / d1Days)
     : null;
 
-  // Get listing + sold data from DB
-  const listingData    = getListingDataFromDb();
-  const rnsSoldMonthly = getSoldFromDb();
-  const revLiveMonthly = getRevFromDb();
+  // Get listing + sold + revenue data from DB in parallel
+  const [listingData, rnsSoldMonthly, revLiveMonthly] = await Promise.all([
+    getListingDataFromDb(),
+    getSoldFromDb(),
+    getRevFromDb(),
+  ]);
 
   const fetchedAt = now.toISOString();
 
@@ -493,7 +502,7 @@ export async function GET(req: Request) {
     rnsLiveMonthly,
     rnsSoldMonthly,
     revLiveMonthly,
-    source:     "db",
+    source:   "db",
     fetchedAt,
   });
 }
