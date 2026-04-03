@@ -2,20 +2,28 @@ import { getSql } from "@/lib/db";
 
 const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
 
-// Must match the mapping in lib/production-dashboard-analytics.ts exactly
+// DB OTA name → canonical OTA name
+// "Goibibo / MMT" is the combined MakeMyTrip+Goibibo channel in the DB
+// "AgodaYCS" is what the DB calls Agoda's channel manager bookings
 const DB_TO_OTA: Record<string, string> = {
   "MakeMyTrip":    "GoMMT",
   "Goibibo":       "GoMMT",
+  "Goibibo / MMT": "GoMMT",
   "MyBiz":         "GoMMT",
   "Booking.com":   "Booking.com",
   "Agoda":         "Agoda",
+  "AgodaYCS":      "Agoda",
+  "AgodaB2B":      "Agoda",
   "Expedia":       "Expedia",
   "Cleartrip":     "Cleartrip",
   "EaseMyTrip":    "EaseMyTrip",
   "Yatra":         "Yatra",
+  "YatraB2B":      "Yatra",
   "Travelguru":    "Yatra",
   "Ixigo":         "Ixigo",
+  "ixigo":         "Ixigo",
   "Akbar Travels": "Akbar Travels",
+  "AkbarTravel":   "Akbar Travels",
 };
 
 export async function GET(req: Request) {
