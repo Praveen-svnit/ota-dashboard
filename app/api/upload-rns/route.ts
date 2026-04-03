@@ -1,30 +1,41 @@
 import { getSql } from "@/lib/db-postgres";
 import { parseCSV } from "@/lib/sheets";
 import { getSession } from "@/lib/auth";
-import { NextRequest } from "next/server";
 
 const COL_MAP: Record<string, string> = {
-  "date":                 "date",
-  "stay date":            "date",
-  "sold date":            "date",
-  "booking date":         "date",
-  "channel":              "channel",
-  "ota":                  "channel",
-  "rns":                  "rns",
-  "room nights":          "rns",
-  "room night sold":      "rns",
-  "room nights sold":     "rns",
-  "revenue":              "revenue",
-  "rev":                  "revenue",
-  "initial property id":  "initial_prop_id",
-  "initial prop id":      "initial_prop_id",
-  "initial_prop_id":      "initial_prop_id",
-  "initial id":           "initial_prop_id",
-  "final property id":    "final_prop_id",
-  "final prop id":        "final_prop_id",
-  "final_prop_id":        "final_prop_id",
-  "final id":             "final_prop_id",
-  "property id":          "final_prop_id",
+  // Date
+  "date":                  "date",
+  "stay date":             "date",
+  "sold date":             "date",
+  "booking date":          "date",
+  "checkin":               "date",      // Axisroom full export
+  // Channel
+  "channel":               "channel",
+  "ota":                   "channel",
+  "ota booking source desc": "channel", // Axisroom full export
+  // RNS / Revenue
+  "rns":                   "rns",
+  "room nights":           "rns",
+  "room night sold":       "rns",
+  "room nights sold":      "rns",
+  "revenue":               "revenue",
+  "rev":                   "revenue",
+  // Property IDs
+  "initial property id":   "initial_prop_id",
+  "initial prop id":       "initial_prop_id",
+  "initial id":            "initial_prop_id",
+  "final property id":     "final_prop_id",
+  "final prop id":         "final_prop_id",
+  "final id":              "final_prop_id",
+  "property id":           "final_prop_id",
+  // Axisroom full-schema extra columns
+  "checkout":              "checkout",
+  "booking id":            "booking_id",
+  "created at":            "created_at",
+  "guest status desc":     "guest_status_desc",
+  "booking source desc":   "booking_source_desc",
+  "ota booking source":    "ota_booking_source",
+  "zone":                  "zone",
 };
 
 function normalize(header: string): string {
@@ -39,22 +50,26 @@ function parseDate(raw: string): string | null {
   return null;
 }
 
-export async function POST(req: NextRequest) {
+function esc(v: string | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "NULL";
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+const BATCH = 500;
+
+export async function POST(req: Request) {
   const session = await getSession();
   if (!session || (session.role !== "admin" && session.role !== "head")) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const formData = await req.formData();
-    const file     = formData.get("file") as File | null;
-    const table    = formData.get("table") as string | null;
+    const { csv, table } = await req.json();
 
-    if (!file)  return Response.json({ error: "No file uploaded" }, { status: 400 });
+    if (!csv)   return Response.json({ error: "No CSV content" }, { status: 400 });
     if (!table || !["stay", "sold"].includes(table))
       return Response.json({ error: "table must be 'stay' or 'sold'" }, { status: 400 });
 
-    const csv = await file.text();
     const { cols, rows } = parseCSV(csv);
 
     const fieldMap: Record<number, string> = {};
@@ -68,14 +83,29 @@ export async function POST(req: NextRequest) {
     if (!Object.values(fieldMap).includes("channel"))
       return Response.json({ error: `No channel column found. Headers: ${cols.join(", ")}` }, { status: 400 });
 
+    const tableName = table === "stay" ? "stay_rns" : "sold_rns";
     const sql = getSql();
     let upserted = 0;
     let skipped  = 0;
+
+    // Build typed row objects
+    type Rec = {
+      date: string; channel: string;
+      rns: number; revenue: number;
+      initId: string; finalId: string;
+      bookingId: string | null; createdAt: string | null; checkout: string | null;
+      guestStatus: string | null; bookingSource: string | null;
+      otaSource: number | null; zone: string | null;
+    };
+    const records: Rec[] = [];
 
     for (const row of rows) {
       const rec: Record<string, string | null> = {
         date: null, channel: null, rns: null, revenue: null,
         initial_prop_id: null, final_prop_id: null,
+        booking_id: null, created_at: null, checkout: null,
+        guest_status_desc: null, booking_source_desc: null,
+        ota_booking_source: null, zone: null,
       };
       for (const [i, field] of Object.entries(fieldMap)) {
         rec[field] = row[Number(i)]?.trim() || null;
@@ -84,26 +114,50 @@ export async function POST(req: NextRequest) {
       const date = parseDate(rec.date ?? "");
       if (!date || !rec.channel) { skipped++; continue; }
 
-      const rns     = parseInt(rec.rns ?? "0") || 0;
-      const revenue = parseFloat(rec.revenue ?? "0") || 0;
-      const initId  = rec.initial_prop_id ?? "";
-      const finalId = rec.final_prop_id ?? "";
-
-      if (table === "stay") {
-        await sql`
-          INSERT INTO stay_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
-          VALUES (${date}::date, ${rec.channel}, ${rns}, ${revenue}, ${initId}, ${finalId}, NOW())
-        `;
-      } else {
-        await sql`
-          INSERT INTO sold_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
-          VALUES (${date}::date, ${rec.channel}, ${rns}, ${revenue}, ${initId}, ${finalId}, NOW())
-        `;
-      }
-      upserted++;
+      records.push({
+        date,
+        channel:       rec.channel,
+        rns:           parseInt(rec.rns ?? "0") || 0,
+        revenue:       parseFloat(rec.revenue ?? "0") || 0,
+        initId:        rec.initial_prop_id ?? "",
+        finalId:       rec.final_prop_id ?? "",
+        bookingId:     rec.booking_id,
+        createdAt:     parseDate(rec.created_at ?? ""),
+        checkout:      parseDate(rec.checkout ?? ""),
+        guestStatus:   rec.guest_status_desc,
+        bookingSource: rec.booking_source_desc,
+        otaSource:     rec.ota_booking_source ? parseInt(rec.ota_booking_source) || null : null,
+        zone:          rec.zone,
+      });
     }
 
-    const tableName = table === "stay" ? "stay_rns" : "sold_rns";
+    for (let i = 0; i < records.length; i += BATCH) {
+      const batch = records.slice(i, i + BATCH);
+      const values = batch.map(r =>
+        `(${esc(r.date)}::date, ${esc(r.channel)}, ${r.rns}, ${r.revenue}, ${esc(r.initId)}, ${esc(r.finalId)}, ${esc(r.bookingId)}, ${r.createdAt ? `${esc(r.createdAt)}::date` : "NULL"}, ${r.checkout ? `${esc(r.checkout)}::date` : "NULL"}, ${esc(r.guestStatus)}, ${esc(r.bookingSource)}, ${r.otaSource ?? "NULL"}, ${esc(r.zone)}, NOW())`
+      ).join(",\n");
+
+      await sql.query(`
+        INSERT INTO ${tableName} (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, booking_id, created_at, checkout, guest_status_desc, booking_source_desc, ota_booking_source, zone, synced_at)
+        VALUES ${values}
+        ON CONFLICT (booking_id) WHERE booking_id IS NOT NULL DO UPDATE SET
+          checkin                 = EXCLUDED.checkin,
+          ota_booking_source_desc = EXCLUDED.ota_booking_source_desc,
+          rns                     = EXCLUDED.rns,
+          rev                     = EXCLUDED.rev,
+          initial_property_id     = EXCLUDED.initial_property_id,
+          property_id             = EXCLUDED.property_id,
+          created_at              = EXCLUDED.created_at,
+          checkout                = EXCLUDED.checkout,
+          guest_status_desc       = EXCLUDED.guest_status_desc,
+          booking_source_desc     = EXCLUDED.booking_source_desc,
+          ota_booking_source      = EXCLUDED.ota_booking_source,
+          zone                    = EXCLUDED.zone,
+          synced_at               = NOW()
+      `, []);
+      upserted += batch.length;
+    }
+
     return Response.json({
       ok: true,
       table: tableName,

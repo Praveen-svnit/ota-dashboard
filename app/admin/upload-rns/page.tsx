@@ -18,11 +18,12 @@ export default function UploadRnsPage() {
     setResult(null);
 
     try {
-      const fd = new FormData();
-      fd.append("file",  file);
-      fd.append("table", tableType);
-
-      const res  = await fetch("/api/upload-rns", { method: "POST", body: fd });
+      const csvText = await file.text();
+      const res = await fetch("/api/upload-rns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: csvText, table: tableType }),
+      });
       const data = await res.json();
       setResult(data);
     } catch (err) {
