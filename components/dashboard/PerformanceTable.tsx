@@ -9,11 +9,12 @@ type MonthlyData = Record<string, Record<string, MonthEntry>>;
 type Metric = "RNS" | "Rev" | "RNPD" | "RPD";
 
 interface Props {
-  title:          string;
-  rnsMonthly:     MonthlyData;
-  rnsSoldMonthly?: MonthlyData | null;
-  revMonthly:     MonthlyData | null;
-  otas:           string[];
+  title:               string;
+  rnsMonthly:          MonthlyData;
+  rnsSoldMonthly?:     MonthlyData | null;
+  rnsOccupiedMonthly?: MonthlyData | null;
+  revMonthly:          MonthlyData | null;
+  otas:                string[];
 }
 
 function parseMonthKey(key: string): Date {
@@ -65,14 +66,14 @@ const METRICS: { key: Metric; label: string }[] = [
   { key: "RPD",  label: "RPD"  },
 ];
 
-export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, revMonthly, otas }: Props) {
+export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, rnsOccupiedMonthly, revMonthly, otas }: Props) {
   const todayKey  = autoMonthKey();
   const allMonths = Object.keys(rnsMonthly).sort(
     (a, b) => parseMonthKey(b).getTime() - parseMonthKey(a).getTime()
   );
 
   const [metric,   setMetric]   = useState<Metric>("RNS");
-  const [view,     setView]     = useState<"Stay" | "Sold">("Stay");
+  const [view,     setView]     = useState<"Stay" | "Occupied" | "Sold">("Occupied");
   const [cmMonth,  setCmMonth]  = useState(todayKey);
   const [lmMonth,  setLmMonth]  = useState(() => prevMonthKey(todayKey));
 
@@ -83,9 +84,14 @@ export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, re
 
   const isRev      = metric === "Rev" || metric === "RPD";
   const isPerDay   = metric === "RNPD" || metric === "RPD";
-  const hasSold    = !!rnsSoldMonthly;
-  // Rev/RPD always use stay data (no sold revenue data); RNS/RNPD switch on view
-  const data       = isRev ? (revMonthly ?? rnsMonthly) : (view === "Sold" ? (rnsSoldMonthly ?? rnsMonthly) : rnsMonthly);
+  const hasSold     = !!rnsSoldMonthly;
+  const hasOccupied = !!rnsOccupiedMonthly;
+  // Rev/RPD always use stay data; RNS/RNPD switch on view
+  const data = isRev
+    ? (revMonthly ?? rnsMonthly)
+    : view === "Occupied" ? (rnsOccupiedMonthly ?? rnsMonthly)
+    : view === "Sold"     ? (rnsSoldMonthly ?? rnsMonthly)
+    : rnsMonthly;
 
   const isCmCurrent = cm === todayKey;
   const cmDaysDone  = daysDoneInMonth(cm);
@@ -202,26 +208,28 @@ export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, re
             })}
           </div>
 
-          {/* Stay / Sold toggle */}
-          {hasSold && (
-            <div style={{ display: "flex", border: "1px solid #E2E8F0", borderRadius: 7, overflow: "hidden" }}>
-              {(["Stay", "Sold"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  style={{
-                    padding: "4px 11px", fontSize: 11, fontWeight: 700,
-                    border: "none", borderLeft: v === "Sold" ? "1px solid #E2E8F0" : "none",
-                    cursor: "pointer", fontFamily: "inherit",
-                    background: view === v ? "#0F172A" : "#F8FAFC",
-                    color:      view === v ? "#FFFFFF"  : "#64748B",
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* View toggle */}
+          <div style={{ display: "flex", border: "1px solid #E2E8F0", borderRadius: 7, overflow: "hidden" }}>
+            {([
+              ["Stay",     "Stay (Checkin)"],
+              ...(hasOccupied ? [["Occupied", "Stay (Occupied)"]] as const : []),
+              ...(hasSold     ? [["Sold",     "Sold"]]            as const : []),
+            ] as [string, string][]).map(([v, label], i) => (
+              <button
+                key={v}
+                onClick={() => setView(v as "Stay" | "Occupied" | "Sold")}
+                style={{
+                  padding: "4px 11px", fontSize: 11, fontWeight: 700,
+                  border: "none", borderLeft: i > 0 ? "1px solid #E2E8F0" : "none",
+                  cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+                  background: view === v ? "#0F172A" : "#F8FAFC",
+                  color:      view === v ? "#FFFFFF"  : "#64748B",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {/* CM month */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

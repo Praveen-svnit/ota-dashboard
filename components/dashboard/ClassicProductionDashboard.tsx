@@ -85,6 +85,7 @@ export default function ClassicProductionDashboard({
           <RNSTable
             rnsLiveMonthly={data.rnsLiveMonthly}
             rnsSoldMonthly={data.rnsSoldMonthly}
+            rnsOccupiedMonthly={(data as any).rnsOccupiedMonthly ?? null}
             revLiveMonthly={data.revLiveMonthly}
           />
           <MonthWiseTable
