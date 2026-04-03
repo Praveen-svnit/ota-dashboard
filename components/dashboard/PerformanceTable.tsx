@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { autoMonthKey, fmt, cmTrend, daysInMonth, daysDoneInMonth } from "@/lib/utils";
+import { OTA_COLORS, OTA_CHANNELS } from "@/lib/constants";
 
 type MonthEntry  = { lmMTD: number; cmMTD: number; lmTotal: number };
 type MonthlyData = Record<string, Record<string, MonthEntry>>;
@@ -72,10 +73,11 @@ export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, rn
     (a, b) => parseMonthKey(b).getTime() - parseMonthKey(a).getTime()
   );
 
-  const [metric,   setMetric]   = useState<Metric>("RNS");
-  const [view,     setView]     = useState<"Stay" | "Occupied" | "Sold">("Occupied");
-  const [cmMonth,  setCmMonth]  = useState(todayKey);
-  const [lmMonth,  setLmMonth]  = useState(() => prevMonthKey(todayKey));
+  const [metric,     setMetric]     = useState<Metric>("RNS");
+  const [view,       setView]       = useState<"Stay" | "Occupied" | "Sold">("Occupied");
+  const [cmMonth,    setCmMonth]    = useState(todayKey);
+  const [lmMonth,    setLmMonth]    = useState(() => prevMonthKey(todayKey));
+  const [showAllOta, setShowAllOta] = useState(false);
 
   if (allMonths.length === 0) return null;
 
@@ -182,6 +184,19 @@ export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, rn
         {/* Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
 
+          {/* All OTAs toggle */}
+          <button
+            onClick={() => setShowAllOta(v => !v)}
+            style={{
+              padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+              border: "1px solid #E2E8F0", borderRadius: 7, fontFamily: "inherit",
+              background: showAllOta ? "#EFF6FF" : "#F8FAFC",
+              color: showAllOta ? accent : "#64748B",
+            }}
+          >
+            {showAllOta ? "▼ All OTAs" : "▶ All OTAs"}
+          </button>
+
           {/* Metric toggle */}
           <div style={{ display: "flex", border: "1px solid #E2E8F0", borderRadius: 7, overflow: "hidden" }}>
             {METRICS.map(({ key, label }) => {
@@ -283,27 +298,72 @@ export default function PerformanceTable({ title, rnsMonthly, rnsSoldMonthly, rn
               const mov1 = movement(vCm,   vLm);
               const mov2 = movement(vProj, vLmF);
               const bg   = ri % 2 === 0 ? "#FFFFFF" : "#FAFAFA";
+              const color = OTA_COLORS[ota] ?? "#64748B";
+              const subChannels = OTA_CHANNELS[ota] ?? [];
 
               return (
-                <tr key={ota} style={{ background: bg }}>
-                  <td style={{ ...TD, textAlign: "left", padding: "7px 14px", fontWeight: 500, color: "#334155", borderRight: "1px solid #F1F5F9", whiteSpace: "nowrap" }}>
-                    {ota}
-                  </td>
-                  <td style={TD}>
-                    <span style={{ color: vLm === 0 ? "#CBD5E1" : "#64748B" }}>{fmtVal(vLm)}</span>
-                  </td>
-                  <td style={TD}>
-                    <span style={{ fontWeight: 700, color: vCm === 0 ? "#CBD5E1" : accent }}>{fmtVal(vCm)}</span>
-                  </td>
-                  <td style={TD}><MovPct pct={mov1} /></td>
-                  <td style={{ ...TD, borderLeft: "1px solid #F1F5F9" }}>
-                    <span style={{ color: vLmF === 0 ? "#CBD5E1" : "#64748B" }}>{fmtVal(vLmF)}</span>
-                  </td>
-                  <td style={TD}>
-                    <span style={{ fontWeight: 700, color: vProj === 0 ? "#CBD5E1" : purple }}>{fmtVal(vProj)}</span>
-                  </td>
-                  <td style={TD}><MovPct pct={mov2} /></td>
-                </tr>
+                <Fragment key={ota}>
+                  <tr style={{ background: bg }}>
+                    <td style={{ ...TD, textAlign: "left", padding: "7px 14px", fontWeight: 500, color: "#334155", borderRight: "1px solid #F1F5F9", whiteSpace: "nowrap" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                        {ota}
+                      </span>
+                    </td>
+                    <td style={TD}>
+                      <span style={{ color: vLm === 0 ? "#CBD5E1" : "#64748B" }}>{fmtVal(vLm)}</span>
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontWeight: 700, color: vCm === 0 ? "#CBD5E1" : accent }}>{fmtVal(vCm)}</span>
+                    </td>
+                    <td style={TD}><MovPct pct={mov1} /></td>
+                    <td style={{ ...TD, borderLeft: "1px solid #F1F5F9" }}>
+                      <span style={{ color: vLmF === 0 ? "#CBD5E1" : "#64748B" }}>{fmtVal(vLmF)}</span>
+                    </td>
+                    <td style={TD}>
+                      <span style={{ fontWeight: 700, color: vProj === 0 ? "#CBD5E1" : purple }}>{fmtVal(vProj)}</span>
+                    </td>
+                    <td style={TD}><MovPct pct={mov2} /></td>
+                  </tr>
+
+                  {showAllOta && subChannels.map((ch) => {
+                    const chEntry  = (data[cm]?.[ota] as any)?.channels?.[ch];
+                    const chCmRaw  = chEntry?.cmMTD  ?? 0;
+                    const chLmRaw  = lmIsNatural ? (chEntry?.lmMTD  ?? 0) : 0;
+                    const chLmFRaw = lmIsNatural ? (chEntry?.lmTotal ?? 0) : 0;
+                    const chProj   = isPerDay ? chCmRaw : cmTrend(chCmRaw, cmDaysDone, cmDaysTotal);
+
+                    const cvCm   = applyScale(chCmRaw,  cmDaysDone);
+                    const cvLm   = applyScale(chLmRaw,  lmDaysDone);
+                    const cvLmF  = applyScale(chLmFRaw, lmDaysTotal);
+                    const cvProj = isPerDay ? cvCm : chProj;
+
+                    return (
+                      <tr key={`${ota}.${ch}`} style={{ background: "#F8FAFC", borderTop: "1px solid #F1F5F9" }}>
+                        <td style={{ ...TD, textAlign: "left", padding: "6px 14px 6px 28px", color: "#64748B", borderRight: "1px solid #F1F5F9", whiteSpace: "nowrap", fontSize: 11 }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, opacity: 0.5, flexShrink: 0 }} />
+                            {ch}
+                          </span>
+                        </td>
+                        <td style={{ ...TD, fontSize: 11 }}>
+                          <span style={{ color: cvLm === 0 ? "#E2E8F0" : "#64748B" }}>{fmtVal(cvLm)}</span>
+                        </td>
+                        <td style={{ ...TD, fontSize: 11 }}>
+                          <span style={{ color: cvCm === 0 ? "#E2E8F0" : "#64748B" }}>{fmtVal(cvCm)}</span>
+                        </td>
+                        <td style={{ ...TD, fontSize: 11 }}><MovPct pct={movement(cvCm, cvLm)} /></td>
+                        <td style={{ ...TD, fontSize: 11, borderLeft: "1px solid #F1F5F9" }}>
+                          <span style={{ color: cvLmF === 0 ? "#E2E8F0" : "#64748B" }}>{fmtVal(cvLmF)}</span>
+                        </td>
+                        <td style={{ ...TD, fontSize: 11 }}>
+                          <span style={{ color: cvProj === 0 ? "#E2E8F0" : "#64748B" }}>{fmtVal(cvProj)}</span>
+                        </td>
+                        <td style={{ ...TD, fontSize: 11 }}><MovPct pct={movement(cvProj, cvLmF)} /></td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               );
             })}
           </tbody>
