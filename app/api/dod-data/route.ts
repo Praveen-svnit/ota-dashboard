@@ -29,7 +29,7 @@ const DB_TO_OTA: Record<string, string> = {
 export async function GET(req: Request) {
   try {
     const sql  = getSql();
-    const type = new URL(req.url).searchParams.get("type") ?? "sold"; // "sold" | "stay"
+    const type = new URL(req.url).searchParams.get("type") ?? "sold"; // "sold" | "stay" | "occupied"
 
     const end   = new Date();
     const start = new Date();
@@ -53,9 +53,27 @@ export async function GET(req: Request) {
       }
     };
 
-    // Both views query stay_rns — Sold uses created_at (booking date), Stay uses checkin
-    if (type === "stay") {
-      // Stay: guests checking in on each day — only Checkin / Checkout statuses
+    if (type === "occupied") {
+      // Occupied: 1 RN per booking per day it spans (checkin inclusive, checkout exclusive)
+      // A guest checking in Mar 31 and out Apr 5 contributes 1 RN to each of Mar 31–Apr 4
+      const rows = await sql`
+        SELECT
+          d::date::text AS day,
+          ota_booking_source_desc AS ota,
+          SUM(rns) AS rns
+        FROM stay_rns,
+          LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
+        WHERE guest_status_desc IN ('Checkin', 'Checkout')
+          AND checkin <= ${fmt(end)}::date
+          AND checkout  > ${fmt(start)}::date
+          AND d::date  >= ${fmt(start)}::date
+          AND d::date  <= ${fmt(end)}::date
+        GROUP BY d::date, ota_booking_source_desc
+        ORDER BY d::date ASC
+      ` as { day: string; ota: string; rns: number }[];
+      populate(rows);
+    } else if (type === "stay") {
+      // Stay: guests checking in on each day
       const rows = await sql`
         SELECT checkin::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns
@@ -66,7 +84,7 @@ export async function GET(req: Request) {
       ` as { day: string; ota: string; rns: number }[];
       populate(rows);
     } else {
-      // Sold: bookings created on each day — only Checkin / Checkout statuses
+      // Sold: bookings created on each day
       const rows = await sql`
         SELECT created_at::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns

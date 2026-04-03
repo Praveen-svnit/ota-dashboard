@@ -9,7 +9,7 @@ interface DodData { days: DayRow[]; otas: string[] }
 const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
 const ACCENT = "#2563EB";
 
-type ViewType = "sold" | "stay";
+type ViewType = "sold" | "stay" | "occupied";
 
 export default function DodView() {
   const [data,    setData]    = useState<DodData | null>(null);
@@ -44,7 +44,7 @@ export default function DodView() {
         <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Day-on-Day Production — Last 30 Days</span>
         <span style={{ fontSize: 10, color: "#94A3B8" }}>room nights per day · OTA wise</span>
         <div style={{ marginLeft: "auto", display: "flex", background: "#F1F5F9", borderRadius: 8, padding: 3, gap: 2 }}>
-          {(["sold", "stay"] as ViewType[]).map((v) => (
+          {(["sold", "stay", "occupied"] as ViewType[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -56,7 +56,7 @@ export default function DodView() {
                 boxShadow:  view === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
               }}
             >
-              {v === "sold" ? "Sold" : "Stay"}
+              {v === "sold" ? "Sold" : v === "stay" ? "Stay" : "Occupied"}
             </button>
           ))}
         </div>
