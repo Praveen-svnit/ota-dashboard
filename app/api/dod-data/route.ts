@@ -60,7 +60,7 @@ export async function GET(req: Request) {
         SELECT
           d::date::text AS day,
           ota_booking_source_desc AS ota,
-          SUM(rns) AS rns
+          ROUND(SUM(rns::numeric / NULLIF(checkout::date - checkin::date, 0))) AS rns
         FROM stay_rns,
           LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
         WHERE guest_status_desc IN ('Checkin', 'Checkout')
