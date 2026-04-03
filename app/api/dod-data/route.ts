@@ -3,8 +3,6 @@ import { getSql } from "@/lib/db";
 const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
 
 // DB OTA name → canonical OTA name
-// "Goibibo / MMT" is the combined MakeMyTrip+Goibibo channel in the DB
-// "AgodaYCS" is what the DB calls Agoda's channel manager bookings
 const DB_TO_OTA: Record<string, string> = {
   "MakeMyTrip":    "GoMMT",
   "Goibibo":       "GoMMT",
@@ -26,10 +24,19 @@ const DB_TO_OTA: Record<string, string> = {
   "AkbarTravel":   "Akbar Travels",
 };
 
+// Sub-sources to show when a canonical OTA is expanded
+const OTA_GROUPS: Record<string, string[]> = {
+  "GoMMT":         ["MakeMyTrip", "Goibibo", "Goibibo / MMT", "MyBiz"],
+  "Agoda":         ["Agoda", "AgodaYCS", "AgodaB2B"],
+  "Yatra":         ["Yatra", "YatraB2B", "Travelguru"],
+  "Ixigo":         ["Ixigo", "ixigo"],
+  "Akbar Travels": ["Akbar Travels", "AkbarTravel"],
+};
+
 export async function GET(req: Request) {
   try {
     const sql  = getSql();
-    const type = new URL(req.url).searchParams.get("type") ?? "sold"; // "sold" | "stay" | "occupied"
+    const type = new URL(req.url).searchParams.get("type") ?? "occupied"; // "sold" | "stay" | "occupied"
 
     const end   = new Date();
     const start = new Date();
@@ -49,13 +56,15 @@ export async function GET(req: Request) {
         const canonical = DB_TO_OTA[row.ota];
         if (!canonical) continue;
         const day = dayMap.get(row.day);
-        if (day) day[canonical] = (day[canonical] ?? 0) + Number(row.rns);
+        if (!day) continue;
+        // Canonical total
+        day[canonical] = (day[canonical] ?? 0) + Number(row.rns);
+        // Sub-source value for expand view
+        day[`${canonical}.${row.ota}`] = (day[`${canonical}.${row.ota}`] ?? 0) + Number(row.rns);
       }
     };
 
     if (type === "occupied") {
-      // Occupied: 1 RN per booking per day it spans (checkin inclusive, checkout exclusive)
-      // A guest checking in Mar 31 and out Apr 5 contributes 1 RN to each of Mar 31–Apr 4
       const rows = await sql`
         SELECT
           d::date::text AS day,
@@ -73,7 +82,6 @@ export async function GET(req: Request) {
       ` as { day: string; ota: string; rns: number }[];
       populate(rows);
     } else if (type === "stay") {
-      // Stay: guests checking in on each day
       const rows = await sql`
         SELECT checkin::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns
@@ -84,7 +92,6 @@ export async function GET(req: Request) {
       ` as { day: string; ota: string; rns: number }[];
       populate(rows);
     } else {
-      // Sold: bookings created on each day — from sold_rns table
       const rows = await sql`
         SELECT created_at::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM sold_rns
@@ -98,10 +105,10 @@ export async function GET(req: Request) {
 
     const days = Array.from(dayMap.entries()).map(([date, otaMap]) => ({
       date,
-      ...Object.fromEntries(OTAS.map((o) => [o, otaMap[o] ?? 0])),
+      ...otaMap,
     }));
 
-    return Response.json({ days, otas: OTAS });
+    return Response.json({ days, otas: OTAS, groups: OTA_GROUPS });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });
   }
