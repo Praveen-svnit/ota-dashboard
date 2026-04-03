@@ -1,37 +1,5 @@
 import { getSql } from "@/lib/db";
-
-const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
-
-// DB OTA name → canonical OTA name
-const DB_TO_OTA: Record<string, string> = {
-  "MakeMyTrip":    "GoMMT",
-  "Goibibo":       "GoMMT",
-  "Goibibo / MMT": "GoMMT",
-  "MyBiz":         "GoMMT",
-  "Booking.com":   "Booking.com",
-  "Agoda":         "Agoda",
-  "AgodaYCS":      "Agoda",
-  "AgodaB2B":      "Agoda",
-  "Expedia":       "Expedia",
-  "Cleartrip":     "Cleartrip",
-  "EaseMyTrip":    "EaseMyTrip",
-  "Yatra":         "Yatra",
-  "YatraB2B":      "Yatra",
-  "Travelguru":    "Yatra",
-  "Ixigo":         "Ixigo",
-  "ixigo":         "Ixigo",
-  "Akbar Travels": "Akbar Travels",
-  "AkbarTravel":   "Akbar Travels",
-};
-
-// Sub-sources to show when a canonical OTA is expanded
-const OTA_GROUPS: Record<string, string[]> = {
-  "GoMMT":         ["MakeMyTrip", "Goibibo", "Goibibo / MMT", "MyBiz"],
-  "Agoda":         ["Agoda", "AgodaYCS", "AgodaB2B"],
-  "Yatra":         ["Yatra", "YatraB2B", "Travelguru"],
-  "Ixigo":         ["Ixigo", "ixigo"],
-  "Akbar Travels": ["Akbar Travels", "AkbarTravel"],
-};
+import { RNS_OTAS, CHANNEL_TO_OTA, OTA_CHANNELS } from "@/lib/constants";
 
 export async function GET(req: Request) {
   try {
@@ -53,7 +21,7 @@ export async function GET(req: Request) {
 
     const populate = (rows: { day: string; ota: string; rns: number }[]) => {
       for (const row of rows) {
-        const canonical = DB_TO_OTA[row.ota];
+        const canonical = CHANNEL_TO_OTA[row.ota];
         if (!canonical) continue;
         const day = dayMap.get(row.day);
         if (!day) continue;
@@ -108,7 +76,7 @@ export async function GET(req: Request) {
       ...otaMap,
     }));
 
-    return Response.json({ days, otas: OTAS, groups: OTA_GROUPS });
+    return Response.json({ days, otas: RNS_OTAS, groups: OTA_CHANNELS });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });
   }
