@@ -180,7 +180,8 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-        <NavLink icon="📍" label="GMB Tracker"          href="/gmb-tracker" />
+        <NavLink icon="◈" label="OTA Analytics"        href="/ota-analytics" />
+
         {/* Listings */}
         <SectionHeader label="Listings" />
         <NavLink icon="≡" label="Property Status" href="/listings" />
@@ -191,18 +192,21 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* Team */}
         <SectionHeader label="Team & Workflow" />
-        <NavLink icon="◉" label="Team"             href="/team" />
-        <NavLink icon="◧" label="Workflow"          href="/workflow" />
-        <NavLink icon="◎" label="IC Performance"   href="/performance" />
-        <NavLink icon="◆" label="TL Performance"   href="/tl-performance" />
+        <NavLink icon="◉" label="Team"           href="/team" />
+        <NavLink icon="◎" label="IC Performance" href="/performance" />
+        <NavLink icon="☑" label="Tasks"          href="/tasks" />
+        <NavLink icon="◷" label="Today's Tasks"  href="/todays-assigned-tasks" />
 
         {/* Reports */}
         <SectionHeader label="Reports" />
-        <NavLink icon="•" label="Summary" href="/reports/summary" />
-        <NavLink icon="◔" label="Monthly TAT" href="/reports/monthly-tat" />
         <NavLink icon="⚠" label="Incomplete Data" href="/incomplete" />
-        <NavLink icon="★" label="BDC Genius"       href="/reports/genius" />
+        <NavLink icon="★" label="BDC Genius"      href="/reports/genius" />
         <NavLink icon="✦" label="BDC Hygiene"     href="/reports/hygiene" />
+
+        {/* Admin */}
+        <SectionHeader label="Admin" />
+        <NavLink icon="⇅" label="Migration"      href="/admin/migration" />
+        <NavLink icon="◐" label="Status Config"  href="/admin/status-config" />
       </nav>
 
       {/* Footer */}
