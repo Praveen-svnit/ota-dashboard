@@ -9,18 +9,23 @@ interface DodData { days: DayRow[]; otas: string[] }
 const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
 const ACCENT = "#2563EB";
 
+type ViewType = "sold" | "stay";
+
 export default function DodView() {
   const [data,    setData]    = useState<DodData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
+  const [view,    setView]    = useState<ViewType>("sold");
 
   useEffect(() => {
-    fetch("/api/dod-data")
+    setLoading(true);
+    setError(null);
+    fetch(`/api/dod-data?type=${view}`)
       .then((r) => r.json())
       .then((d) => { if (d.error) setError(d.error); else setData(d); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [view]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -37,7 +42,24 @@ export default function DodView() {
       {/* Header */}
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Day-on-Day Production — Last 30 Days</span>
-        <span style={{ fontSize: 10, color: "#94A3B8" }}>room nights sold per day · OTA wise</span>
+        <span style={{ fontSize: 10, color: "#94A3B8" }}>room nights per day · OTA wise</span>
+        <div style={{ marginLeft: "auto", display: "flex", background: "#F1F5F9", borderRadius: 8, padding: 3, gap: 2 }}>
+          {(["sold", "stay"] as ViewType[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              style={{
+                padding: "4px 14px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
+                borderRadius: 6, transition: "all 0.15s",
+                background: view === v ? "#FFFFFF" : "transparent",
+                color:      view === v ? ACCENT : "#64748B",
+                boxShadow:  view === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+              }}
+            >
+              {v === "sold" ? "Sold" : "Stay"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading && <div style={{ padding: 40, textAlign: "center", color: "#94A3B8", fontSize: 12 }}>Loading…</div>}
