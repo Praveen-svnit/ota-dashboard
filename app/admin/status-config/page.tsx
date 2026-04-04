@@ -252,10 +252,27 @@ export default function StatusConfigPage() {
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Status & Sub-Status Logic</div>
-          <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 3 }}>
-            Define canonical sub-status → status combos, then assign them per OTA.
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Status & Sub-Status Logic</div>
+            <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 3 }}>
+              Define canonical sub-status → status combos, then assign them per OTA.
+            </div>
+          </div>
+          <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
+            {([
+              ["CRM",           "/crm",                false],
+              ["Task Manager",  "/tasks",               false],
+              ["Performance",   "/performance",         false],
+              ["Status Config", "/admin/status-config", true ],
+            ] as [string, string, boolean][]).map(([label, href, active]) => (
+              <a key={label} href={href} style={{
+                padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                textDecoration: "none", whiteSpace: "nowrap", display: "inline-block",
+                background: active ? "#0F172A" : "transparent",
+                color: active ? "#FFFFFF" : "#64748B",
+              }}>{label}</a>
+            ))}
           </div>
         </div>
 

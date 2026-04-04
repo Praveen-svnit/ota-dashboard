@@ -315,9 +315,10 @@ export default function PerformancePage() {
           {/* Nav tab strip — right side */}
           <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
             {([
-              ["CRM",          "/crm",         false],
-              ["Task Manager", "/tasks",        false],
-              ["Performance",  "/performance",  true ],
+              ["CRM",           "/crm",                false],
+              ["Task Manager",  "/tasks",               false],
+              ["Performance",   "/performance",         true ],
+              ["Status Config", "/admin/status-config", false],
             ] as [string, string, boolean][]).map(([label, href, active]) => (
               <a key={label} href={href} style={{
                 padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,

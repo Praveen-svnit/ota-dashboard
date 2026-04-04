@@ -249,9 +249,10 @@ export default function CrmPage() {
         {/* Nav tabs */}
         <div style={{ display: "flex", gap: 1 }}>
           {([
-            ["CRM",         "/crm",        true],
-            ["Tasks",       "/tasks",       false],
-            ["Performance", "/performance", false],
+            ["CRM",           "/crm",                  true],
+            ["Tasks",         "/tasks",                 false],
+            ["Performance",   "/performance",           false],
+            ["Status Config", "/admin/status-config",   false],
           ] as [string, string, boolean][]).map(([label, href, active]) => (
             <Link key={label} href={href} style={{
               padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600,
