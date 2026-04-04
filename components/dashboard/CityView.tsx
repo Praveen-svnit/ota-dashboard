@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OTA_COLORS } from "@/lib/constants";
 
 interface CityData {
@@ -36,13 +36,118 @@ function getMonthOptions() {
 
 const MONTH_OPTIONS = getMonthOptions();
 
+/* ── Multi-select dropdown ── */
+interface MultiSelectProps {
+  label: string;
+  all: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  renderLabel?: (v: string) => string;
+  width?: number;
+}
+
+function MultiSelect({ label, all, selected, onChange, renderLabel, width = 180 }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const allSelected  = selected.size === 0 || selected.size === all.length;
+  const displayLabel = allSelected
+    ? `All ${label}`
+    : selected.size === 1
+      ? (renderLabel ? renderLabel([...selected][0]) : [...selected][0])
+      : `${selected.size} ${label}`;
+
+  function toggleAll() {
+    onChange(new Set()); // empty = all
+  }
+
+  function toggle(v: string) {
+    const next = new Set(selected);
+    if (next.has(v)) {
+      next.delete(v);
+      if (next.size === 0) onChange(new Set()); // all selected
+      else onChange(next);
+    } else {
+      next.add(v);
+      if (next.size === all.length) onChange(new Set()); // all selected
+      else onChange(next);
+    }
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          padding: "4px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+          border: "1px solid #E2E8F0", borderRadius: 7, fontFamily: "inherit",
+          background: allSelected ? "#F8FAFC" : ACCENT + "10",
+          color:      allSelected ? "#64748B" : ACCENT,
+          display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
+        }}
+      >
+        {displayLabel}
+        <span style={{ fontSize: 9, opacity: 0.6 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50,
+          background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 8,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: width, maxHeight: 260,
+          overflowY: "auto",
+        }}>
+          {/* All option */}
+          <label style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "7px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700,
+            borderBottom: "1px solid #F1F5F9", color: "#0F172A",
+          }}>
+            <input
+              type="checkbox" checked={allSelected}
+              onChange={toggleAll}
+              style={{ accentColor: ACCENT, width: 13, height: 13 }}
+            />
+            All {label}
+          </label>
+          {all.map(v => {
+            const checked = selected.size === 0 || selected.has(v);
+            return (
+              <label key={v} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 12px", cursor: "pointer", fontSize: 11,
+                color: "#374151",
+              }}>
+                <input
+                  type="checkbox" checked={checked}
+                  onChange={() => toggle(v)}
+                  style={{ accentColor: ACCENT, width: 13, height: 13 }}
+                />
+                {renderLabel ? renderLabel(v) : v}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CityView() {
-  const [data,       setData]       = useState<CityData | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [search,     setSearch]     = useState("");
-  const [view,          setView]          = useState<ViewType>("occupied");
-  const [selectedOta,   setSelectedOta]   = useState("all");
+  const [data,         setData]         = useState<CityData | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
+  const [view,         setView]         = useState<ViewType>("occupied");
+  const [selectedOtas, setSelectedOtas] = useState<Set<string>>(new Set());
+  const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set());
   const [selectedMonth, setSelectedMonth] = useState("");
 
   useEffect(() => {
@@ -63,22 +168,29 @@ export default function CityView() {
   const dates = data ? [...data.dates].reverse() : [];
 
   const filteredCities = data?.cities.filter((c) =>
-    !search || c.toLowerCase().includes(search.toLowerCase())
+    selectedCities.size === 0 || selectedCities.has(c)
   ) ?? [];
+
+  // Active OTAs for computation
+  const activeOtas = data
+    ? (selectedOtas.size === 0 ? data.otas : data.otas.filter(o => selectedOtas.has(o)))
+    : [];
 
   function getCityDayRns(city: string, date: string): number {
     if (!data) return 0;
-    if (selectedOta === "all") {
-      return data.otas.reduce((sum, ota) => sum + (data.cityOtaDayRns[city]?.[ota]?.[date] ?? 0), 0);
-    }
-    return data.cityOtaDayRns[city]?.[selectedOta]?.[date] ?? 0;
+    return activeOtas.reduce((sum, ota) => sum + (data.cityOtaDayRns[city]?.[ota]?.[date] ?? 0), 0);
   }
 
   const colTotals = dates.map((date) =>
     filteredCities.reduce((sum, city) => sum + getCityDayRns(city, date), 0)
   );
 
-  const otaColor = selectedOta !== "all" ? (OTA_COLORS[selectedOta] ?? ACCENT) : ACCENT;
+  // Accent color — blue if multi/all OTAs, else OTA color
+  const singleOta  = selectedOtas.size === 1 ? [...selectedOtas][0] : null;
+  const accentColor = singleOta ? (OTA_COLORS[singleOta] ?? ACCENT) : ACCENT;
+
+  const otaShortName = (ota: string) =>
+    ota === "Booking.com" ? "BDC" : ota === "Akbar Travels" ? "AKT" : ota === "EaseMyTrip" ? "EMT" : ota;
 
   return (
     <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
@@ -91,7 +203,7 @@ export default function CityView() {
           <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: 8 }}>city wise · estimated from live property share</span>
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           {/* View tab strip */}
           <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 8, padding: 3, gap: 2 }}>
             {(["sold", "stay", "occupied"] as ViewType[]).map((v) => (
@@ -100,7 +212,7 @@ export default function CityView() {
                 onClick={() => setView(v)}
                 style={{
                   padding: "4px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
-                  borderRadius: 6, transition: "all 0.15s", whiteSpace: "nowrap",
+                  borderRadius: 6, transition: "all 0.15s", whiteSpace: "nowrap", fontFamily: "inherit",
                   background: view === v ? "#FFFFFF" : "transparent",
                   color:      view === v ? ACCENT : "#64748B",
                   boxShadow:  view === v ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
@@ -111,35 +223,30 @@ export default function CityView() {
             ))}
           </div>
 
-          {/* OTA filter */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            <button
-              onClick={() => setSelectedOta("all")}
-              style={{
-                fontSize: 9, fontWeight: 700, padding: "3px 10px", borderRadius: 20, cursor: "pointer",
-                background: selectedOta === "all" ? "#0F172A" : "#F8FAFC",
-                color:      selectedOta === "all" ? "#FFFFFF"  : "#64748B",
-                border:     `1px solid ${selectedOta === "all" ? "#0F172A" : "#E2E8F0"}`,
-              }}
-            >
-              All OTAs
-            </button>
-            {data?.otas.map((ota) => {
-              const color  = OTA_COLORS[ota] ?? "#64748B";
-              const active = selectedOta === ota;
-              return (
-                <button key={ota} onClick={() => setSelectedOta(ota)} style={{
-                  fontSize: 9, fontWeight: 700, padding: "3px 9px", borderRadius: 20, cursor: "pointer",
-                  background: active ? color + "20" : "#F8FAFC",
-                  color:      active ? color : "#94A3B8",
-                  border:     `1px solid ${active ? color + "50" : "#E2E8F0"}`,
-                }}>
-                  {ota === "Booking.com" ? "BDC" : ota === "Akbar Travels" ? "AKT" : ota === "EaseMyTrip" ? "EMT" : ota}
-                </button>
-              );
-            })}
-          </div>
+          {/* OTA multi-select */}
+          {data && (
+            <MultiSelect
+              label="OTAs"
+              all={data.otas}
+              selected={selectedOtas}
+              onChange={setSelectedOtas}
+              renderLabel={otaShortName}
+              width={180}
+            />
+          )}
 
+          {/* City multi-select */}
+          {data && (
+            <MultiSelect
+              label="Cities"
+              all={data.cities}
+              selected={selectedCities}
+              onChange={setSelectedCities}
+              width={200}
+            />
+          )}
+
+          {/* Month select */}
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
@@ -149,13 +256,6 @@ export default function CityView() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter city…"
-            style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 11, outline: "none", width: 140 }}
-          />
         </div>
       </div>
 
@@ -181,10 +281,10 @@ export default function CityView() {
                   return (
                     <th key={date} style={{
                       padding: "9px 8px", fontSize: 10, fontWeight: 700,
-                      color:      isToday ? otaColor : "#94A3B8",
+                      color:      isToday ? accentColor : "#94A3B8",
                       textAlign:  "center", whiteSpace: "nowrap",
                       borderBottom: "1px solid #E2E8F0",
-                      background: isToday ? otaColor + "08" : "#F8FAFC",
+                      background: isToday ? accentColor + "08" : "#F8FAFC",
                       minWidth: 46,
                     }}>
                       {label}{isToday ? " ★" : ""}
@@ -211,11 +311,11 @@ export default function CityView() {
                     return (
                       <td key={date} style={{
                         padding: "8px 8px", textAlign: "center",
-                        background: isToday ? otaColor + "05" : "transparent",
+                        background: isToday ? accentColor + "05" : "transparent",
                       }}>
                         <span style={{
                           fontWeight: isToday ? 700 : 400,
-                          color: val === 0 ? "#CBD5E1" : isToday ? otaColor : "#374151",
+                          color: val === 0 ? "#CBD5E1" : isToday ? accentColor : "#374151",
                         }}>
                           {val === 0 ? "—" : val.toLocaleString()}
                         </span>
@@ -238,9 +338,9 @@ export default function CityView() {
                   return (
                     <td key={i} style={{
                       padding: "9px 8px", textAlign: "center",
-                      background: isToday ? otaColor + "10" : "transparent",
+                      background: isToday ? accentColor + "10" : "transparent",
                     }}>
-                      <span style={{ fontWeight: 800, color: isToday ? otaColor : "#0F172A", fontSize: 12 }}>
+                      <span style={{ fontWeight: 800, color: isToday ? accentColor : "#0F172A", fontSize: 12 }}>
                         {t === 0 ? "—" : t.toLocaleString()}
                       </span>
                     </td>
