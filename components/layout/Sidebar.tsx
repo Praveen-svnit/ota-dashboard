@@ -180,8 +180,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-        <NavLink icon="◈" label="OTA Analytics"        href="/ota-analytics" />
-
         {/* OTAs */}
         <SectionHeader label="OTAs" />
         <NavLink icon="•" label="GoMMT"         href="/ota/gommt"         indent />
