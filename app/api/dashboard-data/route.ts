@@ -176,11 +176,11 @@ function sumDMap(map: DMap, y: number, m: number, maxDay: number): Record<string
 
 function daysInYM(y: number, m: number) { return new Date(y, m + 1, 0).getDate(); }
 
-/* ── Module-level cache (refreshes once per hour) ──────────────────────── */
+/* ── Module-level cache (refreshes once per day) ───────────────────────── */
 type RnsResult = { monthlyData: Record<string, Record<string, any>>; totalCmMtd: number };
 type RnsCache  = { checkin: RnsResult | null; occupied: SoldMonthlyData | null; ts: number };
 let rnsCache: RnsCache | null = null;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /* ── Stay RNS from DB (stay_rns, CICO, last 13 months by checkin) ──────── */
 async function getRnsFromDb(): Promise<RnsResult | null> {
