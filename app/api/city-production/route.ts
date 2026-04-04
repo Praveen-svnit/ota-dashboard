@@ -45,41 +45,47 @@ export async function GET(req: Request) {
     if (type === "occupied") {
       const rows = await sql`
         SELECT
-          d::date::text AS day,
-          zone          AS city,
-          ota_booking_source_desc AS ota,
-          ROUND(SUM(rns::numeric / NULLIF(checkout::date - checkin::date, 0))) AS rns
-        FROM stay_rns,
-          LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
-        WHERE guest_status_desc IN ('Checkin', 'Checkout')
-          AND checkin  <= ${fmt(end)}::date
-          AND checkout >  ${fmt(start)}::date
-          AND d::date  >= ${fmt(start)}::date
-          AND d::date  <= ${fmt(end)}::date
-        GROUP BY d::date, zone, ota_booking_source_desc
+          d::date::text        AS day,
+          i.city               AS city,
+          s.ota_booking_source_desc AS ota,
+          ROUND(SUM(s.rns::numeric / NULLIF(s.checkout::date - s.checkin::date, 0))) AS rns
+        FROM stay_rns s
+        JOIN inventory i ON i.property_id = s.property_id,
+          LATERAL generate_series(s.checkin::date, s.checkout::date - 1, '1 day'::interval) d
+        WHERE s.guest_status_desc IN ('Checkin', 'Checkout')
+          AND i.city IS NOT NULL AND i.city <> ''
+          AND s.checkin  <= ${fmt(end)}::date
+          AND s.checkout >  ${fmt(start)}::date
+          AND d::date    >= ${fmt(start)}::date
+          AND d::date    <= ${fmt(end)}::date
+        GROUP BY d::date, i.city, s.ota_booking_source_desc
         ORDER BY d::date ASC
       ` as { day: string; city: string; ota: string; rns: number }[];
       populate(rows);
     } else if (type === "stay") {
       const rows = await sql`
-        SELECT checkin::text AS day, zone AS city, ota_booking_source_desc AS ota, SUM(rns) AS rns
-        FROM stay_rns
-        WHERE guest_status_desc IN ('Checkin', 'Checkout')
-          AND checkin >= ${fmt(start)}::date
-          AND checkin <= ${fmt(end)}::date
-        GROUP BY checkin, zone, ota_booking_source_desc
-        ORDER BY checkin ASC
+        SELECT s.checkin::text AS day, i.city AS city, s.ota_booking_source_desc AS ota, SUM(s.rns) AS rns
+        FROM stay_rns s
+        JOIN inventory i ON i.property_id = s.property_id
+        WHERE s.guest_status_desc IN ('Checkin', 'Checkout')
+          AND i.city IS NOT NULL AND i.city <> ''
+          AND s.checkin >= ${fmt(start)}::date
+          AND s.checkin <= ${fmt(end)}::date
+        GROUP BY s.checkin, i.city, s.ota_booking_source_desc
+        ORDER BY s.checkin ASC
       ` as { day: string; city: string; ota: string; rns: number }[];
       populate(rows);
     } else {
       const rows = await sql`
-        SELECT created_at::text AS day, zone AS city, ota_booking_source_desc AS ota, SUM(rns) AS rns
-        FROM sold_rns
-        WHERE guest_status_desc IN ('Checkin', 'Checkout')
-          AND created_at >= ${fmt(start)}::date
-          AND created_at <= ${fmt(end)}::date
-        GROUP BY created_at, zone, ota_booking_source_desc
-        ORDER BY created_at ASC
+        SELECT r.created_at::text AS day, i.city AS city, r.ota_booking_source_desc AS ota, SUM(r.rns) AS rns
+        FROM sold_rns r
+        JOIN inventory i ON i.property_id = r.property_id
+        WHERE r.guest_status_desc IN ('Checkin', 'Checkout')
+          AND i.city IS NOT NULL AND i.city <> ''
+          AND r.created_at >= ${fmt(start)}::date
+          AND r.created_at <= ${fmt(end)}::date
+        GROUP BY r.created_at, i.city, r.ota_booking_source_desc
+        ORDER BY r.created_at ASC
       ` as { day: string; city: string; ota: string; rns: number }[];
       populate(rows);
     }
