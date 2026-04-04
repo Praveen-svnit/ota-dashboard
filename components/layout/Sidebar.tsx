@@ -188,7 +188,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {/* Team */}
         <SectionHeader label="Team & Workflow" />
         <NavLink icon="◉" label="Team"           href="/team" />
-        <NavLink icon="◎" label="IC Performance" href="/performance" />
+        <NavLink icon="◎" label="Team Performance" href="/performance" />
         <NavLink icon="☑" label="Tasks"          href="/tasks" />
         <NavLink icon="◷" label="Today's Tasks"  href="/todays-assigned-tasks" />
 
