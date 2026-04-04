@@ -138,6 +138,19 @@ export default function PropertyRnsView({ ota }: Props) {
       .finally(() => setLoading(false));
   }, []);
 
+  /* Unique OTAs present in loaded data */
+  const availableOtas = useMemo(() => {
+    const set = new Set<string>();
+    for (const prop of listingProps) {
+      for (const o of Object.keys(prop.otas)) set.add(o);
+    }
+    // Return in OTA_LIST order, then any extras
+    return [
+      ...OTA_LIST.filter(o => set.has(o)),
+      ...[...set].filter(o => !OTA_LIST.includes(o)).sort(),
+    ];
+  }, [listingProps]);
+
   /* One row per property — aggregated across OTAs (or single OTA when filtered) */
   const allRows = useMemo<MergedRow[]>(() => {
     const rows: MergedRow[] = [];
@@ -315,7 +328,7 @@ export default function PropertyRnsView({ ota }: Props) {
           <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
             style={{ padding: "6px 10px", fontSize: 11, border: "1px solid #E5E7EB", borderRadius: 6, background: "#FFFFFF", color: "#374151", cursor: "pointer", outline: "none" }}>
             <option value="">All OTAs</option>
-            {OTA_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+            {availableOtas.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
         )}
 
