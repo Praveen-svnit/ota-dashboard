@@ -180,13 +180,10 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="Dashboards" />
         <NavLink icon="▣" label="Production Dashboard" href="/" />
         <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
-        {/* Listings */}
-        <SectionHeader label="Listings" />
-        <NavLink icon="≡" label="Property Status" href="/listings" />
-
         {/* CRM */}
         <SectionHeader label="CRM" />
         <NavLink icon="◈" label="Property CRM"   href="/crm" />
+        <NavLink icon="≡" label="Property Status" href="/listings" />
 
         {/* Team */}
         <SectionHeader label="Team & Workflow" />
