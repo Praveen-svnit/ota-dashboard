@@ -50,7 +50,7 @@ export async function GET(req: Request) {
           s.ota_booking_source_desc AS ota,
           ROUND(SUM(s.rns::numeric / NULLIF(s.checkout::date - s.checkin::date, 0))) AS rns
         FROM stay_rns s
-        JOIN inventory i ON i.property_id = s.property_id,
+        JOIN inventory i ON i.property_id = s.property_id::text,
           LATERAL generate_series(s.checkin::date, s.checkout::date - 1, '1 day'::interval) d
         WHERE s.guest_status_desc IN ('Checkin', 'Checkout')
           AND i.city IS NOT NULL AND i.city <> ''
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
       const rows = await sql`
         SELECT s.checkin::text AS day, i.city AS city, s.ota_booking_source_desc AS ota, SUM(s.rns) AS rns
         FROM stay_rns s
-        JOIN inventory i ON i.property_id = s.property_id
+        JOIN inventory i ON i.property_id = s.property_id::text
         WHERE s.guest_status_desc IN ('Checkin', 'Checkout')
           AND i.city IS NOT NULL AND i.city <> ''
           AND s.checkin >= ${fmt(start)}::date
@@ -79,7 +79,7 @@ export async function GET(req: Request) {
       const rows = await sql`
         SELECT r.created_at::text AS day, i.city AS city, r.ota_booking_source_desc AS ota, SUM(r.rns) AS rns
         FROM sold_rns r
-        JOIN inventory i ON i.property_id = r.property_id
+        JOIN inventory i ON i.property_id = r.property_id::text
         WHERE r.guest_status_desc IN ('Checkin', 'Checkout')
           AND i.city IS NOT NULL AND i.city <> ''
           AND r.created_at >= ${fmt(start)}::date

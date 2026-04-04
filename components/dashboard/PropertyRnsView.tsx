@@ -67,10 +67,6 @@ interface ListingProp {
   fhId: string; name: string; city: string; fhLiveDate: string | null;
   otas: Record<string, OtaListing>;
 }
-interface RnsProp {
-  name: string;
-  otas: Record<string, { cm: number; lm: number }>;
-}
 
 interface MergedRow {
   fhId: string; name: string; city: string; ota: string;
@@ -104,6 +100,7 @@ export default function PropertyRnsView({ ota }: Props) {
   const [sortCol,     setSortCol]     = useState<"lm" | "cm" | "delta" | null>(null);
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("desc");
   const [showDetails, setShowDetails] = useState(false);
+  const [propType,    setPropType]    = useState<"final" | "initial">("final");
 
   useEffect(() => { setOtaFilter(ota ?? ""); }, [ota]);
   useEffect(() => { setPage(1); }, [search, otaFilter, statusFilter, rnsMin, rnsMax, tab, sortCol, sortDir]);
@@ -121,22 +118,22 @@ export default function PropertyRnsView({ ota }: Props) {
     setLoading(true); setError(null);
     Promise.all([
       fetch("/api/listing-data").then(r => r.json()),
-      fetch("/api/rns-property-list").then(r => r.json()),
+      fetch(`/api/rns-property-list?type=${propType}`).then(r => r.json()),
     ]).then(([listingRes, rnsRes]) => {
       if (listingRes.error) throw new Error(listingRes.error);
       setListingProps(listingRes.properties ?? []);
 
-      // Build map: lowercase(name) → otaRns
+      // Build map: property_id → otaRns
       const map = new Map<string, Record<string, { cm: number; lm: number }>>();
-      for (const p of (rnsRes.properties ?? []) as RnsProp[]) {
-        map.set(p.name.toLowerCase().trim(), p.otas);
+      for (const p of (rnsRes.properties ?? []) as { id: string; otas: Record<string, { cm: number; lm: number }> }[]) {
+        map.set(p.id, p.otas);
       }
       setRnsMap(map);
       setMonth(rnsRes.month ?? "");
       setLmMonth(rnsRes.lmMonth ?? "");
     }).catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [propType]);
 
   /* Unique OTAs present in loaded data */
   const availableOtas = useMemo(() => {
@@ -157,7 +154,7 @@ export default function PropertyRnsView({ ota }: Props) {
     const activeOta = ota || otaFilter; // locked OTA (from prop) or filter selection
 
     for (const prop of listingProps) {
-      const rnsOtas = rnsMap.get(prop.name.toLowerCase().trim()) ?? {};
+      const rnsOtas = rnsMap.get(prop.fhId) ?? {};
 
       // Count live OTAs across all canonical OTAs
       let liveOtaCount = 0;
@@ -281,18 +278,65 @@ export default function PropertyRnsView({ ota }: Props) {
     borderBottom: "1px solid #E5E7EB", minWidth,
   });
 
+  function downloadCsv() {
+    const activeOta = ota || otaFilter;
+    const headers = [
+      "FH ID", "Property Name", "City",
+      ...(activeOta ? ["OTA", "Sub Status", "Live Date"] : ["Live OTAs"]),
+      "FH Live Date", "LM RNs", "CM RNs", "Delta %",
+    ];
+    const rows = filtered.map(r => {
+      const delta = r.lm > 0 ? ((r.cm - r.lm) / r.lm * 100).toFixed(1) : "";
+      return [
+        r.fhId, r.name, r.city,
+        ...(activeOta ? [r.ota, r.subStatus ?? "", r.liveDate ?? ""] : [String(r.liveOtaCount)]),
+        r.fhLiveDate ?? "", String(r.lm), String(r.cm), delta,
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    });
+    const csv  = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `property-production-${propType}-${month || "current"}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
   return (
     <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
 
       {/* Header */}
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Property Production</span>
+        {/* Initial / Final tab strip */}
+        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 7, padding: 3, gap: 2 }}>
+          {(["final", "initial"] as const).map(t => (
+            <button key={t} onClick={() => setPropType(t)} style={{
+              padding: "3px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
+              borderRadius: 5, fontFamily: "inherit", transition: "all 0.15s",
+              background: propType === t ? "#FFFFFF" : "transparent",
+              color:      propType === t ? "#2563EB" : "#64748B",
+              boxShadow:  propType === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+            }}>
+              {t === "final" ? "Final Property" : "Initial Property"}
+            </button>
+          ))}
+        </div>
         {month && (
           <span style={{ fontSize: 11, color: "#6B7280", background: "#F3F4F6", padding: "2px 8px", borderRadius: 99 }}>
             {month} vs {lmMonth}
           </span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={downloadCsv}
+            style={{
+              padding: "4px 10px", fontSize: 11, fontWeight: 600,
+              border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer",
+              background: "#F9FAFB", color: "#374151", fontFamily: "inherit",
+            }}
+          >
+            ↓ CSV
+          </button>
           <button
             onClick={() => setShowDetails(v => !v)}
             style={{
