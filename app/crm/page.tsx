@@ -745,7 +745,7 @@ export default function CrmPage() {
 
                   {/* Action */}
                   <div style={{ opacity: isHovered ? 1 : 0, transition: "opacity 0.15s" }}>
-                    <Link href={`/crm/${row.id}`}
+                    <Link href={`/crm/${row.id}`} target="_blank" rel="noopener noreferrer"
                       style={{ fontSize: 11, fontWeight: 600, color: "#fff",
                         background: "#4F46E5", borderRadius: 6, padding: "4px 10px",
                         textDecoration: "none", whiteSpace: "nowrap" }}>
