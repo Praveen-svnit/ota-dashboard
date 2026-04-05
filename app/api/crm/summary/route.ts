@@ -27,7 +27,7 @@ export async function GET() {
               COUNT(*) AS cnt
        FROM ota_listing ol
        JOIN inventory inv ON inv.property_id = ol.property_id
-         AND inv.fh_status IN ('Live','SoldOut')
+         AND 1=1
        ${otaCond}
        GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.sub_status), ''), 'New'))
        ORDER BY cnt DESC`,
@@ -40,7 +40,7 @@ export async function GET() {
               COUNT(*) AS cnt
        FROM ota_listing ol
        JOIN inventory inv ON inv.property_id = ol.property_id
-         AND inv.fh_status IN ('Live','SoldOut')
+         AND 1=1
        ${otaCond}
        GROUP BY LOWER(COALESCE(NULLIF(TRIM(ol.status), ''), 'New'))
        ORDER BY cnt DESC`,
@@ -56,7 +56,7 @@ export async function GET() {
               SUM(CASE WHEN LOWER(ol.sub_status) IN ('ready to go live','content in progress','listing in progress') THEN 1 ELSE 0 END) AS "inProgress"
        FROM ota_listing ol
        JOIN inventory inv ON inv.property_id = ol.property_id
-         AND inv.fh_status IN ('Live','SoldOut')
+         AND 1=1
        ${otaCond}
        GROUP BY ol.ota
        ORDER BY live DESC`,
