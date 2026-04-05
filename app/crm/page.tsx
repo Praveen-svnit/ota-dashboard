@@ -19,11 +19,13 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; dot: string }> 
   "closed":                { bg: "#F1F5F9", color: "#475569", dot: "#94A3B8" },
 };
 
+interface OtaChip {
+  ota: string; status: string; subStatus: string; liveDate: string | null;
+}
+
 interface Row {
   id: string; name: string; city: string; fhStatus: string; fhLiveDate: string;
-  ota: string; status: string; subStatus: string; liveDate: string;
-  tat: number; tatError: number; assignedTo: string; crmNote: string;
-  assignedName: string; taskDueDate: string | null;
+  otas: OtaChip[]; taskDueDate: string | null;
 }
 
 interface Summary {
@@ -618,7 +620,7 @@ export default function CrmPage() {
           <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10,
             background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
-              {loading ? "Loading…" : `${total.toLocaleString()} listing${total !== 1 ? "s" : ""}`}
+              {loading ? "Loading…" : `${total.toLocaleString()} propert${total !== 1 ? "ies" : "y"}`}
             </span>
             {activeFilterCount > 0 && (
               <span style={{ fontSize: 10, color: "#4F46E5", background: "#EEF2FF",
@@ -632,10 +634,10 @@ export default function CrmPage() {
           <div style={{ flex: 1 }}>
             {/* Column headers */}
             <div style={{ display: "grid",
-              gridTemplateColumns: "2fr 100px 80px 90px 130px 130px 120px 80px 80px",
+              gridTemplateColumns: "2fr 3fr 110px 90px 80px",
               padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
               gap: 8 }}>
-              {["Property", "OTA", "Status", "Sub-Status", "FH Live Date", "OTA Live Date", "Assigned To", "Task Due", ""].map(h => (
+              {["Property", "OTA Status", "FH Live Date", "Task Due", ""].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF",
                   textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
               ))}
@@ -650,7 +652,6 @@ export default function CrmPage() {
                 <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>Try adjusting your filters</div>
               </div>
             ) : rows.map((row, i) => {
-              const otaCol = OTA_COLORS[row.ota] ?? "#64748B";
               const isHovered = hoveredRow === i;
               const isOverdue = row.taskDueDate && new Date(row.taskDueDate) < new Date(new Date().toDateString());
               return (
@@ -658,7 +659,7 @@ export default function CrmPage() {
                   onMouseEnter={() => setHoveredRow(i)}
                   onMouseLeave={() => setHoveredRow(null)}
                   style={{ display: "grid",
-                    gridTemplateColumns: "2fr 100px 80px 90px 130px 130px 120px 80px 80px",
+                    gridTemplateColumns: "2fr 3fr 110px 90px 80px",
                     padding: "10px 20px", gap: 8, alignItems: "center",
                     borderBottom: "1px solid #F1F5F9",
                     background: isHovered ? "#F8FAFC" : "#fff",
@@ -666,61 +667,39 @@ export default function CrmPage() {
 
                   {/* Property */}
                   <div style={{ minWidth: 0 }}>
-                    <Link href={`/crm/${row.id}?ota=${encodeURIComponent(row.ota)}`}
+                    <Link href={`/crm/${row.id}`}
                       style={{ fontSize: 13, fontWeight: 700, color: "#0F172A",
                         textDecoration: "none", display: "block",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       title={row.name}>
                       {row.name}
                     </Link>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
                       <span style={{ fontSize: 10, color: "#9CA3AF" }}>#{row.id}</span>
                       {row.city && <span style={{ fontSize: 10, color: "#9CA3AF" }}>· {row.city}</span>}
-                      {row.crmNote && (
-                        <span style={{ fontSize: 10, color: "#64748B",
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          maxWidth: 160 }} title={row.crmNote}>
-                          · {row.crmNote}
-                        </span>
-                      )}
                     </div>
                   </div>
 
-                  {/* OTA */}
-                  <div>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12,
-                      background: otaCol + "18", color: otaCol, border: `1px solid ${otaCol}30`,
-                      whiteSpace: "nowrap" }}>
-                      {row.ota}
-                    </span>
-                  </div>
-
-                  {/* Status */}
-                  <div><StatusDot status={row.status} /></div>
-
-                  {/* Sub-status */}
-                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {row.subStatus || <span style={{ color: "#CBD5E1" }}>—</span>}
+                  {/* OTA chips */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(row.otas ?? []).map(chip => {
+                      const otaCol = OTA_COLORS[chip.ota] ?? "#64748B";
+                      const s = STATUS_COLORS[chip.status?.toLowerCase()] ?? { dot: "#94A3B8" };
+                      return (
+                        <span key={chip.ota} title={`${chip.ota}: ${chip.status}${chip.subStatus ? ` · ${chip.subStatus}` : ""}`}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                            fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
+                            background: otaCol + "14", color: otaCol, border: `1px solid ${otaCol}28`,
+                            whiteSpace: "nowrap" }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
+                          {chip.ota}
+                        </span>
+                      );
+                    })}
                   </div>
 
                   {/* FH Live Date */}
                   <div style={{ fontSize: 11, color: "#475569" }}>{fmtDate(row.fhLiveDate)}</div>
-
-                  {/* OTA Live Date */}
-                  <div style={{ fontSize: 11, color: "#475569" }}>{fmtDate(row.liveDate)}</div>
-
-                  {/* Assigned to */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    {row.assignedName ? (
-                      <>
-                        <Avatar name={row.assignedName} size={22} />
-                        <span style={{ fontSize: 11, color: "#374151", overflow: "hidden",
-                          textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {row.assignedName.split(" ")[0]}
-                        </span>
-                      </>
-                    ) : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
-                  </div>
 
                   {/* Task due */}
                   <div>
@@ -737,7 +716,7 @@ export default function CrmPage() {
 
                   {/* Action */}
                   <div style={{ opacity: isHovered ? 1 : 0, transition: "opacity 0.15s" }}>
-                    <Link href={`/crm/${row.id}?ota=${encodeURIComponent(row.ota)}`}
+                    <Link href={`/crm/${row.id}`}
                       style={{ fontSize: 11, fontWeight: 600, color: "#fff",
                         background: "#4F46E5", borderRadius: 6, padding: "4px 10px",
                         textDecoration: "none", whiteSpace: "nowrap" }}>

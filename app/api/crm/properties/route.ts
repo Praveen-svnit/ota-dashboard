@@ -21,24 +21,20 @@ export async function GET(req: Request) {
 
   const sql = getSql();
 
-  // params and conditions are built up together; each push returns the new $N index
   const conditions: string[] = [];
   const params: unknown[] = [];
-  const p = () => params.length; // current placeholder index after a push
+  const p = () => params.length;
 
   // ── Role-based access control ──────────────────────────────
   if (session.role === "intern") {
     if (session.ota) {
-      // OTA-assigned interns see all properties for their OTA
       params.push(session.ota);
       conditions.push(`c.ota = $${p()}`);
     } else {
-      // Interns without OTA see only their assigned properties
       params.push(session.id);
       conditions.push(`c.assigned_to = $${p()}`);
     }
   } else if (session.role === "tl") {
-    // Fetch intern IDs under this TL (tagged template handles its own binding)
     const internRows = await sql`
       SELECT id FROM users
       WHERE team_lead = ${session.name} AND role = 'intern' AND active = 1
@@ -83,11 +79,8 @@ export async function GET(req: Request) {
   if (otaTo)   { params.push(otaTo);   conditions.push(`c.live_date::date <= $${p()}`); }
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
-
-  // Snapshot params for the count query (no LIMIT/OFFSET needed there)
   const countParams = [...params];
 
-  // Add LIMIT / OFFSET for the rows query
   params.push(limit);
   const limitIdx = p();
   params.push(offset);
@@ -103,36 +96,62 @@ export async function GET(req: Request) {
     WHERE inv.fh_status IN ('Live','SoldOut')
   `;
 
+  if (exportAll) {
+    // Export: flat rows (one per property×OTA)
+    const rowsQuery = `
+      SELECT
+        c.property_id                                          AS id,
+        c.property_name                                        AS name,
+        c.city,
+        c.fh_status                                            AS "fhStatus",
+        c.fh_live_date                                         AS "fhLiveDate",
+        c.ota,
+        COALESCE(NULLIF(TRIM(c.status),     ''), 'New')        AS status,
+        COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New')        AS "subStatus",
+        c.live_date                                            AS "liveDate",
+        c.assigned_to                                          AS "assignedTo",
+        c.crm_note                                             AS "crmNote",
+        u.name                                                 AS "assignedName",
+        (SELECT MIN(t.due_date) FROM tasks t
+         WHERE t.property_id = c.property_id
+           AND t.status = 'open'
+           AND t.due_date IS NOT NULL)                         AS "taskDueDate"
+      FROM (${innerCte}) c
+      LEFT JOIN users u ON u.id = c.assigned_to
+      ${where}
+      ORDER BY c.property_name ASC, c.ota ASC
+    `;
+    const rows = await sql.query(rowsQuery, countParams as unknown[]);
+    return Response.json({ rows, total: (rows as unknown[]).length, page, limit });
+  }
+
+  // Grouped: one row per property with OTA array
   const rowsQuery = `
     SELECT
-      c.property_id                                          AS id,
-      c.property_name                                        AS name,
+      c.property_id                  AS id,
+      c.property_name                AS name,
       c.city,
-      c.fh_status                                            AS "fhStatus",
-      c.fh_live_date                                         AS "fhLiveDate",
-      c.ota,
-      COALESCE(NULLIF(TRIM(c.status),     ''), 'New')        AS status,
-      COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New')        AS "subStatus",
-      c.live_date                                            AS "liveDate",
-      c.tat,
-      c.tat_error                                            AS "tatError",
-      c.assigned_to                                          AS "assignedTo",
-      c.crm_note                                             AS "crmNote",
-      c.crm_updated_at                                       AS "crmUpdatedAt",
-      u.name                                                 AS "assignedName",
+      c.fh_status                    AS "fhStatus",
+      c.fh_live_date                 AS "fhLiveDate",
+      json_agg(json_build_object(
+        'ota',       c.ota,
+        'status',    COALESCE(NULLIF(TRIM(c.status),     ''), 'New'),
+        'subStatus', COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New'),
+        'liveDate',  c.live_date
+      ) ORDER BY c.ota)              AS otas,
       (SELECT MIN(t.due_date) FROM tasks t
        WHERE t.property_id = c.property_id
          AND t.status = 'open'
-         AND t.due_date IS NOT NULL)                         AS "taskDueDate"
+         AND t.due_date IS NOT NULL) AS "taskDueDate"
     FROM (${innerCte}) c
-    LEFT JOIN users u ON u.id = c.assigned_to
     ${where}
+    GROUP BY c.property_id, c.property_name, c.city, c.fh_status, c.fh_live_date
     ORDER BY c.property_name ASC
     LIMIT $${limitIdx} OFFSET $${offsetIdx}
   `;
 
   const countQuery = `
-    SELECT COUNT(*) AS n
+    SELECT COUNT(DISTINCT c.property_id) AS n
     FROM (${innerCte}) c
     ${where}
   `;
@@ -143,6 +162,5 @@ export async function GET(req: Request) {
   ]);
 
   const total = Number((countRows[0] as { n: string | number }).n);
-
   return Response.json({ rows, total, page, limit });
 }
