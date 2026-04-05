@@ -688,7 +688,7 @@ export default function CrmPage() {
                     transition: "background 0.1s" }}>
 
                   {/* ID */}
-                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>#{row.id}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{row.id}</div>
 
                   {/* Property Name */}
                   <div style={{ minWidth: 0 }}>
