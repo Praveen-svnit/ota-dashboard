@@ -138,7 +138,7 @@ async function batchUpsert(
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
     const vals = batch.map(r =>
-      `(${escVal(r.property_id)}, ${escVal(r.ota)}, ${escVal(r.status)}, ${escVal(r.sub_status)}, ${r.live_date ? `'${r.live_date}'::date` : "NULL"}, ${escVal(r.ota_id)}, ${escVal(r.pre_post)})`
+      `(${escVal(r.property_id)}, ${escVal(r.ota)}, ${escVal(r.status)}, ${escVal(r.sub_status)}, ${r.live_date ? `'${r.live_date}'::date` : "NULL"}, ${escVal(r.ota_id)}, ${escVal(r.pre_post)}, NOW())`
     ).join(",\n");
 
     const subStatusUpdate = updateSubStatus
