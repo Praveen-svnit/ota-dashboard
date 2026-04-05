@@ -124,6 +124,7 @@ export default function CrmPage() {
   const [otaFilter,       setOtaFilter]       = useState("all");
   const [statusFilter,    setStatusFilter]    = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
+  const [fhStatusFilter,  setFhStatusFilter]  = useState("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fhDateFrom,   setFhDateFrom]   = useState("");
   const [fhDateTo,     setFhDateTo]     = useState("");
@@ -165,7 +166,7 @@ export default function CrmPage() {
   }, []);
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
-    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter };
+    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter };
     if (fhDateFrom)  q.fhFrom  = fhDateFrom;
     if (fhDateTo)    q.fhTo    = fhDateTo;
     if (otaDateFrom) q.otaFrom = otaDateFrom;
@@ -182,7 +183,7 @@ export default function CrmPage() {
   }, [buildParams, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
 
   const [csvLoading, setCsvLoading] = useState(false);
   const downloadCsv = () => {
@@ -216,12 +217,12 @@ export default function CrmPage() {
     : (summary?.otaBreakdown ?? []).map(o => o.ota).filter(Boolean);
 
   const activeFilterCount = [
-    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all",
+    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all", fhStatusFilter !== "all",
     !!fhDateFrom || !!fhDateTo, !!otaDateFrom || !!otaDateTo,
   ].filter(Boolean).length;
 
   function clearFilters() {
-    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all");
+    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter("all");
     setFhDateFrom(""); setFhDateTo(""); setOtaDateFrom(""); setOtaDateTo("");
     setSearch("");
   }
@@ -371,8 +372,24 @@ export default function CrmPage() {
             </select>
           </FilterSection>
 
+          {/* FH Status filter */}
+          <FilterSection label="FH Status" count={fhStatusFilter !== "all" ? 1 : 0}>
+            {["all", "Live", "SoldOut", "Churned"].map(s => (
+              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
+                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
+                <input type="radio" name="fhStatus" checked={fhStatusFilter === s}
+                  onChange={() => setFhStatusFilter(s)}
+                  style={{ accentColor: "#4F46E5" }} />
+                <span style={{ color: fhStatusFilter === s ? "#4F46E5" : "#475569",
+                  fontWeight: fhStatusFilter === s ? 600 : 400 }}>
+                  {s === "all" ? "All" : s}
+                </span>
+              </label>
+            ))}
+          </FilterSection>
+
           {/* Status filter */}
-          <FilterSection label="Status" count={statusFilter !== "all" ? 1 : 0}>
+          <FilterSection label="OTA Status" count={statusFilter !== "all" ? 1 : 0}>
             {["all", ...statusOptions].map(s => (
               <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
                 padding: "3px 0", cursor: "pointer", fontSize: 11 }}>

@@ -14,6 +14,7 @@ export async function GET(req: Request) {
   const fhTo         = searchParams.get("fhTo")    ?? "";
   const otaFrom      = searchParams.get("otaFrom") ?? "";
   const otaTo        = searchParams.get("otaTo")   ?? "";
+  const fhStatusFilter = searchParams.get("fhStatus") ?? "all";
   const exportAll    = searchParams.get("export") === "1";
   const page         = parseInt(searchParams.get("page") ?? "1", 10);
   const limit        = exportAll ? 99999 : 50;
@@ -73,6 +74,11 @@ export async function GET(req: Request) {
     conditions.push(`(c.property_name ILIKE $${idx} OR c.property_id ILIKE $${idx} OR c.city ILIKE $${idx})`);
   }
 
+  if (fhStatusFilter !== "all") {
+    params.push(fhStatusFilter);
+    conditions.push(`c.fh_status = $${p()}`);
+  }
+
   if (fhFrom)  { params.push(fhFrom);  conditions.push(`c.fh_live_date::date >= $${p()}`); }
   if (fhTo)    { params.push(fhTo);    conditions.push(`c.fh_live_date::date <= $${p()}`); }
   if (otaFrom) { params.push(otaFrom); conditions.push(`c.live_date::date >= $${p()}`); }
@@ -93,7 +99,7 @@ export async function GET(req: Request) {
       ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
-    WHERE inv.fh_status IN ('Live','SoldOut')
+    WHERE 1=1
   `;
 
   if (exportAll) {

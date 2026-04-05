@@ -99,6 +99,32 @@ async function runSync() {
     upserted += batch.length;
   }
 
+  // Bootstrap new properties — insert "New" status for all OTAs if no ota_listing row exists yet
+  const OTA_LIST = ["GoMMT","Agoda","Expedia","Yatra","Ixigo","Akbar Travels","Booking.com","Cleartrip","EaseMyTrip","Indigo"];
+  const allIds = records.map(r => r.property_id);
+
+  for (let i = 0; i < allIds.length; i += BATCH) {
+    const chunk = allIds.slice(i, i + BATCH);
+    const placeholders = chunk.map((_, j) => `$${j + 1}`).join(", ");
+    const existing = await sql.query(
+      `SELECT DISTINCT property_id FROM ota_listing WHERE property_id IN (${placeholders})`,
+      chunk
+    ) as { property_id: string }[];
+    const existingSet = new Set(existing.map(r => r.property_id));
+    const newIds = chunk.filter(id => !existingSet.has(id));
+
+    if (newIds.length > 0) {
+      const bootstrapVals = newIds.flatMap(pid =>
+        OTA_LIST.map(ota => `(${escVal(pid)}, ${escVal(ota)}, 'New', 'New', NOW())`)
+      ).join(",\n");
+      await sql.query(`
+        INSERT INTO ota_listing (property_id, ota, status, sub_status, synced_at)
+        VALUES ${bootstrapVals}
+        ON CONFLICT (property_id, ota) DO NOTHING
+      `, []);
+    }
+  }
+
   return { upserted, skipped };
 }
 
