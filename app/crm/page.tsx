@@ -124,7 +124,7 @@ export default function CrmPage() {
   const [otaFilter,       setOtaFilter]       = useState("all");
   const [statusFilter,    setStatusFilter]    = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
-  const [fhStatusFilter,  setFhStatusFilter]  = useState<string[]>([]);
+  const [fhStatusFilter,  setFhStatusFilter]  = useState<string[]>(["Live", "SoldOut"]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fhDateFrom,   setFhDateFrom]   = useState("");
   const [fhDateTo,     setFhDateTo]     = useState("");
@@ -217,12 +217,13 @@ export default function CrmPage() {
     : (summary?.otaBreakdown ?? []).map(o => o.ota).filter(Boolean);
 
   const activeFilterCount = [
-    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all", fhStatusFilter.length > 0,
+    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all",
+    !(fhStatusFilter.length === 2 && fhStatusFilter.includes("Live") && fhStatusFilter.includes("SoldOut")),
     !!fhDateFrom || !!fhDateTo, !!otaDateFrom || !!otaDateTo,
   ].filter(Boolean).length;
 
   function clearFilters() {
-    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter([]);
+    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter(["Live", "SoldOut"]);
     setFhDateFrom(""); setFhDateTo(""); setOtaDateFrom(""); setOtaDateTo("");
     setSearch("");
   }
