@@ -8,8 +8,13 @@ export async function GET(req: NextRequest) {
   }
 
   const base = new URL(req.url).origin;
-  const res  = await fetch(`${base}/api/sync-ota-listings`, { method: "POST" });
-  const json = await res.json();
 
-  return Response.json({ ok: true, ...json });
+  const [otaRes, invRes] = await Promise.all([
+    fetch(`${base}/api/sync-ota-listings`, { method: "POST" }),
+    fetch(`${base}/api/sync-inventory`,    { method: "POST" }),
+  ]);
+
+  const [otaJson, invJson] = await Promise.all([otaRes.json(), invRes.json()]);
+
+  return Response.json({ ok: true, ota: otaJson, inventory: invJson });
 }
