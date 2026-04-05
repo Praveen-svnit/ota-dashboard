@@ -207,9 +207,9 @@ export default function CrmPage() {
 
   const totalPages = Math.ceil(total / 50);
 
-  const liveCount     = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
-  const notLiveCount  = totalListings - (summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0);
   const totalListings = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
+  const liveCount     = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
+  const notLiveCount  = totalListings - liveCount;
   const readyCount    = summary?.statusTopCounts.find(s => s.status === "ready to go live")?.cnt ?? 0;
 
   const availableOtas = summary?.userOta
