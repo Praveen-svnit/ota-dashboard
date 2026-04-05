@@ -634,10 +634,10 @@ export default function CrmPage() {
           <div style={{ flex: 1 }}>
             {/* Column headers */}
             <div style={{ display: "grid",
-              gridTemplateColumns: "2fr 3fr 110px 90px 80px",
+              gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
               padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
               gap: 8 }}>
-              {["Property", "OTA Status", "FH Live Date", "Task Due", ""].map(h => (
+              {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "Task Due", ""].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF",
                   textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
               ))}
@@ -654,18 +654,23 @@ export default function CrmPage() {
             ) : rows.map((row, i) => {
               const isHovered = hoveredRow === i;
               const isOverdue = row.taskDueDate && new Date(row.taskDueDate) < new Date(new Date().toDateString());
+              // Show OTA status/sub-status only when a single OTA is selected
+              const singleOta = otaFilter !== "all" ? (row.otas ?? []).find(o => o.ota === otaFilter) ?? null : null;
               return (
                 <div key={i}
                   onMouseEnter={() => setHoveredRow(i)}
                   onMouseLeave={() => setHoveredRow(null)}
                   style={{ display: "grid",
-                    gridTemplateColumns: "2fr 3fr 110px 90px 80px",
+                    gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
                     padding: "10px 20px", gap: 8, alignItems: "center",
                     borderBottom: "1px solid #F1F5F9",
                     background: isHovered ? "#F8FAFC" : "#fff",
                     transition: "background 0.1s" }}>
 
-                  {/* Property */}
+                  {/* ID */}
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>#{row.id}</div>
+
+                  {/* Property Name */}
                   <div style={{ minWidth: 0 }}>
                     <Link href={`/crm/${row.id}`}
                       style={{ fontSize: 13, fontWeight: 700, color: "#0F172A",
@@ -674,32 +679,37 @@ export default function CrmPage() {
                       title={row.name}>
                       {row.name}
                     </Link>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
-                      <span style={{ fontSize: 10, color: "#9CA3AF" }}>#{row.id}</span>
-                      {row.city && <span style={{ fontSize: 10, color: "#9CA3AF" }}>· {row.city}</span>}
-                    </div>
                   </div>
 
-                  {/* OTA chips */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {(row.otas ?? []).map(chip => {
-                      const otaCol = OTA_COLORS[chip.ota] ?? "#64748B";
-                      const s = STATUS_COLORS[chip.status?.toLowerCase()] ?? { dot: "#94A3B8" };
-                      return (
-                        <span key={chip.ota} title={`${chip.ota}: ${chip.status}${chip.subStatus ? ` · ${chip.subStatus}` : ""}`}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
-                            background: otaCol + "14", color: otaCol, border: `1px solid ${otaCol}28`,
-                            whiteSpace: "nowrap" }}>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
-                          {chip.ota}
-                        </span>
-                      );
-                    })}
+                  {/* City */}
+                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.city || <span style={{ color: "#CBD5E1" }}>—</span>}
                   </div>
 
                   {/* FH Live Date */}
                   <div style={{ fontSize: 11, color: "#475569" }}>{fmtDate(row.fhLiveDate)}</div>
+
+                  {/* FH Status */}
+                  <div>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                      background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9",
+                      color: row.fhStatus === "Live" ? "#15803D" : "#64748B",
+                      border: `1px solid ${row.fhStatus === "Live" ? "#BBF7D0" : "#E2E8F0"}` }}>
+                      {row.fhStatus || "—"}
+                    </span>
+                  </div>
+
+                  {/* OTA Status */}
+                  <div>
+                    {singleOta
+                      ? <StatusDot status={singleOta.status} />
+                      : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* Sub-Status */}
+                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {singleOta?.subStatus || <span style={{ color: "#CBD5E1" }}>—</span>}
+                  </div>
 
                   {/* Task due */}
                   <div>
