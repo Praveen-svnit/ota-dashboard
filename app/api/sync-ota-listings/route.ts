@@ -69,26 +69,72 @@ type OtaRecord = {
   pre_post: string | null;
 };
 
+type DbRow = {
+  id: number;
+  property_id: string;
+  status: string | null;
+  sub_status: string | null;
+  live_date: string | null;
+  ota_id: string | null;
+};
+
+type LogEntry = {
+  property_id: string;
+  ota_listing_id: number | null;
+  field: string;
+  old_value: string | null;
+  new_value: string;
+};
+
+const TRACKED_FIELDS: (keyof Pick<OtaRecord, "status" | "sub_status" | "live_date" | "ota_id">)[] = [
+  "status", "sub_status", "live_date", "ota_id",
+];
+
 async function batchUpsert(
   sql: ReturnType<typeof getSql>,
   records: OtaRecord[],
   updateSubStatus: boolean,
-  updateOnly: boolean = false   // if true, skip inserts (only update existing rows)
+  updateOnly: boolean = false
 ): Promise<{ upserted: number }> {
-  let upserted = 0;
+  if (records.length === 0) return { upserted: 0 };
 
-  // For update-only mode, pre-fetch existing property_ids for this OTA
-  let existingIds: Set<string> | null = null;
-  if (updateOnly && records.length > 0) {
-    const ota = records[0].ota;
-    const rows = await sql.query(
-      `SELECT property_id FROM ota_listing WHERE ota = $1`,
-      [ota]
-    ) as { property_id: string }[];
-    existingIds = new Set(rows.map(r => r.property_id));
-    records = records.filter(r => existingIds!.has(r.property_id));
+  const ota = records[0].ota;
+
+  // Fetch all existing rows for this OTA in one query
+  const existing = await sql.query(
+    `SELECT id, property_id, status, sub_status, live_date::text AS live_date, ota_id
+     FROM ota_listing WHERE ota = $1`,
+    [ota]
+  ) as DbRow[];
+  const existingMap = new Map(existing.map(r => [r.property_id, r]));
+
+  if (updateOnly) {
+    records = records.filter(r => existingMap.has(r.property_id));
   }
 
+  // Diff and collect log entries
+  const logEntries: LogEntry[] = [];
+  for (const rec of records) {
+    const dbRow = existingMap.get(rec.property_id) ?? null;
+    for (const field of TRACKED_FIELDS) {
+      if (field === "sub_status" && !updateSubStatus) continue;
+      const incoming = rec[field];
+      if (!incoming) continue; // don't log nulls coming from sheet
+      const current = dbRow ? (dbRow[field as keyof DbRow] as string | null) : null;
+      if (incoming !== current) {
+        logEntries.push({
+          property_id: rec.property_id,
+          ota_listing_id: dbRow?.id ?? null,
+          field,
+          old_value: current,
+          new_value: incoming,
+        });
+      }
+    }
+  }
+
+  // Upsert ota_listing in batches
+  let upserted = 0;
   for (let i = 0; i < records.length; i += BATCH) {
     const batch = records.slice(i, i + BATCH);
     const vals = batch.map(r =>
@@ -112,6 +158,21 @@ async function batchUpsert(
     `, []);
     upserted += batch.length;
   }
+
+  // Bulk insert log entries
+  if (logEntries.length > 0) {
+    for (let i = 0; i < logEntries.length; i += BATCH) {
+      const chunk = logEntries.slice(i, i + BATCH);
+      const logVals = chunk.map(e =>
+        `(${escVal(e.property_id)}, ${e.ota_listing_id ?? "NULL"}, 'sheets_sync', 'field_updated', ${escVal(e.field)}, ${escVal(e.old_value)}, ${escVal(e.new_value)})`
+      ).join(",\n");
+      await sql.query(`
+        INSERT INTO property_log (property_id, ota_listing_id, user_id, action, field, old_value, new_value)
+        VALUES ${logVals}
+      `, []);
+    }
+  }
+
   return { upserted };
 }
 
