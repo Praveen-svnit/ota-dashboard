@@ -124,7 +124,7 @@ export default function CrmPage() {
   const [otaFilter,       setOtaFilter]       = useState("all");
   const [statusFilter,    setStatusFilter]    = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
-  const [fhStatusFilter,  setFhStatusFilter]  = useState("all");
+  const [fhStatusFilter,  setFhStatusFilter]  = useState<string[]>([]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fhDateFrom,   setFhDateFrom]   = useState("");
   const [fhDateTo,     setFhDateTo]     = useState("");
@@ -166,7 +166,7 @@ export default function CrmPage() {
   }, []);
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
-    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter };
+    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter.join(",") };
     if (fhDateFrom)  q.fhFrom  = fhDateFrom;
     if (fhDateTo)    q.fhTo    = fhDateTo;
     if (otaDateFrom) q.otaFrom = otaDateFrom;
@@ -217,12 +217,12 @@ export default function CrmPage() {
     : (summary?.otaBreakdown ?? []).map(o => o.ota).filter(Boolean);
 
   const activeFilterCount = [
-    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all", fhStatusFilter !== "all",
+    otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all", fhStatusFilter.length > 0,
     !!fhDateFrom || !!fhDateTo, !!otaDateFrom || !!otaDateTo,
   ].filter(Boolean).length;
 
   function clearFilters() {
-    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter("all");
+    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter([]);
     setFhDateFrom(""); setFhDateTo(""); setOtaDateFrom(""); setOtaDateTo("");
     setSearch("");
   }
@@ -373,19 +373,21 @@ export default function CrmPage() {
           </FilterSection>
 
           {/* FH Status filter */}
-          <FilterSection label="FH Status" count={fhStatusFilter !== "all" ? 1 : 0}>
-            {["all", "Live", "SoldOut", "Churned"].map(s => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                <input type="radio" name="fhStatus" checked={fhStatusFilter === s}
-                  onChange={() => setFhStatusFilter(s)}
-                  style={{ accentColor: "#4F46E5" }} />
-                <span style={{ color: fhStatusFilter === s ? "#4F46E5" : "#475569",
-                  fontWeight: fhStatusFilter === s ? 600 : 400 }}>
-                  {s === "all" ? "All" : s}
-                </span>
-              </label>
-            ))}
+          <FilterSection label="FH Status" count={fhStatusFilter.length}>
+            {["Live", "SoldOut", "Churned"].map(s => {
+              const checked = fhStatusFilter.includes(s);
+              return (
+                <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
+                  padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
+                  <input type="checkbox" checked={checked}
+                    onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
+                    style={{ accentColor: "#4F46E5" }} />
+                  <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>
+                    {s}
+                  </span>
+                </label>
+              );
+            })}
           </FilterSection>
 
           {/* Status filter */}

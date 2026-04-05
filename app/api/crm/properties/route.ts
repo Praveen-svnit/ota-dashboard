@@ -14,7 +14,8 @@ export async function GET(req: Request) {
   const fhTo         = searchParams.get("fhTo")    ?? "";
   const otaFrom      = searchParams.get("otaFrom") ?? "";
   const otaTo        = searchParams.get("otaTo")   ?? "";
-  const fhStatusFilter = searchParams.get("fhStatus") ?? "all";
+  const fhStatusRaw    = searchParams.get("fhStatus") ?? "";
+  const fhStatusFilter = fhStatusRaw ? fhStatusRaw.split(",").filter(Boolean) : [];
   const exportAll    = searchParams.get("export") === "1";
   const page         = parseInt(searchParams.get("page") ?? "1", 10);
   const limit        = exportAll ? 99999 : 50;
@@ -74,9 +75,9 @@ export async function GET(req: Request) {
     conditions.push(`(c.property_name ILIKE $${idx} OR c.property_id ILIKE $${idx} OR c.city ILIKE $${idx})`);
   }
 
-  if (fhStatusFilter !== "all") {
-    params.push(fhStatusFilter);
-    conditions.push(`c.fh_status = $${p()}`);
+  if (fhStatusFilter.length > 0) {
+    const placeholders = fhStatusFilter.map(s => { params.push(s); return `$${p()}`; }).join(", ");
+    conditions.push(`c.fh_status IN (${placeholders})`);
   }
 
   if (fhFrom)  { params.push(fhFrom);  conditions.push(`c.fh_live_date::date >= $${p()}`); }
