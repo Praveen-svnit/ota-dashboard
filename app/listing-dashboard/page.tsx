@@ -100,7 +100,7 @@ interface DashData { pivot: Record<string, Record<string, number>>; columns: str
 
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [selectedOta, setSelectedOta] = useState<string>("GoMMT");
+  const [selectedOta, setSelectedOta] = useState<string>("Overview");
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
