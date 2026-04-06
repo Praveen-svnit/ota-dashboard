@@ -123,7 +123,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <NavLink icon="📈" label="Team Performance" href="/performance" />
 
         {/* Reports */}
-        <SectionHeader label="Reports" />
+        <SectionHeader label="BDC Reports" />
         <NavLink icon="📅" label="Today's Tasks"  href="/todays-assigned-tasks" />
         <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
         <NavLink icon="⭐" label="BDC Genius"      href="/reports/genius" />
