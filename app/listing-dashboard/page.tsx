@@ -11,7 +11,7 @@ const OTA_SLUG_MAP: Record<string, string> = {
   "Indigo":"indigo",
 };
 
-const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo"];
+const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo","GMB"];
 
 const T = {
   pageBg:   "#F4F7FB",
@@ -32,6 +32,8 @@ const T = {
 };
 
 const OTA_COLORS: Record<string, string> = {
+  "Overview":      "#5D87FF",
+  "GMB":           "#34A853",
   "GoMMT":         "#E83F6F",
   "Booking.com":   "#2563EB",
   "Agoda":         "#7C3AED",
@@ -98,8 +100,7 @@ interface DashData { pivot: Record<string, Record<string, number>>; columns: str
 
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [view,        setView]        = useState<"overview" | "gmb" | "ota">("overview");
-  const [selectedOta, setSelectedOta] = useState<string | null>(null);
+  const [selectedOta, setSelectedOta] = useState<string>("GoMMT");
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -185,86 +186,34 @@ export default function ListingDashboardPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
           </div>
         </div>
-        {/* View toggle — Overview / GMB / OTA Wise */}
-        <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-          {([
-            { key: "overview", label: "Overview" },
-            { key: "gmb",      label: "GMB" },
-            { key: "ota",      label: "OTA Wise" },
-          ] as { key: "overview" | "gmb" | "ota"; label: string }[]).map(({ key, label }) => {
-            const active = view === key;
+        {/* OTA tab strip */}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {["Overview", ...OTA_LIST_ORDER].map(name => {
+            const active = selectedOta === name;
+            const color  = OTA_COLORS[name] ?? T.orange;
             return (
               <button
-                key={key}
-                onClick={() => setView(key)}
+                key={name}
+                onClick={() => setSelectedOta(name)}
                 style={{
-                  padding: "7px 18px", fontSize: 11, fontWeight: 700,
-                  borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit",
-                  background: active ? "#FFFFFF" : "transparent",
-                  color:      active ? T.textPri : "#94A3B8",
-                  boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
+                  padding: "5px 13px", fontSize: 11, fontWeight: 700,
+                  border: `1px solid ${active ? color : T.cardBdr}`,
+                  borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
+                  background: active ? color : "#FFFFFF",
+                  color:      active ? "#FFFFFF" : "#64748B",
                   transition: "all 0.13s ease",
                 }}
               >
-                {label}
+                {name}
               </button>
             );
           })}
         </div>
       </div>
 
-      {view === "gmb" ? (
+      {selectedOta === "GMB" ? (
         <GmbTab />
-      ) : view === "ota" ? (
-        /* ── OTA Wise view ── */
-        <div>
-          {/* OTA filter row */}
-          <div style={{
-            display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
-            marginBottom: 18, padding: "12px 16px",
-            background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
-            borderRadius: 14, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
-          }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Select OTA</span>
-            {OTA_LIST_ORDER.map(name => {
-              const active = selectedOta === name;
-              const color  = OTA_COLORS[name] ?? T.orange;
-              return (
-                <button
-                  key={name}
-                  onClick={() => setSelectedOta(active ? null : name)}
-                  style={{
-                    padding: "6px 14px", fontSize: 11, fontWeight: 700,
-                    border: `1px solid ${active ? color : T.cardBdr}`,
-                    borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
-                    background: active ? color : "#FFFFFF",
-                    color:      active ? "#FFFFFF" : "#64748B",
-                    boxShadow: active ? `0 4px 12px ${color}30` : "none",
-                    transition: "all 0.13s ease",
-                  }}
-                >
-                  {name}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* OTA detail or empty state */}
-          {selectedOta ? (
-            <OtaDetailView otaName={selectedOta} />
-          ) : (
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              padding: "60px 24px", background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
-              borderRadius: 18, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
-            }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>◈</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: T.textPri, marginBottom: 6 }}>Select an OTA to view analytics</div>
-              <div style={{ fontSize: 11, color: T.textMut }}>Month-wise TAT · Not Live Properties · Sub-status breakdown</div>
-            </div>
-          )}
-        </div>
-      ) : (
+      ) : selectedOta === "Overview" ? (
         <>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
@@ -867,6 +816,8 @@ export default function ListingDashboardPage() {
       })()}
 
         </>
+      ) : (
+        <OtaDetailView otaName={selectedOta} />
       )}
     </div>
   );

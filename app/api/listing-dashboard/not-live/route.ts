@@ -37,13 +37,13 @@ export async function GET(req: NextRequest) {
     if (monthMode) {
       conditions = ["LOWER(COALESCE(o.sub_status,'')) != 'live'", "p.fh_status = 'Live'"];
     } else if (category === "live") {
-      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'live'"];
+      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'live'", "p.fh_status IN ('Live','SoldOut')"];
     } else if (category === "exception") {
-      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'exception'"];
+      conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'exception'", "p.fh_status IN ('Live','SoldOut')"];
     } else if (category === "all") {
-      conditions = [];
+      conditions = ["p.fh_status IN ('Live','SoldOut')"];
     } else {
-      conditions = ["(LOWER(o.sub_status) != 'live' OR o.sub_status IS NULL)", "LOWER(COALESCE(o.sub_status,'')) != 'exception'"];
+      conditions = ["(LOWER(o.sub_status) != 'live' OR o.sub_status IS NULL)", "LOWER(COALESCE(o.sub_status,'')) != 'exception'", "p.fh_status IN ('Live','SoldOut')"];
       if (category === "inProcess")    conditions.push("o.tat <= 15");
       if (category === "tatExhausted") conditions.push("o.tat > 15");
     }
