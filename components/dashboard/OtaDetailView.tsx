@@ -348,7 +348,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
 
-  const [propTab,   setPropTab]   = useState<"notlive" | "live">("notlive");
+  const [propTab,   setPropTab]   = useState<"notlive" | "live">("live");
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -479,7 +479,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setDashData(null); setOvrLive([]); setOvrNotLive([]);
     setRnsMonthly({}); setRevMonthly({}); setNlData(null); setLiveData(null);
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
-    setLiveSearch(""); setPropTab("notlive");
+    setLiveSearch(""); setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -652,18 +652,36 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         .ss-clickable-num:hover { opacity: 0.8; }
       `}</style>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+      {/* Header + Tab Strip */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 3, height: 22, background: otaColor, borderRadius: 2 }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>OTA Detail · listing analytics</span>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {([
+            { key: "live",    label: "Live",     count: liveData?.total, color: T.live,    bg: T.liveL   },
+            { key: "notlive", label: "Not Live", count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
+          ] as const).map(tab => {
+            const active = propTab === tab.key;
+            return (
+              <button key={tab.key} onClick={() => setPropTab(tab.key)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
+                  borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
+                  background: active ? tab.color : "#FFFFFF", color: active ? "#FFFFFF" : T.textSec,
+                  cursor: "pointer", transition: "all 0.13s" }}>
+                {tab.label}
+                {tab.count != null && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 99, background: active ? "rgba(255,255,255,0.25)" : tab.bg, color: active ? "#FFFFFF" : tab.color }}>{tab.count.toLocaleString()}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
       {error   && <div style={{ padding: "8px 14px", background: T.notLiveL, border: "1px solid #FECACA", borderRadius: 8, fontSize: 11, color: T.notLive, marginBottom: 14 }}>⚠ {error}</div>}
 
-      {dashData && (
+      {dashData && propTab === "notlive" && (
         <>
           {/* KPI Tiles — compact horizontal */}
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
@@ -679,94 +697,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               );
             })}
           </div>
-
-          {/* ── OTA Quality Metrics ── */}
-          {Object.keys(metricsAgg).length > 0 && (
-            <div style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 12, marginBottom: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(15,23,42,0.05)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Quality Metrics · {otaName}</span>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {([{ key: "agg", label: "Summary" }, { key: "props", label: "Per Property" }] as const).map(tab => (
-                    <button key={tab.key} onClick={() => setMetricsTab(tab.key)}
-                      style={{ padding: "3px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
-                        border: `1px solid ${metricsTab === tab.key ? otaColor : T.cardBdr}`,
-                        background: metricsTab === tab.key ? otaColor : "#FFFFFF",
-                        color: metricsTab === tab.key ? "#FFFFFF" : T.textSec }}>
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {metricsTab === "agg" && (
-                <div style={{ padding: "12px 14px", display: "flex", flexWrap: "wrap", gap: 16 }}>
-                  {Object.entries(metricsAgg).map(([key, vals]) => (
-                    <div key={key} style={{ minWidth: 160 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{key.replace(/_/g, " ")}</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {vals.map(v => {
-                          const isYes = ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(v.value.toLowerCase());
-                          const isNo  = ["no","false","0","inactive","not enrolled","not requested"].includes(v.value.toLowerCase());
-                          const color = isYes ? "#16A34A" : isNo ? "#DC2626" : otaColor;
-                          const bg    = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}15`;
-                          return (
-                            <div key={v.value} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 10px", borderRadius: 7, background: bg }}>
-                              <span style={{ fontSize: 11, fontWeight: 600, color }}>{v.value}</span>
-                              <span style={{ fontSize: 13, fontWeight: 800, color, minWidth: 28, textAlign: "right" }}>{v.count}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {metricsTab === "props" && (() => {
-                const keys = Object.keys(metricsAgg);
-                return (
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-                      <thead>
-                        <tr style={{ background: T.headerBg }}>
-                          {["ID", "Property", "City", ...keys.map(k => k.replace(/_/g, " ")), "Open"].map((h, i) => (
-                            <th key={h} style={{ padding: "6px 12px", fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.07em", textAlign: i <= 2 ? "left" : "center", borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`, whiteSpace: "nowrap", background: T.headerBg }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {metricsProps.map((p, i) => (
-                          <tr key={p.propertyId} style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
-                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: otaColor }}>{p.propertyId}</td>
-                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.name}>{p.name}</td>
-                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, textAlign: "center" }}>{p.city || "—"}</td>
-                            {keys.map(k => {
-                              const val = p.metrics[k];
-                              const isYes = val && ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(val.toLowerCase());
-                              const isNo  = val && ["no","false","0","inactive","not enrolled","not requested"].includes(val.toLowerCase());
-                              const color = !val ? T.textMut : isYes ? "#16A34A" : isNo ? "#DC2626" : T.textSec;
-                              const bg    = !val ? "transparent" : isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}12`;
-                              return (
-                                <td key={k} style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                                  {val ? <span style={{ fontSize: 10, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 5 }}>{val}</span> : <span style={{ color: T.textMut }}>—</span>}
-                                </td>
-                              );
-                            })}
-                            <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                              <a href={`/crm/${p.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
-                            </td>
-                          </tr>
-                        ))}
-                        {metricsProps.length === 0 && (
-                          <tr><td colSpan={keys.length + 4} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No metric data entered yet</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
 
           {/* Status × Sub-status */}
           {(() => {
@@ -940,68 +870,157 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         </>
       )}
 
-      {/* Property Section with Tab Strip */}
+      {/* Live tab: TAT + month table + quality metrics + live properties */}
+      {dashData && propTab === "live" && (
+        <>
+          {/* TAT KPI chips */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            {TAT_CHIPS.map(chip => (
+              <div key={chip.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: chip.bg, border: `1px solid ${chip.color}30` }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: chip.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>{chip.label}</span>
+                <span style={{ fontSize: 15, fontWeight: 900, color: chip.color }}>{String(chip.value)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Month-wise table */}
+          {mergedMonthData.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <MergedMonthTable title={`Month-wise · ${otaName}`} rows={mergedMonthData} onMonthClick={goToMonth} />
+            </div>
+          )}
+
+          {/* Quality Metrics (live tab) */}
+          {Object.keys(metricsAgg).length > 0 && (
+            <div style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 12, marginBottom: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(15,23,42,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Quality Metrics · {otaName}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {([{ key: "agg", label: "Summary" }, { key: "props", label: "Per Property" }] as const).map(tab => (
+                    <button key={tab.key} onClick={() => setMetricsTab(tab.key)}
+                      style={{ padding: "3px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
+                        border: `1px solid ${metricsTab === tab.key ? otaColor : T.cardBdr}`,
+                        background: metricsTab === tab.key ? otaColor : "#FFFFFF",
+                        color: metricsTab === tab.key ? "#FFFFFF" : T.textSec }}>
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {metricsTab === "agg" && (
+                <div style={{ padding: "12px 14px", display: "flex", flexWrap: "wrap", gap: 16 }}>
+                  {Object.entries(metricsAgg).map(([key, vals]) => (
+                    <div key={key} style={{ minWidth: 160 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{key.replace(/_/g, " ")}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {vals.map(v => {
+                          const isYes = ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(v.value.toLowerCase());
+                          const isNo  = ["no","false","0","inactive","not enrolled","not requested"].includes(v.value.toLowerCase());
+                          const color = isYes ? "#16A34A" : isNo ? "#DC2626" : otaColor;
+                          const bg    = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}15`;
+                          return (
+                            <div key={v.value} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 10px", borderRadius: 7, background: bg }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color }}>{v.value}</span>
+                              <span style={{ fontSize: 13, fontWeight: 800, color, minWidth: 28, textAlign: "right" }}>{v.count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {metricsTab === "props" && (() => {
+                const keys = Object.keys(metricsAgg);
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                      <thead>
+                        <tr style={{ background: T.headerBg }}>
+                          {["ID", "Property", "City", ...keys.map(k => k.replace(/_/g, " ")), "Open"].map((h, i) => (
+                            <th key={h} style={{ padding: "6px 12px", fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.07em", textAlign: i <= 2 ? "left" : "center", borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`, whiteSpace: "nowrap", background: T.headerBg }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {metricsProps.map((p, i) => (
+                          <tr key={p.propertyId} style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: otaColor }}>{p.propertyId}</td>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.name}>{p.name}</td>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, textAlign: "center" }}>{p.city || "—"}</td>
+                            {keys.map(k => {
+                              const val = p.metrics[k];
+                              const isYes = val && ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(val.toLowerCase());
+                              const isNo  = val && ["no","false","0","inactive","not enrolled","not requested"].includes(val.toLowerCase());
+                              const color = !val ? T.textMut : isYes ? "#16A34A" : isNo ? "#DC2626" : T.textSec;
+                              const bg    = !val ? "transparent" : isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}12`;
+                              return (
+                                <td key={k} style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                                  {val ? <span style={{ fontSize: 10, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 5 }}>{val}</span> : <span style={{ color: T.textMut }}>—</span>}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                              <a href={`/crm/${p.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                            </td>
+                          </tr>
+                        ))}
+                        {metricsProps.length === 0 && (
+                          <tr><td colSpan={keys.length + 4} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No metric data entered yet</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Properties Card */}
       <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 16px rgba(15,23,42,0.06)" }}>
 
-        {/* Tab strip */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, flexWrap: "wrap", gap: 8 }}>
-          <div style={{ display: "flex", gap: 6 }}>
+        {/* Filter bar — Not Live */}
+        {propTab === "notlive" && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, flexWrap: "wrap", gap: 8 }}>
             {([
-              { key: "notlive", label: "Not Live", count: nlData?.total, color: T.notLive, bg: T.notLiveL },
-              { key: "live",    label: "Live",     count: liveData?.total, color: T.live,    bg: T.liveL   },
-            ] as const).map(tab => {
-              const active = propTab === tab.key;
-              return (
-                <button key={tab.key} onClick={() => setPropTab(tab.key)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 14px", fontSize: 11, fontWeight: 700,
-                    borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
-                    background: active ? tab.color : "#FFFFFF", color: active ? "#FFFFFF" : T.textSec,
-                    cursor: "pointer", transition: "all 0.13s" }}>
-                  {tab.label}
-                  {tab.count != null && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 99, background: active ? "rgba(255,255,255,0.25)" : tab.bg, color: active ? "#FFFFFF" : tab.color }}>{tab.count.toLocaleString()}</span>}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {propTab === "notlive" ? (
-              <>
-                {([
-                  { val: "",             label: "All" },
-                  { val: "inProcess",    label: "In Process" },
-                  { val: "tatExhausted", label: "TAT Exhausted" },
-                ] as const).map(btn => (
-                  <button key={btn.val} onClick={() => { setNlCat(btn.val); loadNl(1, nlSearch, btn.val, nlSss); }}
-                    style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
-                      border: `1px solid ${nlCategory === btn.val ? T.orange : T.cardBdr}`,
-                      background: nlCategory === btn.val ? T.orangeL : "#FFFFFF",
-                      color: nlCategory === btn.val ? T.orange : T.textSec }}>
-                    {btn.label}
-                  </button>
-                ))}
-                <div style={{ position: "relative" }}>
-                  <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
-                    placeholder="Search…"
-                    style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
-                </div>
-                {ssOptions.length > 0 && (
-                  <CheckboxDropdown label="Sub-Status" options={ssOptions} selected={nlSss}
-                    onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
-                )}
-                {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth) && (
-                  <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); loadNl(1, "", "", [], ""); }}
-                    style={{ padding: "4px 10px", fontSize: 10, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
-                    Clear
-                  </button>
-                )}
-              </>
-            ) : (
-              <input value={liveSearch} onChange={e => { setLiveSearch(e.target.value); loadLive(1, e.target.value); }}
-                placeholder="Search…"
-                style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
+              { val: "",             label: "All" },
+              { val: "inProcess",    label: "In Process" },
+              { val: "tatExhausted", label: "TAT Exhausted" },
+            ] as const).map(btn => (
+              <button key={btn.val} onClick={() => { setNlCat(btn.val); loadNl(1, nlSearch, btn.val, nlSss); }}
+                style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
+                  border: `1px solid ${nlCategory === btn.val ? T.orange : T.cardBdr}`,
+                  background: nlCategory === btn.val ? T.orangeL : "#FFFFFF",
+                  color: nlCategory === btn.val ? T.orange : T.textSec }}>
+                {btn.label}
+              </button>
+            ))}
+            <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
+              placeholder="Search…"
+              style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
+            {ssOptions.length > 0 && (
+              <CheckboxDropdown label="Sub-Status" options={ssOptions} selected={nlSss}
+                onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
+            )}
+            {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth) && (
+              <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); loadNl(1, "", "", [], ""); }}
+                style={{ padding: "4px 10px", fontSize: 10, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
+                Clear
+              </button>
             )}
           </div>
-        </div>
+        )}
+
+        {/* Filter bar — Live */}
+        {propTab === "live" && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, gap: 8 }}>
+            <input value={liveSearch} onChange={e => { setLiveSearch(e.target.value); loadLive(1, e.target.value); }}
+              placeholder="Search…"
+              style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
+          </div>
+        )}
 
         {/* Not Live table */}
         {propTab === "notlive" && (
@@ -1078,27 +1097,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           </div>
         )}
 
-        {/* Live tab — TAT + month table + live properties */}
+        {/* Live properties table */}
         {propTab === "live" && (
           <div>
-            {/* TAT KPI chips */}
-            <div style={{ display: "flex", gap: 8, padding: "12px 16px", flexWrap: "wrap", borderBottom: `1px solid ${T.cardBdr}`, background: "#FAFCFF" }}>
-              {TAT_CHIPS.map(chip => (
-                <div key={chip.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: chip.bg, border: `1px solid ${chip.color}30` }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: chip.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>{chip.label}</span>
-                  <span style={{ fontSize: 15, fontWeight: 900, color: chip.color }}>{String(chip.value)}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Month-wise TAT table */}
-            {mergedMonthData.length > 0 && (
-              <div style={{ padding: "12px 16px", borderBottom: `1px solid ${T.cardBdr}` }}>
-                <MergedMonthTable title={`Month-wise · ${otaName}`} rows={mergedMonthData} onMonthClick={goToMonth} />
-              </div>
-            )}
-
-            {/* Live properties table */}
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
                 <thead>

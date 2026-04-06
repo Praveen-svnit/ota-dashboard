@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
       conditions = ["p.fh_status IN ('Live','SoldOut')"];
     } else {
       conditions = ["(LOWER(o.sub_status) != 'live' OR o.sub_status IS NULL)", "LOWER(COALESCE(o.sub_status,'')) != 'exception'", "p.fh_status IN ('Live','SoldOut')"];
-      if (category === "inProcess")    conditions.push("o.tat <= 15");
-      if (category === "tatExhausted") conditions.push("o.tat > 15");
+      if (category === "inProcess")    conditions.push("COALESCE(o.tat, CASE WHEN p.fh_live_date IS NOT NULL THEN CURRENT_DATE - p.fh_live_date::date ELSE 0 END) <= 15");
+      if (category === "tatExhausted") conditions.push("COALESCE(o.tat, CASE WHEN p.fh_live_date IS NOT NULL THEN CURRENT_DATE - p.fh_live_date::date ELSE 0 END) > 15");
     }
 
     const params: unknown[] = [];
@@ -94,12 +94,12 @@ export async function GET(req: NextRequest) {
              o.status,
              o.sub_status AS "subStatus",
              o.live_date AS "liveDate",
-             o.tat,
+             COALESCE(o.tat, CASE WHEN p.fh_live_date IS NOT NULL THEN CURRENT_DATE - p.fh_live_date::date ELSE NULL END) AS tat,
              o.tat_error AS "tatError"
       FROM ota_listing o
       JOIN inventory p ON p.property_id = o.property_id
       ${where}
-      ORDER BY o.tat DESC, p.property_name, o.ota
+      ORDER BY COALESCE(o.tat, CASE WHEN p.fh_live_date IS NOT NULL THEN CURRENT_DATE - p.fh_live_date::date ELSE 0 END) DESC, p.property_name, o.ota
       LIMIT ${size} OFFSET ${offset}
     `;
 

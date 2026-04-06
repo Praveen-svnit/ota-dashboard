@@ -91,12 +91,12 @@ export async function GET() {
           SUM(CASE
             WHEN LOWER(COALESCE(ol.sub_status,'')) NOT IN ('live','exception')
              AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
-             AND COALESCE(ol.tat, 0) <= ${TAT_THRESHOLD}
+             AND COALESCE(ol.tat, CASE WHEN inv.fh_live_date IS NOT NULL THEN CURRENT_DATE - inv.fh_live_date::date ELSE 0 END) <= ${TAT_THRESHOLD}
             THEN 1 ELSE 0 END) AS "inProcess",
           SUM(CASE
             WHEN LOWER(COALESCE(ol.sub_status,'')) NOT IN ('live','exception')
              AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
-             AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD}
+             AND COALESCE(ol.tat, CASE WHEN inv.fh_live_date IS NOT NULL THEN CURRENT_DATE - inv.fh_live_date::date ELSE 0 END) > ${TAT_THRESHOLD}
             THEN 1 ELSE 0 END) AS "tatExhausted"
         FROM ota_listing ol
         JOIN inventory inv ON inv.property_id = ol.property_id
@@ -112,18 +112,20 @@ export async function GET() {
           AND inv.fh_status IN ('Live','SoldOut')
         WHERE LOWER(COALESCE(ol.sub_status,'')) NOT IN ('live','exception')
           AND LOWER(COALESCE(ol.status,'')) != 'ready to go live'
-          AND COALESCE(ol.tat, 0) > ${TAT_THRESHOLD}
+          AND COALESCE(ol.tat, CASE WHEN inv.fh_live_date IS NOT NULL THEN CURRENT_DATE - inv.fh_live_date::date ELSE 0 END) > ${TAT_THRESHOLD}
         GROUP BY ol.ota, ol.sub_status
       ` as Promise<Array<{ ota: string; subStatus: string | null; n: number }>>,
 
       sql`
         SELECT ol.ota,
-          ROUND(AVG(ol.tat)) AS "avgTat",
-          SUM(CASE WHEN ol.tat <= 7  THEN 1 ELSE 0 END) AS "d0_7",
-          SUM(CASE WHEN ol.tat > 7  AND ol.tat <= 15 THEN 1 ELSE 0 END) AS "d8_15",
-          SUM(CASE WHEN ol.tat > 15 AND ol.tat <= 30 THEN 1 ELSE 0 END) AS "d16_30",
-          SUM(CASE WHEN ol.tat > 30 AND ol.tat <= 60 THEN 1 ELSE 0 END) AS "d31_60",
-          SUM(CASE WHEN ol.tat > 60 THEN 1 ELSE 0 END) AS "d60p"
+          ROUND(AVG(COALESCE(ol.tat,
+            CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL
+            THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END))) AS "avgTat",
+          SUM(CASE WHEN COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) <= 7  THEN 1 ELSE 0 END) AS "d0_7",
+          SUM(CASE WHEN COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) > 7  AND COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) <= 15 THEN 1 ELSE 0 END) AS "d8_15",
+          SUM(CASE WHEN COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) > 15 AND COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) <= 30 THEN 1 ELSE 0 END) AS "d16_30",
+          SUM(CASE WHEN COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) > 30 AND COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) <= 60 THEN 1 ELSE 0 END) AS "d31_60",
+          SUM(CASE WHEN COALESCE(ol.tat, CASE WHEN ol.live_date IS NOT NULL AND inv.fh_live_date IS NOT NULL THEN ol.live_date::date - inv.fh_live_date::date ELSE NULL END) > 60 THEN 1 ELSE 0 END) AS "d60p"
         FROM ota_listing ol
         JOIN inventory inv ON inv.property_id = ol.property_id
           AND inv.fh_status IN ('Live','SoldOut')

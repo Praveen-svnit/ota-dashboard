@@ -13,12 +13,15 @@ export async function GET() {
         p.fh_live_date  AS "fhLiveDate",
         ol.live_date    AS "liveDate",
         ol.ota          AS ota,
-        ol.tat          AS tat
+        COALESCE(ol.tat,
+          CASE WHEN ol.live_date IS NOT NULL AND p.fh_live_date IS NOT NULL
+          THEN ol.live_date::date - p.fh_live_date::date ELSE 0 END
+        ) AS tat
       FROM ota_listing ol
       JOIN inventory p ON p.property_id = ol.property_id
       WHERE p.fh_status = 'Live'
         AND LOWER(COALESCE(ol.sub_status, '')) = 'live'
-      ORDER BY ol.tat DESC
+      ORDER BY tat DESC
     ` as Array<{
       fhId: string; name: string; city: string;
       fhLiveDate: string | null; liveDate: string | null; ota: string; tat: number;
@@ -30,7 +33,10 @@ export async function GET() {
         p.property_id  AS "fhId",
         p.fh_live_date AS "fhLiveDate",
         ol.ota         AS ota,
-        ol.tat         AS tat
+        COALESCE(ol.tat,
+          CASE WHEN p.fh_live_date IS NOT NULL
+          THEN CURRENT_DATE - p.fh_live_date::date ELSE 0 END
+        ) AS tat
       FROM ota_listing ol
       JOIN inventory p ON p.property_id = ol.property_id
       WHERE p.fh_status = 'Live'
