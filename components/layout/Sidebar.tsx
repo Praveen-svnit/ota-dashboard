@@ -108,30 +108,42 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* Dashboards */}
         <SectionHeader label="Dashboards" />
-        <NavLink icon="📊" label="Production Dashboard" href="/" />
-        <NavLink icon="🏠" label="Listing Dashboard"    href="/listing-dashboard" />
+        {sessionUser?.role !== "intern" && <NavLink icon="📊" label="Production Dashboard" href="/" />}
+        <NavLink icon="🏠" label="Listing Dashboard" href="/listing-dashboard" />
 
         {/* CRM */}
         <SectionHeader label="CRM" />
-        <NavLink icon="🏢" label="Property CRM"   href="/crm" />
-        <NavLink icon="📋" label="Property Status" href="/listings" />
-        <NavLink icon="✅" label="Tasks"          href="/tasks" />
+        <NavLink icon="🏢" label="Property CRM" href="/crm" />
+        {sessionUser?.role !== "intern" && <NavLink icon="📋" label="Property Status" href="/listings" />}
+        {sessionUser?.role !== "intern" && <NavLink icon="✅" label="Tasks"           href="/tasks" />}
 
-        {/* Team */}
-        <SectionHeader label="Team & Workflow" />
-        <NavLink icon="👥" label="Team"           href="/team" />
-        <NavLink icon="📈" label="Team Performance" href="/performance" />
+        {/* Team — hidden for interns */}
+        {sessionUser?.role !== "intern" && (
+          <>
+            <SectionHeader label="Team & Workflow" />
+            <NavLink icon="👥" label="Team"             href="/team" />
+            <NavLink icon="📈" label="Team Performance" href="/performance" />
+          </>
+        )}
 
-        {/* Reports */}
-        <SectionHeader label="BDC Reports" />
-        <NavLink icon="📅" label="Today's Tasks"  href="/todays-assigned-tasks" />
-        <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
-        <NavLink icon="⭐" label="BDC Genius"      href="/reports/genius" />
-        <NavLink icon="🔍" label="BDC Hygiene"     href="/reports/hygiene" />
+        {/* Reports — hidden for interns */}
+        {sessionUser?.role !== "intern" && (
+          <>
+            <SectionHeader label="BDC Reports" />
+            <NavLink icon="📅" label="Today's Tasks"   href="/todays-assigned-tasks" />
+            <NavLink icon="⚠️" label="Incomplete Data"  href="/incomplete" />
+            <NavLink icon="⭐" label="BDC Genius"       href="/reports/genius" />
+            <NavLink icon="🔍" label="BDC Hygiene"      href="/reports/hygiene" />
+          </>
+        )}
 
-        {/* Admin */}
-        <SectionHeader label="Admin" />
-        <NavLink icon="🔄" label="Migration"      href="/admin/migration" />
+        {/* Admin — hidden for interns */}
+        {sessionUser?.role !== "intern" && (
+          <>
+            <SectionHeader label="Admin" />
+            <NavLink icon="🔄" label="Migration" href="/admin/migration" />
+          </>
+        )}
       </nav>
 
       {/* Footer */}

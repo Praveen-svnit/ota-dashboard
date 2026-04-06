@@ -114,7 +114,10 @@ function KpiTile({ label, value, color, bg, border }: { label: string; value: nu
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
+interface SessionUser { role: string; ota: string | null; }
+
 export default function CrmPage() {
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [rows,    setRows]    = useState<Row[]>([]);
   const [total,   setTotal]   = useState(0);
   const [page,    setPage]    = useState(1);
@@ -147,7 +150,15 @@ export default function CrmPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  useEffect(() => { fetch("/api/crm/summary").then(r => r.json()).then(setSummary); }, []);
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.user) {
+        setSessionUser(d.user);
+        if (d.user.role === "intern" && d.user.ota) setOtaFilter(d.user.ota);
+      }
+    });
+    fetch("/api/crm/summary").then(r => r.json()).then(setSummary);
+  }, []);
 
   useEffect(() => {
     const q = breakdownOtas.length > 0 ? `?otas=${encodeURIComponent(breakdownOtas.join(","))}` : "";
@@ -222,8 +233,12 @@ export default function CrmPage() {
     !!fhDateFrom || !!fhDateTo, !!otaDateFrom || !!otaDateTo,
   ].filter(Boolean).length;
 
+  const isIntern = sessionUser?.role === "intern";
+
   function clearFilters() {
-    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter(["Live", "SoldOut"]);
+    // Interns keep their OTA filter locked
+    if (!isIntern) setOtaFilter("all");
+    setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter(["Live", "SoldOut"]);
     setFhDateFrom(""); setFhDateTo(""); setOtaDateFrom(""); setOtaDateTo("");
     setSearch("");
   }
@@ -359,19 +374,21 @@ export default function CrmPage() {
             })}
           </div>
 
-          {/* OTA filter */}
-          <FilterSection label="OTA" count={otaFilter !== "all" ? 1 : 0}>
-            <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
-              disabled={!!summary?.userOta}
-              style={{ width: "100%", padding: "6px 8px", border: "1px solid #E2E8F0",
-                borderRadius: 6, fontSize: 11, background: "#F8FAFC", color: "#374151",
-                outline: "none" }}>
-              <option value="all">All OTAs</option>
-              {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-          </FilterSection>
+          {/* OTA filter — hidden for interns (locked to their OTA) */}
+          {sessionUser?.role !== "intern" && (
+            <FilterSection label="OTA" count={otaFilter !== "all" ? 1 : 0}>
+              <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
+                disabled={!!summary?.userOta}
+                style={{ width: "100%", padding: "6px 8px", border: "1px solid #E2E8F0",
+                  borderRadius: 6, fontSize: 11, background: "#F8FAFC", color: "#374151",
+                  outline: "none" }}>
+                <option value="all">All OTAs</option>
+                {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </FilterSection>
+          )}
 
           {/* FH Status filter */}
           <FilterSection label="FH Status" count={fhStatusFilter.length}>

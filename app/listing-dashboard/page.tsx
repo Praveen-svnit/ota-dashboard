@@ -98,8 +98,11 @@ interface CatRow { ota: string; live: number; exception: number; readyToGoLive: 
 interface TatStat { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: Stats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; }
 
+interface SessionUser { role: string; ota: string | null; }
+
 export default function ListingDashboardPage() {
   const router = useRouter();
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [selectedOta, setSelectedOta] = useState<string>("Overview");
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -168,7 +171,17 @@ export default function ListingDashboardPage() {
   }
 
 
-  useEffect(() => { load(); loadNl(); }, []);
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.user) {
+        setSessionUser(d.user);
+        // Interns default to their assigned OTA
+        if (d.user.role === "intern" && d.user.ota) setSelectedOta(d.user.ota);
+      }
+    });
+    load();
+    loadNl();
+  }, []);
 
   return (
     <div style={{ padding: "22px 24px", background: "linear-gradient(180deg, #F7FAFD 0%, #EEF4FA 100%)", minHeight: "100vh" }}>
@@ -188,7 +201,10 @@ export default function ListingDashboardPage() {
         </div>
         {/* OTA tab strip */}
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {["Overview", ...OTA_LIST_ORDER].map(name => {
+          {["Overview", ...OTA_LIST_ORDER].filter(name => {
+            if (sessionUser?.role === "intern" && sessionUser.ota) return name === sessionUser.ota;
+            return true;
+          }).map(name => {
             const active = selectedOta === name;
             const color  = OTA_COLORS[name] ?? T.orange;
             return (
