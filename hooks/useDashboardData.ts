@@ -73,8 +73,7 @@ export function useDashboardData() {
     }
   }, []);
 
-  // Auto-fetch on mount (page load)
-  useEffect(() => { refresh(); }, [refresh]);
+  // No auto-fetch — user clicks Fetch button to load stay_rns/sold_rns data
 
   return { data, isLoading, lastRefreshed, refresh };
 }
