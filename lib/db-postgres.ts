@@ -130,7 +130,7 @@ export async function initPostgresSchema() {
   if (Number(rows[0].n) === 0) {
     await sql`
       INSERT INTO users (id, username, password_hash, name, role, created_at)
-      VALUES ('user_admin_1', 'admin', '$2b$10$/xPJxWaZgPZ0SKyRLUSQ/OhQbKmp.7BltjTR4i3D7y0Hy4VwapTky', 'Admin', 'admin', NOW())
+      VALUES ('user_admin_1', 'Admin', '$2b$10$AHZlj64k3tp37a3JEX0HQ.cAcrhCCJnjRsnbfzfgFRJp0mawvzvey', 'Admin', 'admin', NOW())
     `;
   }
 
