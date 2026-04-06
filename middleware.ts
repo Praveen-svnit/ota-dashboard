@@ -8,9 +8,6 @@ const COOKIE_NAME = "ota_session";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/sync-inventory", "/api/sync-rns", "/api/init-db"];
 
-// Pages interns are allowed to visit
-const INTERN_ALLOWED = ["/listing-dashboard", "/crm"];
-
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -27,17 +24,7 @@ export async function middleware(req: NextRequest) {
   if (!token) return NextResponse.redirect(new URL("/login", req.url));
 
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    const role = (payload as { role?: string }).role;
-
-    // Interns can only access listing-dashboard and crm pages
-    if (role === "intern" && !pathname.startsWith("/api")) {
-      const allowed = INTERN_ALLOWED.some(p => pathname === p || pathname.startsWith(p + "/"));
-      if (!allowed) {
-        return NextResponse.redirect(new URL("/listing-dashboard", req.url));
-      }
-    }
-
+    await jwtVerify(token, SECRET);
     return NextResponse.next();
   } catch {
     return NextResponse.redirect(new URL("/login", req.url));
