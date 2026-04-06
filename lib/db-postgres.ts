@@ -1,24 +1,39 @@
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
-let _sql: ReturnType<typeof neon> | null = null;
+let _pool: Pool | null = null;
 
-export function getSql() {
+type SqlFn = {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<Record<string, unknown>[]>;
+  query(text: string, params?: unknown[]): Promise<Record<string, unknown>[]>;
+};
+
+let _sql: SqlFn | null = null;
+
+export function getSql(): SqlFn {
   if (!_sql) {
     const raw = process.env.DATABASE_URL;
     if (!raw) throw new Error("DATABASE_URL not set");
 
-    // neon() requires postgresql:// — Railway often provides postgres://
-    // Also strip unsupported options (channel_binding) and trim whitespace
-    let url = raw.trim().replace(/^postgres:\/\//, "postgresql://");
+    _pool = new Pool({
+      connectionString: raw,
+      ssl: false,
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
 
-    // Remove channel_binding param — not supported by neon HTTP client
-    try {
-      const u = new URL(url);
-      u.searchParams.delete("channel_binding");
-      url = u.toString();
-    } catch { /* keep url as-is if URL parse fails */ }
+    const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.reduce((acc, str, i) =>
+        acc + str + (i < values.length ? `$${i + 1}` : ""), "");
+      const res = await _pool!.query(text, values);
+      return res.rows as Record<string, unknown>[];
+    };
 
-    _sql = neon(url);
+    sql.query = async (text: string, params: unknown[] = []) => {
+      const res = await _pool!.query(text, params);
+      return res.rows as Record<string, unknown>[];
+    };
+
+    _sql = sql;
   }
   return _sql;
 }
