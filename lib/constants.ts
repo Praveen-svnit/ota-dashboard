@@ -79,6 +79,6 @@ export const TEAM_COLORS = ["#6366F1", "#E83F6F", "#F59E0B", "#10B981", "#8B5CF6
 // Sync-tool sheet IDs (used by admin sync routes only, not data-serving routes)
 export const SHEET_ID     = "1VkFA4keBAT3tG5NkZwmSNRbLZJgx2neOhZ7Zuj2z_98";
 export const INV_SHEET_ID  = "1VkFA4keBAT3tG5NkZwmSNRbLZJgx2neOhZ7Zuj2z_98";
-export const INV_SHEET_TAB = "inventory";
+export const INV_SHEET_TAB = "Inventory";
 export const RNS_RAW_SHEET_ID  = "1xI0TjmZkmKwD27nNIhah7iaQtbpAmX5tfJYckbw2Jio";
 export const RNS_RAW_TAB       = "Raw_Data_New";
