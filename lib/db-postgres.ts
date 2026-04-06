@@ -19,6 +19,7 @@ export function getSql(): SqlFn {
       ssl: false,
       max: 10,
       idleTimeoutMillis: 30000,
+      options: '-c search_path=public',
     });
 
     const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
