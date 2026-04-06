@@ -13,7 +13,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/login") return <>{children}</>;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#F8FAFC" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#F2F6FA" }}>
       <Sidebar lastRefreshed={lastRefreshed} />
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
         <GlobalDashboardTaskShell />

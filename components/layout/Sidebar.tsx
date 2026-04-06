@@ -36,13 +36,13 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           display: "flex", alignItems: "center", gap: 8,
           padding: collapsed ? "9px 0" : indent ? "7px 10px 7px 22px" : "8px 10px",
           borderRadius: 7, marginBottom: 1,
-          background: active ? "#EFF6FF" : "transparent",
-          color: active ? "#2563EB" : indent ? "#9CA3AF" : "#64748B",
+          background: active ? "#5D87FF" : "transparent",
+          color: active ? "#FFFFFF" : indent ? "#9CA3AF" : "#64748B",
           textDecoration: "none", fontSize: indent ? 11 : 12,
           fontWeight: active ? 600 : 400,
           justifyContent: collapsed ? "center" : "flex-start",
           transition: "background 0.12s, color 0.12s",
-          borderLeft: active && !collapsed ? "3px solid #2563EB" : "3px solid transparent",
+          borderLeft: "none",
         }}
       >
         <span style={{ fontSize: indent ? 12 : 14, flexShrink: 0 }}>{icon}</span>
@@ -55,7 +55,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     if (collapsed) return <div style={{ height: 1, background: "#F1F5F9", margin: "8px 4px" }} />;
     return (
       <div style={{
-        fontSize: 9, fontWeight: 700, color: "#B0BAC9",
+        fontSize: 9, fontWeight: 700, color: "#A0AEC0",
         letterSpacing: "0.1em", textTransform: "uppercase",
         padding: "12px 8px 4px",
       }}>
@@ -149,9 +149,9 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {sessionUser && !collapsed && (
           <div style={{ paddingTop: 8, borderTop: "1px solid #F1F5F9",
             display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EFF6FF",
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EEF2FF",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 800, color: "#2563EB", flexShrink: 0 }}>
+              fontSize: 11, fontWeight: 800, color: "#5D87FF", flexShrink: 0 }}>
               {sessionUser.name[0].toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>

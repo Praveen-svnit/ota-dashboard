@@ -349,24 +349,24 @@ export default function ListingDashboardPage() {
                 { key: "tatExhausted", label: "TAT Exhausted", color: "#B42318", bg: "#FFF4F2", accent: "#F97066" },
               ] as const;
               const TABLE_THEME = {
-                shellBg: "linear-gradient(180deg, #0B1220 0%, #101828 100%)",
-                shellBorder: "rgba(148, 163, 184, 0.25)",
-                headerBg: "rgba(15, 118, 110, 0.08)",
-                headerBorder: "rgba(15, 118, 110, 0.25)",
-                title: "#E2E8F0",
-                subtitle: "#94A3B8",
-                badgeBg: "rgba(59, 130, 246, 0.14)",
-                badgeText: "#60A5FA",
-                sectionBg: "#0F172A",
-                sectionBorder: "rgba(148, 163, 184, 0.2)",
-                stickyBg: "#0F172A",
-                stickyMutedBg: "#111827",
-                gridSoft: "rgba(148, 163, 184, 0.25)",
-                totalRowBg: "#0A1120",
-                totalCellBg: "#0F172A",
-                totalText: "#38BDF8",
-                mutedText: "#94A3B8",
-                headerText: "#E2E8F0",
+                shellBg: "#FFFFFF",
+                shellBorder: "#E2E8F0",
+                headerBg: "rgba(15, 118, 110, 0.06)",
+                headerBorder: "#D1FAE5",
+                title: "#1E293B",
+                subtitle: "#64748B",
+                badgeBg: "rgba(59, 130, 246, 0.10)",
+                badgeText: "#2563EB",
+                sectionBg: "#FFFFFF",
+                sectionBorder: "#E2E8F0",
+                stickyBg: "#F8FAFC",
+                stickyMutedBg: "#F1F5F9",
+                gridSoft: "#E2E8F0",
+                totalRowBg: "#F1F5F9",
+                totalCellBg: "#F8FAFC",
+                totalText: "#0F172A",
+                mutedText: "#64748B",
+                headerText: "#1E293B",
               };
 
               const TH_STICKY: React.CSSProperties = {
@@ -393,7 +393,7 @@ export default function ListingDashboardPage() {
               };
               const INLINE_WRAP: React.CSSProperties = {
                 padding: "12px 14px",
-                background: "#0A1120",
+                background: "#F8FAFC",
                 borderTop: `1px solid ${TABLE_THEME.gridSoft}`,
                 borderBottom: `1px solid ${TABLE_THEME.gridSoft}`,
               };
