@@ -284,46 +284,21 @@ export default function ListingDashboardPage() {
         return (
           <>
           {/* ── KPI Cards ── */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-            <div style={{ ...kpi, flex: "1 1 360px", minWidth: 260 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: T.textMut }}>Live Snapshot</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: liveColor(grandPct).text }}>{grandPct.toFixed(1)}% live</span>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+            {[
+              { label: "Live",          value: data.stats.live,               accent: "#16A34A" },
+              { label: "Sold Out",      value: data.stats.soldOut,            accent: "#DC2626" },
+              { label: "Total",         value: data.stats.total,              accent: "#475569" },
+              { label: `Onboarded · ${new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}`,
+                                        value: data.stats.onboardedThisMonth, accent: "#0F766E" },
+              { label: "MTD Listings",  value: data.stats.mtdListings,        accent: "#5D87FF" },
+              { label: "Live %",        value: `${grandPct.toFixed(1)}%`,     accent: liveColor(grandPct).text, isStr: true },
+            ].map(({ label, value, accent, isStr }) => (
+              <div key={label} style={{ ...kpi, flex: "1 1 110px", minWidth: 100 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1 }}>{isStr ? value : (value as number).toLocaleString()}</div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))", gap: 12, marginTop: 10 }}>
-                {[{
-                  label: "Live",
-                  value: data.stats.live,
-                  color: T.live,
-                  bg: T.liveL,
-                }, {
-                  label: "Sold Out",
-                  value: data.stats.soldOut,
-                  color: T.notLive,
-                  bg: T.notLiveL,
-                }, {
-                  label: "Total",
-                  value: data.stats.total,
-                  color: T.textSec,
-                  bg: "#F1F5F9",
-                }].map(metric => (
-                  <div key={metric.label} style={{ padding: 8, borderRadius: 12, background: "#FFFFFF", border: "1px solid rgba(148, 163, 184, 0.3)" }}>
-                    <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em" }}>{metric.label}</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginTop: 4, fontSize: 18, fontWeight: 900, color: metric.color, background: metric.bg, padding: "4px 0", borderRadius: 8 }}>{metric.value.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ ...kpi, flex: "1 1 220px", minWidth: 220, display: "grid", gap: 10 }}>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em" }}>Onboarded · {new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}</div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: T.orange }}>{data.stats.onboardedThisMonth.toLocaleString()}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#6366F1", letterSpacing: "0.08em" }}>MTD New Listings</div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: "#6366F1" }}>{data.stats.mtdListings.toLocaleString()}</div>
-              </div>
-            </div>
+            ))}
           </div>
 
           {/* ── OTA Listing Status Table ── */}
@@ -1099,6 +1074,7 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
                 { label: "Sub Status", key: "subStatus" as SortKey },
                 { label: "OTA Live", key: "liveDate" as SortKey },
                 { label: "TAT (days)", key: "tat" as SortKey },
+                { label: "Open" },
               ].map((h, i) => {
                 const sortable = !!h.key;
                 return (
@@ -1132,7 +1108,7 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
             )}
             {!loading && sortedRows.map((row, i) => {
               const sc = getSSColor(row.subStatus ?? "");
@@ -1163,11 +1139,18 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
                       ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span>
                       : <span style={{ color: T.textMut }}>—</span>}
                   </td>
+                  <td style={{ ...NL_TD, textAlign: "center" }}>
+                    <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700,
+                      background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40",
+                      borderRadius: 6, textDecoration: "none", whiteSpace: "nowrap",
+                    }}>Open ↗</a>
+                  </td>
                 </tr>
               );
             })}
             {!loading && data?.rows.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
             )}
           </tbody>
         </table>
@@ -1239,12 +1222,12 @@ function actionBtn(bg: string, color: string, disabled: boolean): React.CSSPrope
 }
 
 const kpi: React.CSSProperties = {
-  background: "#0F172A",
-  border: "1px solid rgba(148, 163, 184, 0.35)",
-  borderRadius: 18,
-  padding: "14px 18px",
-  boxShadow: "0 20px 40px rgba(2, 6, 23, 0.45)",
-  color: "#E2E8F0",
+  background: "#FFFFFF",
+  border: `1px solid #E2E8F0`,
+  borderRadius: 12,
+  padding: "10px 14px",
+  boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+  color: "#1E293B",
 };
 
 const TH_STICKY: React.CSSProperties = {
