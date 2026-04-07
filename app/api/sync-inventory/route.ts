@@ -12,6 +12,8 @@ const COL_MAP: Record<string, string> = {
   "city":            "city",
   "fh live date":    "fh_live_date",
   "fhlivedate":      "fh_live_date",
+  "created at":      "fh_live_date",
+  "createdat":       "fh_live_date",
   "fh status":       "fh_status",
   "fhstatus":        "fh_status",
   "status":          "fh_status",

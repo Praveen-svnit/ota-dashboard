@@ -116,18 +116,22 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <NavLink icon="🏢" label="Property CRM"   href="/crm" />
         <NavLink icon="📋" label="Property Status" href="/listings" />
         <NavLink icon="✅" label="Tasks"          href="/tasks" />
+        <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
 
         {/* Team */}
         <SectionHeader label="Team & Workflow" />
         <NavLink icon="👥" label="Team"           href="/team" />
         <NavLink icon="📈" label="Team Performance" href="/performance" />
 
-        {/* Reports */}
+        {/* BDC Reports */}
         <SectionHeader label="BDC Reports" />
         <NavLink icon="📅" label="Today's Tasks"  href="/todays-assigned-tasks" />
-        <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
         <NavLink icon="⭐" label="BDC Genius"      href="/reports/genius" />
         <NavLink icon="🔍" label="BDC Hygiene"     href="/reports/hygiene" />
+
+        {/* MMT Reports */}
+        <SectionHeader label="MMT Reports" />
+        <NavLink icon="📊" label="OTA Analysis"   href="/reports/ota-analysis" />
 
         {/* Admin */}
         <SectionHeader label="Admin" />
