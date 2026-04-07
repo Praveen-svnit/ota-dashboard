@@ -131,7 +131,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* MMT Reports */}
         <SectionHeader label="MMT Reports" />
-        <NavLink icon="📊" label="OTA Analysis"   href="/reports/ota-analysis" />
+        <NavLink icon="🧼" label="MMT Hygiene"   href="/reports/mmt-hygiene" />
 
         {/* Admin */}
         <SectionHeader label="Admin" />
