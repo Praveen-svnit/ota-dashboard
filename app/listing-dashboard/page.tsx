@@ -98,6 +98,44 @@ interface CatRow { ota: string; live: number; exception: number; readyToGoLive: 
 interface TatStat { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: Stats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; }
 
+/* ── Listing Tracker constants ──────────────────────────────────────────── */
+interface LTMember { name: string; ota: string }
+interface LTTeam   { name: string; color: string; members: LTMember[] }
+const LT_TEAMS: LTTeam[] = [
+  {
+    name: "Jyoti", color: "#E83F6F",
+    members: [
+      { name: "Rudra",    ota: "GoMMT"     },
+      { name: "Mohit",    ota: "Expedia"   },
+      { name: "Karan",    ota: "Cleartrip" },
+      { name: "Abhishek", ota: "Indigo"    },
+    ],
+  },
+  {
+    name: "Gourav", color: "#F59E0B",
+    members: [
+      { name: "Aman",     ota: "Agoda"         },
+      { name: "Ajeet",    ota: "Yatra"          },
+      { name: "Shrishti", ota: "Ixigo"          },
+      { name: "Joti",     ota: "Akbar Travels"  },
+      { name: "Vipul",    ota: "EaseMyTrip"     },
+    ],
+  },
+  {
+    name: "Ajay", color: "#10B981",
+    members: [
+      { name: "Gaurav Pandey", ota: "Booking.com" },
+    ],
+  },
+];
+const LT_UNSIGNED = new Set(["Ixigo", "Akbar Travels"]);
+const LT_TH: React.CSSProperties = {
+  padding: "8px 12px", fontSize: 9, fontWeight: 700, color: "#94A3B8",
+  background: "#F8FAFC", borderBottom: "1px solid #E2E8F0",
+  whiteSpace: "nowrap", letterSpacing: "0.06em", textTransform: "uppercase",
+};
+const LT_TD: React.CSSProperties = { padding: "7px 12px", whiteSpace: "nowrap", verticalAlign: "middle" };
+
 export default function ListingDashboardPage() {
   const router = useRouter();
   const [selectedOta, setSelectedOta] = useState<string>("Overview");
@@ -106,6 +144,12 @@ export default function ListingDashboardPage() {
   const [loading, setLoading]         = useState(true);
   const [liveExpanded, setLiveExpanded] = useState(false);
   const [tatExpanded, setTatExpanded]   = useState(false);
+  // ── Listing Tracker state ──
+  const [ltView,   setLtView]   = useState<"mom" | "dod">("mom");
+  const [ltL12m,   setLtL12m]   = useState<{ months: string[]; byOta: Record<string, number[]> }>({ months: [], byOta: {} });
+  const [ltDod,    setLtDod]    = useState<{ labels: string[]; byOta: Record<string, number[]> }>({ labels: [], byOta: {} });
+  const [ltRtgl,   setLtRtgl]   = useState<Record<string, number>>({});
+  const [ltLoading, setLtLoading] = useState(true);
   type PopupInfo = { type: "live" } | { type: "ota"; ota: string } | { type: "tatExhausted" };
   const [popup,    setPopup]    = useState<PopupInfo | null>(null);
   const [popupPos, setPopupPos] = useState({ x: 240, y: 160 });
@@ -169,6 +213,21 @@ export default function ListingDashboardPage() {
 
 
   useEffect(() => { load(); loadNl(); }, []);
+
+  useEffect(() => {
+    let done = 0;
+    const tryFinish = () => { if (++done === 2) setLtLoading(false); };
+    fetch("/api/dashboard-data")
+      .then(r => r.json())
+      .then(d => { if (d.l12mOtaLive && d.l12mMonths) setLtL12m({ months: d.l12mMonths, byOta: d.l12mOtaLive }); })
+      .catch(console.error)
+      .finally(tryFinish);
+    fetch("/api/perf-data")
+      .then(r => r.json())
+      .then(p => { if (p.rtglCounts) setLtRtgl(p.rtglCounts); if (p.dod) setLtDod(p.dod); })
+      .catch(console.error)
+      .finally(tryFinish);
+  }, []);
 
   return (
     <div style={{ padding: "22px 24px", background: "linear-gradient(180deg, #F7FAFD 0%, #EEF4FA 100%)", minHeight: "100vh" }}>
@@ -353,7 +412,6 @@ export default function ListingDashboardPage() {
                     <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 6px rgba(16, 185, 129, 0.22)" }} />
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.02em" }}>OTA Listing Status</div>
-                      <div style={{ fontSize: 11, color: TABLE_THEME.subtitle, letterSpacing: "0.08em" }}>Category health across OTAs</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -577,6 +635,201 @@ export default function ListingDashboardPage() {
               );
             })()}
 
+            {/* ── Listing Tracker (MoM / DoD) ─────────────────────────────────── */}
+            <div style={{ background: "#FFF", border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", marginBottom: 20 }}>
+              <div style={{ padding: "9px 14px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#0F172A" }}>Listing Tracker</span>
+                <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 8, padding: 3, marginLeft: 4 }}>
+                  {(["mom", "dod"] as const).map((v) => {
+                    const active = ltView === v;
+                    return (
+                      <button key={v} onClick={() => setLtView(v)} style={{
+                        padding: "4px 12px", fontSize: 10, fontWeight: 700, borderRadius: 6,
+                        border: "none", cursor: "pointer",
+                        background: active ? "#FFFFFF" : "transparent",
+                        color: active ? "#0F172A" : "#94A3B8",
+                        boxShadow: active ? "0 1px 3px rgba(15,23,42,0.10)" : "none",
+                        transition: "all 0.12s",
+                      }}>
+                        {v === "mom" ? "L12M" : "L15D"}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span style={{ fontSize: 9, color: "#94A3B8" }}>
+                  {ltView === "mom"
+                    ? `OTA listings month-wise · ${ltL12m.months[ltL12m.months.length - 1] ?? ""} = current (partial)`
+                    : "Daily listings · from OTA live-date columns"}
+                </span>
+              </div>
+
+              {ltView === "mom" && ltL12m.months.length > 0 && (() => {
+                const revMonths  = [...ltL12m.months].reverse();
+                const colTotals  = revMonths.map((_, mi) => {
+                  const origIdx = ltL12m.months.length - 1 - mi;
+                  return LT_TEAMS.flatMap(t => t.members).reduce((s, m) => s + ((ltL12m.byOta[m.ota] ?? [])[origIdx] ?? 0), 0);
+                });
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...LT_TH, textAlign: "left", position: "sticky", left: 0, zIndex: 2, background: "#F8FAFC", minWidth: 90 }}>OTA</th>
+                          <th style={{ ...LT_TH, textAlign: "left", position: "sticky", left: 90, zIndex: 2, background: "#F8FAFC", minWidth: 90 }}>Intern</th>
+                          {revMonths.map((mo, mi) => {
+                            const isCm = mi === 0;
+                            return (
+                              <th key={mo} style={{
+                                ...LT_TH, textAlign: "center", minWidth: 48, padding: "8px 6px",
+                                background:   isCm ? "#EEF2FF" : "#F8FAFC",
+                                color:        isCm ? "#6366F1"  : "#94A3B8",
+                                borderLeft:   isCm ? "2px solid #C7D2FE" : undefined,
+                                borderRight:  isCm ? "2px solid #C7D2FE" : undefined,
+                                borderBottom: isCm ? "2px solid #6366F1" : "1px solid #E2E8F0",
+                              }}>{mo}</th>
+                            );
+                          })}
+                          <th style={{ ...LT_TH, textAlign: "center", background: "#F0FDF4", color: "#16A34A", minWidth: 52 }}>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {LT_TEAMS.flatMap((team) =>
+                          team.members.map((member, i, arr) => {
+                            const origVals = ltL12m.byOta[member.ota] ?? Array(ltL12m.months.length).fill(0);
+                            const vals     = [...origVals].reverse();
+                            const rowTotal = vals.reduce((s, v) => s + v, 0);
+                            const maxVal   = Math.max(...vals, 1);
+                            const otaColor = OTA_COLORS[member.ota] ?? "#64748B";
+                            const isLast   = i === arr.length - 1;
+                            return (
+                              <tr key={`mom-${team.name}-${member.name}`} style={{ borderBottom: isLast ? "2px solid #E2E8F0" : "1px solid #F8FAFC" }}>
+                                <td style={{ ...LT_TD, position: "sticky", left: 0, background: "#FFF", borderLeft: `3px solid ${otaColor}`, minWidth: 90 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: otaColor + "18", color: otaColor, border: `1px solid ${otaColor}35` }}>{member.ota}</span>
+                                </td>
+                                <td style={{ ...LT_TD, position: "sticky", left: 90, background: "#FFF", minWidth: 90 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    <span style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, background: team.color + "20", color: team.color, fontSize: 8, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{member.name[0]}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>{member.name}</span>
+                                  </div>
+                                </td>
+                                {vals.map((cnt, mi) => {
+                                  const isCm      = mi === 0;
+                                  const rtgl      = isCm && LT_UNSIGNED.has(member.ota) ? (ltRtgl[member.ota] ?? 0) : 0;
+                                  const intensity = cnt > 0 ? Math.round((cnt / maxVal) * 80) + 20 : 0;
+                                  const bg = cnt === 0 ? (isCm ? "#EEF2FF" : "transparent") : `${otaColor}${intensity.toString(16).padStart(2, "0")}`;
+                                  return (
+                                    <td key={mi} style={{ ...LT_TD, textAlign: "center", padding: "6px 6px", background: bg, borderLeft: isCm ? "2px solid #C7D2FE" : undefined, borderRight: isCm ? "2px solid #C7D2FE" : undefined }}>
+                                      <span style={{ fontSize: 11, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isCm ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0px 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
+                                    </td>
+                                  );
+                                })}
+                                <td style={{ ...LT_TD, textAlign: "center", background: "#F0FDF4" }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
+                          <td style={{ ...LT_TD, position: "sticky", left: 0, background: "#F8FAFC", fontWeight: 800, fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", minWidth: 90 }} colSpan={2}>Total</td>
+                          {colTotals.map((ct, mi) => {
+                            const isCm = mi === 0;
+                            return (
+                              <td key={mi} style={{ ...LT_TD, textAlign: "center", padding: "6px 6px", background: isCm ? "#EEF2FF" : "transparent", borderLeft: isCm ? "2px solid #C7D2FE" : undefined, borderRight: isCm ? "2px solid #C7D2FE" : undefined }}>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: ct > 0 ? (isCm ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : ct || "·"}</span>
+                              </td>
+                            );
+                          })}
+                          <td style={{ ...LT_TD, textAlign: "center", background: "#F0FDF4" }}>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: "#16A34A" }}>{ltLoading ? "—" : colTotals.reduce((s, v) => s + v, 0)}</span>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              })()}
+
+              {ltView === "dod" && (() => {
+                const revLabels = [...ltDod.labels].reverse();
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...LT_TH, textAlign: "left", position: "sticky", left: 0, zIndex: 2, background: "#F8FAFC", minWidth: 80 }}>TL</th>
+                          <th style={{ ...LT_TH, textAlign: "left", position: "sticky", left: 80, zIndex: 2, background: "#F8FAFC", minWidth: 90 }}>Member</th>
+                          <th style={{ ...LT_TH, textAlign: "left", minWidth: 80 }}>OTA</th>
+                          {revLabels.map((lbl, i) => {
+                            const isToday = i === 0;
+                            return (
+                              <th key={lbl} style={{
+                                ...LT_TH, textAlign: "center", minWidth: 36, padding: "8px 6px",
+                                background: isToday ? "#EEF2FF" : "#F8FAFC",
+                                color:      isToday ? "#6366F1"  : "#94A3B8",
+                                borderBottom: isToday ? "2px solid #6366F1" : "1px solid #E2E8F0",
+                              }}>{lbl}</th>
+                            );
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {LT_TEAMS.map((team) =>
+                          team.members.map((member, i) => {
+                            const origCounts = ltDod.byOta[member.ota] ?? Array(15).fill(0);
+                            const counts     = [...origCounts].reverse();
+                            const maxVal     = Math.max(...counts, 1);
+                            const otaColor   = OTA_COLORS[member.ota] ?? "#64748B";
+                            const isLast     = i === team.members.length - 1;
+                            return (
+                              <tr key={`dod-${team.name}-${member.name}`} style={{ borderBottom: isLast ? "2px solid #E2E8F0" : "1px solid #F8FAFC" }}>
+                                <td style={{ ...LT_TD, position: "sticky", left: 0, background: team.color + "07", borderLeft: `3px solid ${team.color}`, fontSize: 10, fontWeight: 700, color: team.color, minWidth: 80 }}>
+                                  {i === 0 ? team.name : ""}
+                                </td>
+                                <td style={{ ...LT_TD, position: "sticky", left: 80, background: "#FFF", fontWeight: 600, color: "#1E293B", fontSize: 11, minWidth: 90 }}>{member.name}</td>
+                                <td style={{ ...LT_TD }}>
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: otaColor + "18", color: otaColor, border: `1px solid ${otaColor}35` }}>{member.ota}</span>
+                                </td>
+                                {counts.map((cnt, di) => {
+                                  const isToday   = di === 0;
+                                  const rtgl      = isToday && LT_UNSIGNED.has(member.ota) ? (ltRtgl[member.ota] ?? 0) : 0;
+                                  const intensity = cnt > 0 ? Math.round((cnt / maxVal) * 100) : 0;
+                                  const bg = cnt === 0 ? (isToday ? "#EEF2FF" : "transparent") : `${otaColor}${Math.max(18, intensity).toString(16).padStart(2, "0")}`;
+                                  return (
+                                    <td key={di} style={{ ...LT_TD, textAlign: "center", padding: "6px 4px", background: bg, borderLeft: isToday ? "1px solid #C7D2FE" : undefined, borderRight: isToday ? "1px solid #C7D2FE" : undefined }}>
+                                      <span style={{ fontSize: 11, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isToday ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0px 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
+                          <td style={{ ...LT_TD, position: "sticky", left: 0, background: "#F8FAFC", fontWeight: 800, fontSize: 10, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", minWidth: 80 }} colSpan={3}>Total</td>
+                          {revLabels.map((_, di) => {
+                            const origDi   = revLabels.length - 1 - di;
+                            const dayTotal = LT_TEAMS.flatMap(t => t.members.map(m => (ltDod.byOta[m.ota] ?? [])[origDi] ?? 0)).reduce((s, v) => s + v, 0);
+                            const isToday  = di === 0;
+                            return (
+                              <td key={di} style={{ ...LT_TD, textAlign: "center", padding: "6px 4px", background: isToday ? "#EEF2FF" : "transparent", borderLeft: isToday ? "1px solid #C7D2FE" : undefined, borderRight: isToday ? "1px solid #C7D2FE" : undefined }}>
+                                <span style={{ fontSize: 11, fontWeight: dayTotal > 0 ? 800 : 400, color: dayTotal > 0 ? (isToday ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : dayTotal || "·"}</span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* ── Floating Popup ── */}
             {popup && (() => {
