@@ -551,10 +551,10 @@ export default function CrmPage() {
               };
               return (
                 <div style={{ display: "grid",
-                  gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 90px 70px",
+                  gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 120px 90px 70px",
                   padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
                   gap: 8 }}>
-                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "OTA Live Date", "Task Due", ""].map(h => {
+                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "OTA Live Date", "OTA ID", "Task Due", ""].map(h => {
                     const sortKey = SORT_COLS[h];
                     return (
                       <div key={h}
@@ -591,7 +591,7 @@ export default function CrmPage() {
                   onMouseEnter={() => setHoveredRow(i)}
                   onMouseLeave={() => setHoveredRow(null)}
                   style={{ display: "grid",
-                    gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 90px 70px",
+                    gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 120px 90px 70px",
                     padding: "10px 20px", gap: 8, alignItems: "center",
                     borderBottom: "1px solid #F1F5F9",
                     background: isHovered ? "#F8FAFC" : "#fff",
@@ -644,6 +644,11 @@ export default function CrmPage() {
                   {/* OTA Live Date */}
                   <div style={{ fontSize: 11, color: "#475569" }}>
                     {singleOta?.liveDate ? fmtDate(singleOta.liveDate) : <span style={{ color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* OTA ID */}
+                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {singleOta?.ota ? <span style={{ fontWeight: 600 }}>{singleOta.ota}</span> : <span style={{ color: "#CBD5E1" }}>—</span>}
                   </div>
 
                   {/* Task due */}
