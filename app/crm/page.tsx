@@ -462,11 +462,28 @@ export default function CrmPage() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {visible.map(item => {
                         const s = STATUS_COLORS[item.label?.toLowerCase()] ?? { bg: "#F1F5F9", color: "#475569", dot: "#9CA3AF" };
+                        const isActive = statusView === "status"
+                          ? statusFilter === item.label
+                          : subStatusFilter === item.label;
                         return (
-                          <div key={item.label} style={{ background: s.bg, border: `1px solid ${s.dot}30`,
-                            borderRadius: 7, padding: "6px 10px", minWidth: 80 }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: s.color, lineHeight: 1 }}>{item.cnt}</div>
-                            <div style={{ fontSize: 9, fontWeight: 600, color: s.color, opacity: 0.8, marginTop: 2, textTransform: "capitalize" }}>
+                          <div key={item.label}
+                            onClick={() => {
+                              if (statusView === "status") {
+                                setStatusFilter(f => f === item.label ? "all" : item.label);
+                                setSubStatusFilter("all");
+                              } else {
+                                setSubStatusFilter(f => f === item.label ? "all" : item.label);
+                                setStatusFilter("all");
+                              }
+                              setPage(1);
+                            }}
+                            style={{ background: isActive ? s.dot : s.bg,
+                              border: `2px solid ${isActive ? s.dot : s.dot + "40"}`,
+                              borderRadius: 7, padding: "6px 10px", minWidth: 80,
+                              cursor: "pointer", transition: "all 0.12s",
+                              boxShadow: isActive ? `0 0 0 3px ${s.dot}30` : "none" }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: isActive ? "#fff" : s.color, lineHeight: 1 }}>{item.cnt}</div>
+                            <div style={{ fontSize: 9, fontWeight: 600, color: isActive ? "#fff" : s.color, opacity: isActive ? 1 : 0.8, marginTop: 2, textTransform: "capitalize" }}>
                               {item.label || "—"}
                             </div>
                           </div>
