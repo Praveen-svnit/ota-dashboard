@@ -109,7 +109,7 @@ export async function GET(req: Request) {
   const innerCte = `
     SELECT
       inv.property_id, inv.property_name, inv.city, inv.fh_status, inv.fh_live_date,
-      ol.ota, ol.status, ol.sub_status, ol.live_date,
+      ol.ota, ol.ota_id, ol.status, ol.sub_status, ol.live_date,
       ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
@@ -155,6 +155,7 @@ export async function GET(req: Request) {
       c.fh_live_date                 AS "fhLiveDate",
       json_agg(json_build_object(
         'ota',       c.ota,
+        'otaId',     c.ota_id,
         'status',    COALESCE(NULLIF(TRIM(c.status),     ''), 'New'),
         'subStatus', COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New'),
         'liveDate',  c.live_date
