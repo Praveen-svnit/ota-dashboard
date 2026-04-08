@@ -38,7 +38,7 @@ const ENDPOINTS: Endpoint[] = [
 async function callMMTApi(endpoint: Endpoint) {
   if (!API_BASE_URL) return null;
 
-  const url = new URL(endpoint.path, API_BASE_URL);
+  const url = new URL(`${API_BASE_URL}${endpoint.path}`);
   Object.entries(endpoint.params ?? {}).forEach(([key, value]) => url.searchParams.set(key, value));
 
   const response = await fetch(url.toString(), {
