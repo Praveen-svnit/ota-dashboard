@@ -169,6 +169,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [addOtaOpen,  setAddOtaOpen]  = useState(false);
   const [addingOta,   setAddingOta]   = useState<string | null>(null);
   const [actionDate,  setActionDate]  = useState("");
+  const [sessionName, setSessionName] = useState("You");
 
   // Tasks
   const [tasks,        setTasks]        = useState<Task[]>([]);
@@ -275,6 +276,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   }
 
   useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => { if (d?.user?.name) setSessionName(d.user.name); });
+  }, []);
+
+  useEffect(() => {
     setProperty(null);
     setListings([]);
     setLogs([]);
@@ -298,6 +303,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     setNoteErr(false);
     setSaving(true);
     const noteWithDate = actionDate ? `[Date: ${actionDate}] ${editNote.trim()}` : editNote.trim();
+    const now = new Date().toISOString();
+
+    const oldListing = listings.find(l => l.id === listingId);
+    const oldValue = oldListing ? String((oldListing as unknown as Record<string, unknown>)[field] ?? "") : "";
 
     await fetch("/api/crm/update-status", {
       method: "POST",
@@ -305,21 +314,44 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       body: JSON.stringify({ otaListingId: listingId, propertyId, field, value, note: noteWithDate }),
     });
 
-    // For Agoda status changes: also save the auto-mapped subStatus silently
+    // Build combined log entry (status+subStatus merged into one)
+    const newLog: Log = {
+      id: Date.now(),
+      otaListingId: listingId,
+      action: "field_updated",
+      field,
+      oldValue,
+      newValue: value,
+      note: noteWithDate,
+      createdAt: now,
+      userName: sessionName,
+      userRole: "",
+    };
+
+    // For Agoda status changes: also save the auto-mapped subStatus, merged into same log display
     if (field === "status" && autoSubStatus) {
       await fetch("/api/crm/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ otaListingId: listingId, propertyId, field: "subStatus", value: autoSubStatus, note: `Auto-mapped from status: ${value}` }),
       });
+      // Add subStatus change to same log entry
+      (newLog as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange = {
+        old: oldListing?.subStatus ?? "",
+        new: autoSubStatus,
+      };
+      setListings(prev => prev.map(l => l.id === listingId ? { ...l, status: value, subStatus: autoSubStatus, crmUpdatedAt: now } : l));
+    } else {
+      setListings(prev => prev.map(l => l.id === listingId
+        ? { ...l, [field]: value, crmUpdatedAt: now } : l));
     }
 
+    setLogs(prev => [newLog, ...prev]);
     setSaving(false);
     setEditing(null);
     setEditNote("");
     setActionDate("");
     setAutoSubStatus(null);
-    load();
   }
 
   async function saveMetric(key: string, value: string, valueKey?: string) {
@@ -337,6 +369,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     const note = noteInput[listingId]?.trim();
     if (!note) return;
     setSaving(true);
+    const now = new Date().toISOString();
     await fetch("/api/crm/update-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -344,7 +377,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     });
     setSaving(false);
     setNoteInput((prev) => ({ ...prev, [listingId]: "" }));
-    load();
+    setLogs(prev => [{ id: Date.now(), otaListingId: listingId, action: "note_added", field: "note", oldValue: "", newValue: note, note, createdAt: now, userName: sessionName, userRole: "" }, ...prev]);
   }
 
   if (loading) return (
@@ -603,81 +636,16 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                         )}
                       </div>
 
-                      {/* Right: key stats */}
-                      <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
-                        <div style={{ textAlign: "center", padding: "10px 16px", borderRadius: 10, background: "#F8FAFC", border: "1px solid #F1F5F9" }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>TAT</div>
-                          <div style={{ fontSize: 22, fontWeight: 800, color: activeListing.tatError ? "#DC2626" : "#059669", lineHeight: 1 }}>
-                            {activeListing.tat > 0 ? `${activeListing.tat}d` : "—"}
-                          </div>
-                          {activeListing.tatError === 1 && <div style={{ fontSize: 9, color: "#DC2626", marginTop: 2 }}>overdue</div>}
-                        </div>
-                        <div style={{ textAlign: "center", padding: "10px 16px", borderRadius: 10, background: "#F8FAFC", border: "1px solid #F1F5F9" }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>FH LIVE</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", lineHeight: 1 }}>
-                            {fmtDate(activeListing.liveDate)}
-                          </div>
-                        </div>
-                      </div>
                     </div>
 
                   </div>
 
-                  {/* Info grid */}
-                  <div style={{ padding: "16px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 32px" }}>
-
-                    {/* Listing Link */}
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>LISTING LINK</div>
-                      {isEditing("listingLink") ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            placeholder="https://…"
-                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
-                              border: "1px solid #CBD5E1", outline: "none" }} />
-                          <div style={{ display: "flex", gap: 5 }}>
-                            <button onClick={async () => {
-                              setSaving(true);
-                              await fetch("/api/crm/update-status", { method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "listingLink", value: editValue, note: "Listing link updated" }) });
-                              setSaving(false); setEditing(null); load();
-                            }} disabled={saving}
-                              style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
-                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              {saving ? "…" : "Save"}
-                            </button>
-                            <button onClick={() => setEditing(null)}
-                              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
-                                background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          {activeListing.listingLink ? (
-                            <a href={activeListing.listingLink} target="_blank" rel="noreferrer"
-                              style={{ fontSize: 12, color: "#2563EB", textDecoration: "none",
-                                padding: "3px 10px", background: "#EFF6FF", borderRadius: 6, border: "1px solid #BFDBFE" }}>
-                              Open ↗
-                            </a>
-                          ) : (
-                            <span style={{ fontSize: 12, color: "#CBD5E1" }}>—</span>
-                          )}
-                          <button onClick={() => { setEditing({ id: activeListing.id, field: "listingLink" }); setEditValue(activeListing.listingLink ?? ""); setEditNote(""); setNoteErr(false); }}
-                            style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
-                            onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
-                            onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* OTA ID (displayed) */}
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>LAST UPDATED</div>
-                      <span style={{ fontSize: 12, color: "#475569" }}>
-                        {activeListing.crmUpdatedAt ? relativeTime(activeListing.crmUpdatedAt) : "Never"}
-                      </span>
-                    </div>
+                  {/* Last updated strip */}
+                  <div style={{ padding: "10px 24px", borderTop: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em" }}>Last Updated</span>
+                    <span style={{ fontSize: 12, color: "#475569" }}>
+                      {activeListing.crmUpdatedAt ? relativeTime(activeListing.crmUpdatedAt) : "Never"}
+                    </span>
                   </div>
                 </div>
 
@@ -747,15 +715,37 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       {log.action === "note_added" ? (
                         <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
                       ) : (
-                        <div style={{ fontSize: 11, color: "#64748B" }}>
-                          <span style={{ fontWeight: 600 }}>{log.field}</span>:{" "}
-                          <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                          {" → "}
-                          <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                        </div>
-                      )}
-                      {log.note && log.action !== "note_added" && (
-                        <div style={{ fontSize: 10, color: "#6366F1", marginTop: 2, fontStyle: "italic" }}>"{log.note}"</div>
+                        <>
+                          <div style={{ fontSize: 11, color: "#64748B" }}>
+                            <span style={{ fontWeight: 600 }}>{log.field === "status" ? "Status" : log.field === "subStatus" ? "Sub-Status" : log.field}</span>:{" "}
+                            <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
+                            {" → "}
+                            <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
+                          </div>
+                          {/* Merged subStatus change (Agoda auto-map) */}
+                          {(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange && (
+                            <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                              <span style={{ fontWeight: 600 }}>Sub-Status</span>:{" "}
+                              <span style={{ color: "#DC2626" }}>{(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange!.old || "—"}</span>
+                              {" → "}
+                              <span style={{ color: "#059669" }}>{(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange!.new}</span>
+                            </div>
+                          )}
+                          {/* Action date extracted from note */}
+                          {log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/) && (
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3,
+                              fontSize: 10, fontWeight: 600, color: "#7C3AED",
+                              background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "1px 7px" }}>
+                              📅 {fmtDate(log.note.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/)![1])}
+                            </div>
+                          )}
+                          {/* Note text (after stripping date prefix) */}
+                          {log.note && (
+                            <div style={{ fontSize: 10, color: "#6366F1", marginTop: 2, fontStyle: "italic" }}>
+                              "{log.note.replace(/^\[Date: \d{4}-\d{2}-\d{2}\]\s*/, "")}"
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -817,6 +807,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
             {activeListing && (() => {
               const color = OTA_COLORS[activeListing.ota] ?? "#64748B";
               const isEditingOtaId = editing?.id === activeListing.id && editing.field === "otaId";
+              const isEditingLink  = editing?.id === activeListing.id && editing.field === "listingLink";
               return (
                 <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
                   <div style={{ padding: "10px 16px", borderBottom: "1px solid #F1F5F9" }}>
@@ -827,6 +818,56 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA Live Date</span>
                       <span style={{ fontSize: 11, color: "#1E293B", fontWeight: 500 }}>{fmtDate(activeListing.liveDate)}</span>
+                    </div>
+                    {/* TAT */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>TAT</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: activeListing.tatError ? "#DC2626" : (activeListing.tat > 0 ? "#059669" : "#94A3B8") }}>
+                        {activeListing.tat > 0 ? `${activeListing.tat}d` : "—"}
+                        {activeListing.tatError === 1 && <span style={{ fontSize: 9, color: "#DC2626", marginLeft: 4 }}>overdue</span>}
+                      </span>
+                    </div>
+                    {/* Listing Link editable */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingLink ? 6 : 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Listing Link</span>
+                        {!isEditingLink && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {activeListing.listingLink
+                              ? <a href={activeListing.listingLink} target="_blank" rel="noreferrer"
+                                  style={{ fontSize: 11, color: "#2563EB", textDecoration: "none", padding: "2px 8px", background: "#EFF6FF", borderRadius: 5, border: "1px solid #BFDBFE" }}>Open ↗</a>
+                              : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
+                            <button onClick={() => { setEditing({ id: activeListing.id, field: "listingLink" }); setEditValue(activeListing.listingLink ?? ""); }}
+                              style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+                              onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
+                              onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
+                          </div>
+                        )}
+                      </div>
+                      {isEditingLink && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="https://…"
+                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12, border: "1px solid #CBD5E1", outline: "none" }} />
+                          <div style={{ display: "flex", gap: 5 }}>
+                            <button onClick={async () => {
+                              setSaving(true);
+                              await fetch("/api/crm/update-status", { method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "listingLink", value: editValue, note: "Listing link updated" }) });
+                              setSaving(false); setEditing(null);
+                              setListings(prev => prev.map(l => l.id === activeListing.id ? { ...l, listingLink: editValue } : l));
+                            }} disabled={saving}
+                              style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
+                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {saving ? "…" : "Save"}
+                            </button>
+                            <button onClick={() => setEditing(null)}
+                              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
+                                background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {/* OTA ID editable */}
                     <div>
@@ -856,7 +897,8 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                               await fetch("/api/crm/update-status", { method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "otaId", value: editValue, note: "OTA ID updated" }) });
-                              setSaving(false); setEditing(null); load();
+                              setSaving(false); setEditing(null);
+                              setListings(prev => prev.map(l => l.id === activeListing.id ? { ...l, otaId: editValue } : l));
                             }} disabled={saving}
                               style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
                                 background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
