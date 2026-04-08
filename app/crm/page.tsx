@@ -149,6 +149,15 @@ export default function CrmPage() {
 
   useEffect(() => { fetch("/api/crm/summary").then(r => r.json()).then(setSummary); }, []);
 
+  // Auto-set OTA filter for interns so OTA Status/Sub-Status columns populate
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.user?.role === "intern" && d.user.ota) {
+        setOtaFilter(d.user.ota);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const q = breakdownOtas.length > 0 ? `?otas=${encodeURIComponent(breakdownOtas.join(","))}` : "";
     fetch(`/api/crm/breakdown${q}`).then(r => r.json()).then(setBreakdownData);
@@ -694,8 +703,10 @@ export default function CrmPage() {
             ) : rows.map((row, i) => {
               const isHovered = hoveredRow === i;
               const isOverdue = row.taskDueDate && new Date(row.taskDueDate) < new Date(new Date().toDateString());
-              // Show OTA status/sub-status only when a single OTA is selected
-              const singleOta = otaFilter !== "all" ? (row.otas ?? []).find(o => o.ota === otaFilter) ?? null : null;
+              // Show OTA status/sub-status when a single OTA is selected, or when there's only one OTA on the property
+              const singleOta = otaFilter !== "all"
+                ? (row.otas ?? []).find(o => o.ota === otaFilter) ?? null
+                : (row.otas ?? []).length === 1 ? (row.otas ?? [])[0] : null;
               return (
                 <div key={i}
                   onMouseEnter={() => setHoveredRow(i)}
@@ -717,7 +728,7 @@ export default function CrmPage() {
                         textDecoration: "none", display: "block",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       title={row.name}>
-                      {row.name}
+                      {row.name || <span style={{ color: "#CBD5E1" }}>—</span>}
                     </Link>
                   </div>
 
