@@ -130,7 +130,19 @@ async function runSync() {
     }
   }
 
-  return { upserted, skipped };
+  // Debug: show column mapping and first few date samples
+  const fhLiveDateIdx = Object.entries(fieldMap).find(([, v]) => v === "fh_live_date")?.[0];
+  const dateSamples = records.slice(0, 5).map(r => r.fh_live_date);
+  const debug = {
+    headers: cols,
+    fieldMap,
+    fhLiveDateColumnIndex: fhLiveDateIdx ?? "NOT FOUND",
+    dateSamples,
+    withDate: records.filter(r => r.fh_live_date !== null).length,
+    withoutDate: records.filter(r => r.fh_live_date === null).length,
+  };
+
+  return { upserted, skipped, debug };
 }
 
 // Manual trigger — admin/head only
@@ -141,12 +153,13 @@ export async function POST() {
   }
 
   try {
-    const { upserted, skipped } = await runSync();
+    const { upserted, skipped, debug } = await runSync();
     return Response.json({
       ok: true,
       upserted,
       skipped,
       message: `Synced ${upserted} properties (${skipped} skipped — no property ID)`,
+      debug,
     });
   } catch (err) {
     console.error("sync-inventory error:", err);
