@@ -73,8 +73,8 @@ async function runSync() {
     }
     if (!rec.property_id) { skipped++; continue; }
     if (rec.fh_live_date) {
-      const dmy = rec.fh_live_date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-      if (dmy) rec.fh_live_date = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+      const mdy = rec.fh_live_date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (mdy) rec.fh_live_date = `${mdy[3]}-${mdy[1].padStart(2, "0")}-${mdy[2].padStart(2, "0")}`;
     }
     records.push(rec as Rec);
   }
