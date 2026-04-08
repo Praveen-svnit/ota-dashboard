@@ -613,25 +613,25 @@ export default function ListingDashboardPage() {
               const LT_HDR_BR = "#D1FAE5";
               const LT_TH_S: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 2,
-                padding: "11px 14px", textAlign: "left", fontSize: 10, fontWeight: 700,
+                padding: "6px 10px", textAlign: "left", fontSize: 9, fontWeight: 700,
                 color: "#1E293B", background: "#F8FAFC",
                 borderBottom: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
-                whiteSpace: "nowrap", minWidth: 130,
+                whiteSpace: "nowrap", minWidth: 110,
               };
               const LT_TH_C: React.CSSProperties = {
-                padding: "9px 10px", textAlign: "center", fontSize: 10, fontWeight: 700,
+                padding: "6px 7px", textAlign: "center", fontSize: 9, fontWeight: 700,
                 color: "#1E293B", background: "#FFFFFF",
                 borderBottom: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
-                whiteSpace: "nowrap", minWidth: 52,
+                whiteSpace: "nowrap", minWidth: 42,
               };
               const LT_TD_S: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 1,
-                padding: "9px 14px", fontSize: 11, fontWeight: 600,
+                padding: "5px 10px", fontSize: 10, fontWeight: 600,
                 background: "#F1F5F9", borderRight: `1px solid ${LT_GRID}`,
                 whiteSpace: "nowrap",
               };
               const LT_TD_C: React.CSSProperties = {
-                padding: "9px 10px", textAlign: "center",
+                padding: "5px 7px", textAlign: "center",
                 borderTop: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
                 background: "#FFFFFF",
               };
@@ -691,7 +691,11 @@ export default function ListingDashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {LT_OTAS.map((ota) => {
+                          {[...LT_OTAS].sort((a, b) => {
+                            const totalA = (ltL12m.byOta[a] ?? []).reduce((s, v) => s + v, 0);
+                            const totalB = (ltL12m.byOta[b] ?? []).reduce((s, v) => s + v, 0);
+                            return totalB - totalA;
+                          }).map((ota) => {
                             const otaColor = OTA_COLORS[ota] ?? "#64748B";
                             const origVals = ltL12m.byOta[ota] ?? Array(ltL12m.months.length).fill(0);
                             const vals     = [...origVals].reverse();
@@ -701,9 +705,9 @@ export default function ListingDashboardPage() {
                             return (
                               <tr key={ota} className="trow" style={{ borderBottom: `1px solid ${LT_GRID}` }}>
                                 <td style={{ ...LT_TD_S, borderBottom: `1px solid ${LT_GRID}`, borderLeft: `3px solid ${otaColor}` }}>
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
-                                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
-                                    <span style={{ fontSize: 10, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
+                                    <span style={{ width: 16, height: 16, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
+                                    <span style={{ fontSize: 9, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
                                   </div>
                                 </td>
                                 {vals.map((cnt, mi) => {
@@ -713,13 +717,13 @@ export default function ListingDashboardPage() {
                                   const bg = cnt === 0 ? (isCm ? "#EEF2FF" : "#FFFFFF") : `${otaColor}${intensity.toString(16).padStart(2, "0")}`;
                                   return (
                                     <td key={mi} style={{ ...LT_TD_C, background: bg, borderLeft: isCm ? "2px solid #C7D2FE" : undefined, borderRight: isCm ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
-                                      <span style={{ fontSize: 11, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isCm ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      <span style={{ fontSize: 10, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isCm ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
                                       {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
                                     </td>
                                   );
                                 })}
                                 <td style={{ ...LT_TD_C, background: "#F0FDF4", borderRight: `1px solid ${LT_GRID}` }}>
-                                  <span style={{ fontSize: 12, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
                                 </td>
                               </tr>
                             );
@@ -751,6 +755,7 @@ export default function ListingDashboardPage() {
                         <thead>
                           <tr style={{ background: "#F8FAFC" }}>
                             <th style={{ ...LT_TH_S }}>OTA</th>
+                            <th style={{ ...LT_TH_C, background: "#F0FDF4", color: "#16A34A", minWidth: 46 }}>Total</th>
                             {revLabels.map((lbl, i) => {
                               const isToday = i === 0;
                               return (
@@ -766,19 +771,27 @@ export default function ListingDashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {LT_OTAS.map((ota) => {
+                          {[...LT_OTAS].sort((a, b) => {
+                            const totalA = (ltDod.byOta[a] ?? []).reduce((s, v) => s + v, 0);
+                            const totalB = (ltDod.byOta[b] ?? []).reduce((s, v) => s + v, 0);
+                            return totalB - totalA;
+                          }).map((ota) => {
                             const otaColor   = OTA_COLORS[ota] ?? "#64748B";
                             const origCounts = ltDod.byOta[ota] ?? Array(15).fill(0);
                             const counts     = [...origCounts].reverse();
+                            const rowTotal   = counts.reduce((s, v) => s + v, 0);
                             const maxVal     = Math.max(...counts, 1);
                             const logo       = OTA_LOGO_STYLE[ota] ?? { mark: ota.slice(0, 2), bg: "#F2F4F7", text: "#344054", ring: "#D0D5DD" };
                             return (
                               <tr key={ota} className="trow" style={{ borderBottom: `1px solid ${LT_GRID}` }}>
                                 <td style={{ ...LT_TD_S, borderBottom: `1px solid ${LT_GRID}`, borderLeft: `3px solid ${otaColor}` }}>
-                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
-                                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
-                                    <span style={{ fontSize: 10, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
+                                    <span style={{ width: 16, height: 16, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
+                                    <span style={{ fontSize: 9, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
                                   </div>
+                                </td>
+                                <td style={{ ...LT_TD_C, background: "#F0FDF4", borderRight: `1px solid ${LT_GRID}` }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
                                 </td>
                                 {counts.map((cnt, di) => {
                                   const isToday   = di === 0;
@@ -787,7 +800,7 @@ export default function ListingDashboardPage() {
                                   const bg = cnt === 0 ? (isToday ? "#EEF2FF" : "#FFFFFF") : `${otaColor}${Math.max(18, intensity).toString(16).padStart(2, "0")}`;
                                   return (
                                     <td key={di} style={{ ...LT_TD_C, background: bg, borderLeft: isToday ? "2px solid #C7D2FE" : undefined, borderRight: isToday ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
-                                      <span style={{ fontSize: 11, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isToday ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      <span style={{ fontSize: 10, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isToday ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
                                       {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
                                     </td>
                                   );
@@ -798,14 +811,17 @@ export default function ListingDashboardPage() {
                         </tbody>
                         <tfoot>
                           <tr style={{ background: "#F1F5F9", borderTop: `2px solid ${LT_GRID}` }}>
-                            <td style={{ ...LT_TD_S, background: "#F1F5F9", fontWeight: 800, fontSize: 10, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${LT_GRID}` }}>Total</td>
+                            <td style={{ ...LT_TD_S, background: "#F1F5F9", fontWeight: 800, fontSize: 9, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${LT_GRID}` }}>Total</td>
+                            <td style={{ ...LT_TD_C, background: "#DCFCE7", borderRight: `1px solid ${LT_GRID}` }}>
+                              <span style={{ fontSize: 11, fontWeight: 900, color: "#16A34A" }}>{ltLoading ? "—" : LT_OTAS.reduce((s, ota) => s + (ltDod.byOta[ota] ?? []).reduce((a, v) => a + v, 0), 0)}</span>
+                            </td>
                             {revLabels.map((_, di) => {
                               const origDi   = revLabels.length - 1 - di;
                               const dayTotal = LT_OTAS.reduce((s, ota) => s + ((ltDod.byOta[ota] ?? [])[origDi] ?? 0), 0);
                               const isToday  = di === 0;
                               return (
                                 <td key={di} style={{ ...LT_TD_C, background: isToday ? "#EEF2FF" : "#F1F5F9", borderLeft: isToday ? "2px solid #C7D2FE" : undefined, borderRight: isToday ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
-                                  <span style={{ fontSize: 11, fontWeight: dayTotal > 0 ? 800 : 400, color: dayTotal > 0 ? (isToday ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : dayTotal || "·"}</span>
+                                  <span style={{ fontSize: 10, fontWeight: dayTotal > 0 ? 800 : 400, color: dayTotal > 0 ? (isToday ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : dayTotal || "·"}</span>
                                 </td>
                               );
                             })}
