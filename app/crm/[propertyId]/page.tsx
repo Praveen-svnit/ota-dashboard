@@ -715,37 +715,49 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       {log.action === "note_added" ? (
                         <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
                       ) : (
-                        <>
-                          <div style={{ fontSize: 11, color: "#64748B" }}>
-                            <span style={{ fontWeight: 600 }}>{log.field === "status" ? "Status" : log.field === "subStatus" ? "Sub-Status" : log.field}</span>:{" "}
-                            <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                            {" → "}
-                            <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                          </div>
-                          {/* Merged subStatus change (Agoda auto-map) */}
-                          {(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange && (
-                            <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                              <span style={{ fontWeight: 600 }}>Sub-Status</span>:{" "}
-                              <span style={{ color: "#DC2626" }}>{(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange!.old || "—"}</span>
-                              {" → "}
-                              <span style={{ color: "#059669" }}>{(log as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange!.new}</span>
-                            </div>
-                          )}
-                          {/* Action date extracted from note */}
-                          {log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/) && (
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3,
-                              fontSize: 10, fontWeight: 600, color: "#7C3AED",
-                              background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "1px 7px" }}>
-                              📅 {fmtDate(log.note.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/)![1])}
-                            </div>
-                          )}
-                          {/* Note text (after stripping date prefix) */}
-                          {log.note && (
-                            <div style={{ fontSize: 10, color: "#6366F1", marginTop: 2, fontStyle: "italic" }}>
-                              "{log.note.replace(/^\[Date: \d{4}-\d{2}-\d{2}\]\s*/, "")}"
-                            </div>
-                          )}
-                        </>
+                        {(() => {
+                          type LogWithSub = Log & { subStatusChange?: { old: string; new: string } };
+                          const lx = log as LogWithSub;
+                          const dateMatch = log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/);
+                          const noteText  = log.note?.replace(/^\[Date: \d{4}-\d{2}-\d{2}\]\s*/, "") ?? "";
+                          return (
+                            <>
+                              {/* Status / field change */}
+                              <div style={{ fontSize: 11, color: "#64748B" }}>
+                                <span style={{ fontWeight: 600 }}>
+                                  {log.field === "status" ? "Status" : log.field === "subStatus" ? "Sub-Status" : log.field}
+                                </span>:{" "}
+                                <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
+                                {" → "}
+                                <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
+                              </div>
+                              {/* Merged subStatus change (Agoda auto-map) */}
+                              {lx.subStatusChange && (
+                                <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
+                                  <span style={{ fontWeight: 600 }}>Sub-Status</span>:{" "}
+                                  <span style={{ color: "#DC2626" }}>{lx.subStatusChange.old || "—"}</span>
+                                  {" → "}
+                                  <span style={{ color: "#059669" }}>{lx.subStatusChange.new}</span>
+                                </div>
+                              )}
+                              {/* Action date + note — shown together below the change lines */}
+                              {(dateMatch || noteText) && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                                  {dateMatch && (
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                                      fontSize: 10, fontWeight: 600, color: "#7C3AED",
+                                      background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "1px 7px" }}>
+                                      📅 {fmtDate(dateMatch[1])}
+                                    </span>
+                                  )}
+                                  {noteText && (
+                                    <span style={{ fontSize: 10, color: "#6366F1", fontStyle: "italic" }}>"{noteText}"</span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       )}
                     </div>
                   </div>
@@ -820,13 +832,19 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       <span style={{ fontSize: 11, color: "#1E293B", fontWeight: 500 }}>{fmtDate(activeListing.liveDate)}</span>
                     </div>
                     {/* TAT */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>TAT</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: activeListing.tatError ? "#DC2626" : (activeListing.tat > 0 ? "#059669" : "#94A3B8") }}>
-                        {activeListing.tat > 0 ? `${activeListing.tat}d` : "—"}
-                        {activeListing.tatError === 1 && <span style={{ fontSize: 9, color: "#DC2626", marginLeft: 4 }}>overdue</span>}
-                      </span>
-                    </div>
+                    {(() => {
+                      const tat = Number(activeListing.tat);
+                      const tatErr = Number(activeListing.tatError);
+                      return (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>TAT</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: tatErr ? "#DC2626" : (tat > 0 ? "#059669" : "#94A3B8") }}>
+                            {tat > 0 ? `${tat}d` : "—"}
+                            {tatErr > 0 && <span style={{ fontSize: 9, color: "#DC2626", marginLeft: 4 }}>overdue</span>}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {/* Listing Link editable */}
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingLink ? 6 : 0 }}>
