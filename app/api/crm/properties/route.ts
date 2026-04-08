@@ -21,6 +21,19 @@ export async function GET(req: Request) {
   const limit        = exportAll ? 99999 : 50;
   const offset       = exportAll ? 0 : (page - 1) * limit;
 
+  const SORT_MAP: Record<string, string> = {
+    name:       "c.property_name",
+    city:       "c.city",
+    fhLiveDate: "c.fh_live_date",
+    fhStatus:   "c.fh_status",
+    taskDue:    "task_due",
+  };
+  const sortByRaw  = searchParams.get("sortBy")  ?? "name";
+  const sortDirRaw = searchParams.get("sortDir") ?? "asc";
+  const sortCol    = SORT_MAP[sortByRaw] ?? "c.property_name";
+  const sortDir    = sortDirRaw === "desc" ? "DESC" : "ASC";
+  const nullsLast  = sortByRaw === "taskDue" || sortByRaw === "fhLiveDate" ? " NULLS LAST" : "";
+
   const sql = getSql();
 
   const conditions: string[] = [];
@@ -149,11 +162,15 @@ export async function GET(req: Request) {
       (SELECT MIN(t.due_date) FROM tasks t
        WHERE t.property_id = c.property_id
          AND t.status = 'open'
-         AND t.due_date IS NOT NULL) AS "taskDueDate"
+         AND t.due_date IS NOT NULL) AS "taskDueDate",
+      (SELECT MIN(t.due_date) FROM tasks t
+       WHERE t.property_id = c.property_id
+         AND t.status = 'open'
+         AND t.due_date IS NOT NULL) AS task_due
     FROM (${innerCte}) c
     ${where}
     GROUP BY c.property_id, c.property_name, c.city, c.fh_status, c.fh_live_date
-    ORDER BY c.property_name ASC
+    ORDER BY ${sortCol} ${sortDir}${nullsLast}
     LIMIT $${limitIdx} OFFSET $${offsetIdx}
   `;
 

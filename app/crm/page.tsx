@@ -166,13 +166,23 @@ export default function CrmPage() {
   }, []);
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
-    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter.join(",") };
+    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter.join(","), sortBy, sortDir };
     if (fhDateFrom)  q.fhFrom  = fhDateFrom;
     if (fhDateTo)    q.fhTo    = fhDateTo;
     if (otaDateFrom) q.otaFrom = otaDateFrom;
     if (otaDateTo)   q.otaTo   = otaDateTo;
     return new URLSearchParams({ ...q, ...extra });
-  }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo, sortBy, sortDir]);
+
+  function handleSort(col: string) {
+    if (sortBy === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -184,6 +194,9 @@ export default function CrmPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+
+  const [sortBy,  setSortBy]  = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const [csvLoading, setCsvLoading] = useState(false);
   const downloadCsv = () => {
@@ -653,15 +666,36 @@ export default function CrmPage() {
           {/* ── Property list ── */}
           <div style={{ flex: 1 }}>
             {/* Column headers */}
-            <div style={{ display: "grid",
-              gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
-              padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
-              gap: 8 }}>
-              {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "Task Due", ""].map(h => (
-                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF",
-                  textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
-              ))}
-            </div>
+            {(() => {
+              const SORT_COLS: Record<string, string> = {
+                "Property Name": "name", "City": "city",
+                "FH Live Date": "fhLiveDate", "FH Status": "fhStatus", "Task Due": "taskDue",
+              };
+              const arrow = (col: string) => {
+                if (sortBy !== SORT_COLS[col]) return <span style={{ color: "#D1D5DB", marginLeft: 3 }}>↕</span>;
+                return <span style={{ color: "#5D87FF", marginLeft: 3 }}>{sortDir === "asc" ? "↑" : "↓"}</span>;
+              };
+              return (
+                <div style={{ display: "grid",
+                  gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
+                  padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
+                  gap: 8 }}>
+                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "Task Due", ""].map(h => {
+                    const sortKey = SORT_COLS[h];
+                    return (
+                      <div key={h}
+                        onClick={sortKey ? () => handleSort(sortKey) : undefined}
+                        style={{ fontSize: 10, fontWeight: 700, color: sortBy === sortKey ? "#5D87FF" : "#9CA3AF",
+                          textTransform: "uppercase", letterSpacing: 0.4,
+                          cursor: sortKey ? "pointer" : "default",
+                          userSelect: "none", display: "flex", alignItems: "center" }}>
+                        {h}{sortKey && arrow(h)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {loading ? (
               <div style={{ padding: 60, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
