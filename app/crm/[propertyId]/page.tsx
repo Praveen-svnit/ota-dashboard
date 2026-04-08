@@ -715,7 +715,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       {log.action === "note_added" ? (
                         <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
                       ) : (
-                        {(() => {
+                        (() => {
                           type LogWithSub = Log & { subStatusChange?: { old: string; new: string } };
                           const lx = log as LogWithSub;
                           const dateMatch = log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/);
@@ -757,7 +757,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                               )}
                             </>
                           );
-                        })()}
+                        })()
                       )}
                     </div>
                   </div>
