@@ -49,12 +49,17 @@ async function callMMTApi(endpoint: Endpoint) {
     },
   });
 
+  const body = await response.text();
+
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`${endpoint.title}: ${response.status} ${response.statusText} — ${body}`);
+    throw new Error(`${endpoint.title}: ${response.status} ${response.statusText}\nURL: ${url.toString()}\n\n${body.slice(0, 300)}`);
   }
 
-  return response.json();
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error(`${endpoint.title}: Server returned non-JSON response\nURL: ${url.toString()}\n\nFirst 300 chars: ${body.slice(0, 300)}`);
+  }
 }
 
 function trimJson(value: unknown) {
