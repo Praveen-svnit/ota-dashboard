@@ -1,5 +1,5 @@
 const API_BASE_URL = process.env.MMT_HYGIENE_API_BASE_URL;
-const API_KEY = process.env.MMT_HYGIENE_API_KEY ?? "mmt_ad230dadca52fbe11cd9e94d2848b36c89f63c7821d2f3e114fb65706d0dbcd5";
+const API_KEY = process.env.MMT_HYGIENE_API_KEY;
 
 type Endpoint = {
   title: string;
@@ -26,6 +26,12 @@ const ENDPOINTS: Endpoint[] = [
     path: "/api/reviews/ratings.php",
     params: { action: "summary" },
     description: "Latest rating snapshots broken down by hotel and platform (filter by city when needed).",
+  },
+  {
+    title: "Analytics overview",
+    path: "/api/analytics/summary.php",
+    params: { action: "overview" },
+    description: "High-level MMT analytics overview.",
   },
 ];
 
