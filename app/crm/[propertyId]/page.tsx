@@ -165,9 +165,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [saving,        setSaving]        = useState(false);
   const [autoSubStatus, setAutoSubStatus] = useState<string | null>(null);
   const [noteInput,  setNoteInput]  = useState<Record<number, string>>({});
-  const [activeOta,  setActiveOta]  = useState<string | null>(null);
-  const [addOtaOpen, setAddOtaOpen] = useState(false);
-  const [addingOta,  setAddingOta]  = useState<string | null>(null);
+  const [activeOta,   setActiveOta]   = useState<string | null>(null);
+  const [addOtaOpen,  setAddOtaOpen]  = useState(false);
+  const [addingOta,   setAddingOta]   = useState<string | null>(null);
+  const [actionDate,  setActionDate]  = useState("");
 
   // Tasks
   const [tasks,        setTasks]        = useState<Task[]>([]);
@@ -296,11 +297,12 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     if (!editNote.trim()) { setNoteErr(true); return; }
     setNoteErr(false);
     setSaving(true);
+    const noteWithDate = actionDate ? `[Date: ${actionDate}] ${editNote.trim()}` : editNote.trim();
 
     await fetch("/api/crm/update-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ otaListingId: listingId, propertyId, field, value, note: editNote.trim() }),
+      body: JSON.stringify({ otaListingId: listingId, propertyId, field, value, note: noteWithDate }),
     });
 
     // For Agoda status changes: also save the auto-mapped subStatus silently
@@ -315,6 +317,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     setSaving(false);
     setEditing(null);
     setEditNote("");
+    setActionDate("");
     setAutoSubStatus(null);
     load();
   }
@@ -473,35 +476,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
           {/* LEFT: main content */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Property overview (shown when Property tab is active) */}
-          {isPropertyView && (
-            <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>All OTA Overview</span>
-                <span style={{ fontSize: 11, color: "#94A3B8" }}>{listings.length} listings</span>
-              </div>
-              <div style={{ padding: "16px 20px", display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {listings.map((l) => {
-                  const color = OTA_COLORS[l.ota] ?? "#64748B";
-                  const sc = STATUS_COLORS[l.status?.toLowerCase()] ?? { bg: "#F1F5F9", color: "#64748B", dot: "#9CA3AF" };
-                  return (
-                    <button key={l.ota} onClick={() => setActiveOta(l.ota)}
-                      style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px",
-                        borderRadius: 10, border: `1px solid ${color}25`, background: color + "06",
-                        cursor: "pointer", minWidth: 140, alignItems: "flex-start", textAlign: "left" }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color }}>{l.ota}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: sc.color }}>{l.status || "—"}</span>
-                      </div>
-                      {l.subStatus && <span style={{ fontSize: 10, color: "#94A3B8" }}>{l.subStatus}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Active OTA detail */}
           {activeListing && (() => {
             const color = OTA_COLORS[activeListing.ota] ?? "#64748B";
@@ -565,13 +539,19 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                                 border: `1px solid ${noteErr ? "#FCA5A5" : "#E2E8F0"}`,
                                 outline: "none", background: noteErr ? "#FEF2F2" : "#F8FAFC" }} />
                             {noteErr && <span style={{ fontSize: 10, color: "#DC2626" }}>Note is required before saving</span>}
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <label style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", whiteSpace: "nowrap" }}>Action Date</label>
+                              <input type="date" value={actionDate} onChange={(e) => setActionDate(e.target.value)}
+                                style={{ flex: 1, padding: "6px 8px", borderRadius: 8, fontSize: 12,
+                                  border: "1px solid #E2E8F0", outline: "none", background: "#F8FAFC" }} />
+                            </div>
                             <div style={{ display: "flex", gap: 6 }}>
                               <button onClick={() => saveField(activeListing.id, "status", editValue)} disabled={saving}
                                 style={{ padding: "7px 16px", borderRadius: 8, border: "none",
                                   background: color, color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                                 {saving ? "Saving…" : "Save"}
                               </button>
-                              <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); setAutoSubStatus(null); }}
+                              <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); setActionDate(""); setAutoSubStatus(null); }}
                                 style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0",
                                   background: "#FFF", fontSize: 12, cursor: "pointer", color: "#64748B" }}>
                                 Cancel
@@ -644,46 +624,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   </div>
 
                   {/* Info grid */}
-                  <div style={{ padding: "16px 24px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px 32px" }}>
-
-                    {/* OTA ID */}
-                    <div>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>OTA ID</div>
-                      {isEditing("otaId") ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            placeholder="Enter OTA ID…"
-                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
-                              border: "1px solid #CBD5E1", outline: "none", fontFamily: "monospace" }} />
-                          <div style={{ display: "flex", gap: 5 }}>
-                            <button onClick={async () => {
-                              setSaving(true);
-                              await fetch("/api/crm/update-status", { method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "otaId", value: editValue, note: "OTA ID updated" }) });
-                              setSaving(false); setEditing(null); load();
-                            }} disabled={saving}
-                              style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
-                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              {saving ? "…" : "Save"}
-                            </button>
-                            <button onClick={() => setEditing(null)}
-                              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
-                                background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 12, color: "#1E293B", fontFamily: "monospace", fontWeight: 500 }}>
-                            {activeListing.otaId || <span style={{ color: "#CBD5E1" }}>—</span>}
-                          </span>
-                          <button onClick={() => { setEditing({ id: activeListing.id, field: "otaId" }); setEditValue(activeListing.otaId ?? ""); }}
-                            style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
-                            onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
-                            onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
-                        </div>
-                      )}
-                    </div>
+                  <div style={{ padding: "16px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 32px" }}>
 
                     {/* Listing Link */}
                     <div>
@@ -762,146 +703,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                     </button>
                   </div>
                 </div>
-
-                {/* ── After-Live Metrics card ── */}
-                {OTA_METRICS[activeListing.ota] && (() => {
-                    const defs = OTA_METRICS[activeListing.ota];
-                    return (
-                      <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-                        <div style={{ padding: "14px 20px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>After-Live Metrics</span>
-                          <span style={{ fontSize: 10, color: "#94A3B8" }}>{activeListing.ota}</span>
-                        </div>
-                        <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
-                          {defs.map((def) => {
-                            // Resolve date fields: named ones if defined, else generic {key}_date
-                            const dateFields  = def.dates ?? [{ key: def.key + "_date", label: "Date" }];
-                            const savedValue  = metrics[def.key] ?? "";
-                            const draftValue  = metricEdit[def.key] ?? savedValue;
-                            const isSaving    = savingMetric === def.key;
-
-                            const savedDates  = dateFields.map((df) => metrics[df.key] ?? "");
-                            const draftDates  = dateFields.map((df) => metricEdit[df.key] ?? metrics[df.key] ?? "");
-
-                            const valueChanged = draftValue !== savedValue;
-                            const datesChanged = draftDates.some((d, i) => d !== savedDates[i]);
-                            const isDirty      = valueChanged || datesChanged;
-                            const canSave      = !!draftValue && draftDates.every((d) => !!d);
-                            const allSaved     = !!savedValue && savedDates.every((d) => !!d);
-
-                            async function commitMetric() {
-                              setSavingMetric(def.key);
-                              // Save date keys first (pass valueKey so API knows companion for log check)
-                              await Promise.all(
-                                dateFields.map((df, i) => saveMetric(df.key, draftDates[i], def.key))
-                              );
-                              // Save value key last — API writes log at this point
-                              await saveMetric(def.key, draftValue, def.key);
-                              setSavingMetric(null);
-                              fetch(`/api/crm/properties/${propertyId}`)
-                                .then((r) => r.json()).then((d) => setLogs(d.logs ?? []));
-                            }
-
-                            return (
-                              <div key={def.key} style={{
-                                background: allSaved ? `${color}06` : "#F8FAFC",
-                                borderRadius: 10,
-                                border: `1px solid ${isDirty ? color + "50" : color + "20"}`,
-                                padding: "10px 12px",
-                              }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", marginBottom: 8 }}>
-                                  {def.label}
-                                </div>
-
-                                {/* Value */}
-                                {def.type === "toggle" && (
-                                  <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
-                                    {["Yes", "No"].map((opt) => (
-                                      <button key={opt}
-                                        onClick={() => setMetricEdit((p) => ({ ...p, [def.key]: opt }))}
-                                        style={{
-                                          flex: 1, padding: "4px 0", borderRadius: 20,
-                                          fontSize: 11, fontWeight: 700, cursor: "pointer",
-                                          border: draftValue === opt ? "none" : "1px solid #E2E8F0",
-                                          background: draftValue === opt
-                                            ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2")
-                                            : "#FFF",
-                                          color: draftValue === opt
-                                            ? (opt === "Yes" ? "#059669" : "#DC2626")
-                                            : "#94A3B8",
-                                        }}>
-                                        {opt}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {def.type === "select" && (
-                                  <select value={draftValue}
-                                    onChange={(e) => setMetricEdit((p) => ({ ...p, [def.key]: e.target.value }))}
-                                    style={{
-                                      width: "100%", padding: "5px 8px", borderRadius: 7, marginBottom: 10,
-                                      border: `1px solid ${color}30`, fontSize: 12, background: "#FFF",
-                                    }}>
-                                    {def.options!.map((o) => <option key={o} value={o}>{o}</option>)}
-                                  </select>
-                                )}
-
-                                {def.type === "text" && (
-                                  <input value={draftValue}
-                                    onChange={(e) => setMetricEdit((p) => ({ ...p, [def.key]: e.target.value }))}
-                                    placeholder="e.g. 15"
-                                    style={{
-                                      width: "100%", padding: "5px 8px", borderRadius: 7, marginBottom: 10,
-                                      border: `1px solid ${color}30`, fontSize: 12,
-                                      outline: "none", background: "#FFF", boxSizing: "border-box",
-                                    }}
-                                  />
-                                )}
-
-                                {/* Date fields */}
-                                {dateFields.map((df, i) => (
-                                  <div key={df.key} style={{ marginBottom: 8 }}>
-                                    <div style={{ fontSize: 9, fontWeight: 600, color: "#94A3B8", marginBottom: 3 }}>
-                                      {df.label.toUpperCase()}
-                                    </div>
-                                    <input type="date" value={draftDates[i]}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setMetricEdit((p) => ({ ...p, [df.key]: val }));
-                                      }}
-                                      style={{
-                                        width: "100%", padding: "4px 6px", borderRadius: 7,
-                                        border: `1px solid ${color}30`, fontSize: 11,
-                                        background: "#FFF", boxSizing: "border-box",
-                                      }}
-                                    />
-                                  </div>
-                                ))}
-
-                                {/* Save button */}
-                                {isDirty ? (
-                                  <button onClick={commitMetric} disabled={!canSave || isSaving}
-                                    style={{
-                                      width: "100%", padding: "5px 0", borderRadius: 7, border: "none",
-                                      background: canSave ? color : "#E2E8F0",
-                                      color: canSave ? "#FFF" : "#94A3B8",
-                                      fontSize: 11, fontWeight: 700,
-                                      cursor: canSave ? "pointer" : "not-allowed",
-                                      opacity: isSaving ? 0.7 : 1, marginTop: 4,
-                                    }}>
-                                    {isSaving ? "Saving…" : canSave ? "Save" : "Fill all fields"}
-                                  </button>
-                                ) : allSaved && (
-                                  <div style={{ fontSize: 9, color: "#059669", fontWeight: 600, marginTop: 4 }}>✓ Saved</div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
 
               </>
             );
@@ -987,28 +788,186 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   </div>
                 ))}
               </div>
-              <div style={{ borderTop: "1px solid #F1F5F9", padding: "4px 0" }}>
-                {listings.map((l) => {
-                  const c = OTA_COLORS[l.ota] ?? "#64748B";
-                  const sc = STATUS_COLORS[l.status?.toLowerCase()] ?? { dot: "#9CA3AF", color: "#64748B" };
-                  const isActive = activeOta === l.ota;
-                  return (
-                    <button key={l.ota} onClick={() => setActiveOta(l.ota)}
-                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                        width: "100%", padding: "7px 16px", border: "none", textAlign: "left",
-                        background: isActive ? c + "08" : "transparent",
-                        borderLeft: isActive ? `3px solid ${c}` : "3px solid transparent",
-                        cursor: "pointer", gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{l.ota}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: (sc as {dot:string}).dot, flexShrink: 0 }} />
-                        <span style={{ fontSize: 10, color: (sc as {color:string}).color, fontWeight: 600 }}>{l.status || "—"}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              {isPropertyView && (
+                <div style={{ borderTop: "1px solid #F1F5F9", padding: "4px 0" }}>
+                  {listings.map((l) => {
+                    const c = OTA_COLORS[l.ota] ?? "#64748B";
+                    const sc = STATUS_COLORS[l.status?.toLowerCase()] ?? { dot: "#9CA3AF", color: "#64748B" };
+                    const isActive = activeOta === l.ota;
+                    return (
+                      <button key={l.ota} onClick={() => setActiveOta(l.ota)}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                          width: "100%", padding: "7px 16px", border: "none", textAlign: "left",
+                          background: isActive ? c + "08" : "transparent",
+                          borderLeft: isActive ? `3px solid ${c}` : "3px solid transparent",
+                          cursor: "pointer", gap: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{l.ota}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: (sc as {dot:string}).dot, flexShrink: 0 }} />
+                          <span style={{ fontSize: 10, color: (sc as {color:string}).color, fontWeight: 600 }}>{l.status || "—"}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
+            {/* OTA Details card (OTA ID + Live Date) */}
+            {activeListing && (() => {
+              const color = OTA_COLORS[activeListing.ota] ?? "#64748B";
+              const isEditingOtaId = editing?.id === activeListing.id && editing.field === "otaId";
+              return (
+                <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+                  <div style={{ padding: "10px 16px", borderBottom: "1px solid #F1F5F9" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#0F172A" }}>OTA Details</span>
+                  </div>
+                  <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                    {/* OTA Live Date */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA Live Date</span>
+                      <span style={{ fontSize: 11, color: "#1E293B", fontWeight: 500 }}>{fmtDate(activeListing.liveDate)}</span>
+                    </div>
+                    {/* OTA ID editable */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingOtaId ? 6 : 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA ID</span>
+                        {!isEditingOtaId && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 11, color: "#1E293B", fontFamily: "monospace", fontWeight: 500 }}>
+                              {activeListing.otaId || <span style={{ color: "#CBD5E1" }}>—</span>}
+                            </span>
+                            <button onClick={() => { setEditing({ id: activeListing.id, field: "otaId" }); setEditValue(activeListing.otaId ?? ""); }}
+                              style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+                              onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
+                              onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
+                          </div>
+                        )}
+                      </div>
+                      {isEditingOtaId && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="Enter OTA ID…"
+                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
+                              border: "1px solid #CBD5E1", outline: "none", fontFamily: "monospace" }} />
+                          <div style={{ display: "flex", gap: 5 }}>
+                            <button onClick={async () => {
+                              setSaving(true);
+                              await fetch("/api/crm/update-status", { method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "otaId", value: editValue, note: "OTA ID updated" }) });
+                              setSaving(false); setEditing(null); load();
+                            }} disabled={saving}
+                              style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
+                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                              {saving ? "…" : "Save"}
+                            </button>
+                            <button onClick={() => setEditing(null)}
+                              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
+                                background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* After-Live Metrics */}
+            {activeListing && OTA_METRICS[activeListing.ota] && (() => {
+              const color = OTA_COLORS[activeListing.ota] ?? "#64748B";
+              const defs = OTA_METRICS[activeListing.ota];
+              return (
+                <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+                  <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>After-Live Metrics</span>
+                    <span style={{ fontSize: 10, color: "#94A3B8" }}>{activeListing.ota}</span>
+                  </div>
+                  <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                    {defs.map((def) => {
+                      const dateFields  = def.dates ?? [{ key: def.key + "_date", label: "Date" }];
+                      const savedValue  = metrics[def.key] ?? "";
+                      const draftValue  = metricEdit[def.key] ?? savedValue;
+                      const isSaving    = savingMetric === def.key;
+                      const savedDates  = dateFields.map((df) => metrics[df.key] ?? "");
+                      const draftDates  = dateFields.map((df) => metricEdit[df.key] ?? metrics[df.key] ?? "");
+                      const valueChanged = draftValue !== savedValue;
+                      const datesChanged = draftDates.some((d, i) => d !== savedDates[i]);
+                      const isDirty      = valueChanged || datesChanged;
+                      const canSave      = !!draftValue && draftDates.every((d) => !!d);
+                      const allSaved     = !!savedValue && savedDates.every((d) => !!d);
+
+                      async function commitMetric() {
+                        setSavingMetric(def.key);
+                        await Promise.all(dateFields.map((df, i) => saveMetric(df.key, draftDates[i], def.key)));
+                        await saveMetric(def.key, draftValue, def.key);
+                        setSavingMetric(null);
+                        fetch(`/api/crm/properties/${propertyId}`)
+                          .then((r) => r.json()).then((d) => setLogs(d.logs ?? []));
+                      }
+
+                      return (
+                        <div key={def.key} style={{
+                          background: allSaved ? `${color}06` : "#F8FAFC",
+                          borderRadius: 10,
+                          border: `1px solid ${isDirty ? color + "50" : color + "20"}`,
+                          padding: "10px 12px",
+                        }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", marginBottom: 8 }}>{def.label}</div>
+                          {def.type === "toggle" && (
+                            <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+                              {["Yes", "No"].map((opt) => (
+                                <button key={opt} onClick={() => setMetricEdit((p) => ({ ...p, [def.key]: opt }))}
+                                  style={{ flex: 1, padding: "4px 0", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                    border: draftValue === opt ? "none" : "1px solid #E2E8F0",
+                                    background: draftValue === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#FFF",
+                                    color: draftValue === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#94A3B8" }}>
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {def.type === "select" && (
+                            <select value={draftValue} onChange={(e) => setMetricEdit((p) => ({ ...p, [def.key]: e.target.value }))}
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 7, marginBottom: 10,
+                                border: `1px solid ${color}30`, fontSize: 12, background: "#FFF" }}>
+                              {def.options!.map((o) => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          )}
+                          {def.type === "text" && (
+                            <input value={draftValue} onChange={(e) => setMetricEdit((p) => ({ ...p, [def.key]: e.target.value }))}
+                              placeholder="e.g. 15"
+                              style={{ width: "100%", padding: "5px 8px", borderRadius: 7, marginBottom: 10,
+                                border: `1px solid ${color}30`, fontSize: 12, outline: "none", background: "#FFF", boxSizing: "border-box" }} />
+                          )}
+                          {dateFields.map((df, i) => (
+                            <div key={df.key} style={{ marginBottom: 8 }}>
+                              <div style={{ fontSize: 9, fontWeight: 600, color: "#94A3B8", marginBottom: 3 }}>{df.label.toUpperCase()}</div>
+                              <input type="date" value={draftDates[i]}
+                                onChange={(e) => setMetricEdit((p) => ({ ...p, [df.key]: e.target.value }))}
+                                style={{ width: "100%", padding: "4px 6px", borderRadius: 7,
+                                  border: `1px solid ${color}30`, fontSize: 11, background: "#FFF", boxSizing: "border-box" }} />
+                            </div>
+                          ))}
+                          {isDirty ? (
+                            <button onClick={commitMetric} disabled={!canSave || isSaving}
+                              style={{ width: "100%", padding: "5px 0", borderRadius: 7, border: "none",
+                                background: canSave ? color : "#E2E8F0", color: canSave ? "#FFF" : "#94A3B8",
+                                fontSize: 11, fontWeight: 700, cursor: canSave ? "pointer" : "not-allowed",
+                                opacity: isSaving ? 0.7 : 1, marginTop: 4 }}>
+                              {isSaving ? "Saving…" : canSave ? "Save" : "Fill all fields"}
+                            </button>
+                          ) : allSaved && (
+                            <div style={{ fontSize: 9, color: "#059669", fontWeight: 600, marginTop: 4 }}>✓ Saved</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Tasks panel */}
             <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>

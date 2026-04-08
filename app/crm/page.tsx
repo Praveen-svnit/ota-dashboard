@@ -20,7 +20,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; dot: string }> 
 };
 
 interface OtaChip {
-  ota: string; status: string; subStatus: string; liveDate: string | null;
+  ota: string; otaId: string | null; status: string; subStatus: string; liveDate: string | null;
 }
 
 interface Row {
