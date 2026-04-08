@@ -79,38 +79,6 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-// ── Filter sidebar section ─────────────────────────────────────────────────
-
-function FilterSection({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div style={{ borderBottom: "1px solid #F1F5F9" }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-          width: "100%", padding: "10px 14px", background: "none", border: "none",
-          cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#374151", textAlign: "left" }}>
-        <span>{label}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          {count ? <span style={{ background: "#4F46E5", color: "#fff", borderRadius: 10,
-            fontSize: 9, fontWeight: 700, padding: "1px 6px" }}>{count}</span> : null}
-          <span style={{ color: "#9CA3AF", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
-        </div>
-      </button>
-      {open && <div style={{ padding: "0 14px 10px" }}>{children}</div>}
-    </div>
-  );
-}
-
-// ── KPI tile ──────────────────────────────────────────────────────────────
-
-function KpiTile({ label, value, color, bg, border }: { label: string; value: number; color: string; bg: string; border: string }) {
-  return (
-    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: "10px 14px", flex: 1, minWidth: 100 }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1 }}>{value.toLocaleString()}</div>
-      <div style={{ fontSize: 10, fontWeight: 600, color, opacity: 0.8, marginTop: 3 }}>{label}</div>
-    </div>
-  );
-}
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
@@ -141,6 +109,8 @@ export default function CrmPage() {
   const [hoveredRow,   setHoveredRow]   = useState<number | null>(null);
   const otaDropRef = useRef<HTMLDivElement>(null);
   const [otaDropOpen, setOtaDropOpen] = useState(false);
+  const [sortBy,  setSortBy]  = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -203,9 +173,6 @@ export default function CrmPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
-
-  const [sortBy,  setSortBy]  = useState<string>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const [csvLoading, setCsvLoading] = useState(false);
   const downloadCsv = () => {
@@ -318,186 +285,94 @@ export default function CrmPage() {
         </button>
       </div>
 
-      {/* ── Body: sidebar + main ── */}
+      {/* ── Body ── */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
-        {/* ── Left filter sidebar ── */}
-        <div style={{ width: 230, background: "#fff", borderRight: "1px solid #E2E8F0",
-          overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+        {/* ── Main content ── */}
+        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 
-          {/* Sidebar header */}
-          <div style={{ padding: "12px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Filters
-              {activeFilterCount > 0 && (
-                <span style={{ marginLeft: 6, background: "#4F46E5", color: "#fff",
-                  borderRadius: 10, fontSize: 9, padding: "1px 6px" }}>
-                  {activeFilterCount}
-                </span>
-              )}
-            </span>
-            {activeFilterCount > 0 && (
-              <button onClick={clearFilters}
-                style={{ fontSize: 10, color: "#4F46E5", background: "none", border: "none",
-                  cursor: "pointer", padding: 0, fontWeight: 600 }}>
-                Clear all
-              </button>
-            )}
-          </div>
+          {/* ── Filter bar ── */}
+          <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
 
-          {/* Quick views */}
-          <div style={{ padding: "0 14px 10px", borderBottom: "1px solid #F1F5F9" }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginBottom: 6, textTransform: "uppercase" }}>
-              Quick View
-            </div>
-            {[
-              { label: "All Listings",    val: "all",               count: totalListings },
-              { label: "Live",            val: "live_ss",            count: liveCount },
-              { label: "Not Live",        val: "not live_ss",        count: notLiveCount },
-              { label: "Ready to Go Live",val: "ready to go live",   count: readyCount },
-            ].map(qv => {
-              const isActive = qv.val === "all"
-                ? statusFilter === "all" && subStatusFilter === "all"
-                : qv.val.endsWith("_ss")
-                  ? subStatusFilter === qv.val.replace("_ss","")
-                  : statusFilter === qv.val;
-              return (
-                <button key={qv.label} onClick={() => {
-                  if (qv.val === "all") { setStatusFilter("all"); setSubStatusFilter("all"); }
-                  else if (qv.val.endsWith("_ss")) { setSubStatusFilter(qv.val.replace("_ss","")); setStatusFilter("all"); }
-                  else { setStatusFilter(qv.val); setSubStatusFilter("all"); }
-                }}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                    width: "100%", padding: "5px 8px", borderRadius: 6, border: "none",
-                    background: isActive ? "#EEF2FF" : "none", cursor: "pointer",
-                    fontSize: 11, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? "#4F46E5" : "#475569", marginBottom: 1, textAlign: "left" }}>
-                  <span>{qv.label}</span>
-                  <span style={{ fontSize: 10, color: isActive ? "#4F46E5" : "#9CA3AF", fontWeight: 600 }}>
-                    {qv.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* OTA filter */}
-          <FilterSection label="OTA" count={otaFilter !== "all" ? 1 : 0}>
+            {/* OTA */}
             <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
               disabled={!!summary?.userOta}
-              style={{ width: "100%", padding: "6px 8px", border: "1px solid #E2E8F0",
-                borderRadius: 6, fontSize: 11, background: "#F8FAFC", color: "#374151",
-                outline: "none" }}>
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: otaFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: otaFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
               <option value="all">All OTAs</option>
               {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
                 <option key={o} value={o}>{o}</option>
               ))}
             </select>
-          </FilterSection>
 
-          {/* FH Status filter */}
-          <FilterSection label="FH Status" count={fhStatusFilter.length}>
-            {["Live", "SoldOut", "Churned"].map(s => {
-              const checked = fhStatusFilter.includes(s);
-              return (
-                <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                  padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                  <input type="checkbox" checked={checked}
-                    onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
-                    style={{ accentColor: "#4F46E5" }} />
-                  <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>
-                    {s}
-                  </span>
-                </label>
-              );
-            })}
-          </FilterSection>
-
-          {/* Status filter */}
-          <FilterSection label="OTA Status" count={statusFilter !== "all" ? 1 : 0}>
-            {["all", ...statusOptions].map(s => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                <input type="radio" name="status" checked={statusFilter === s}
-                  onChange={() => setStatusFilter(s)}
-                  style={{ accentColor: "#4F46E5" }} />
-                <span style={{ color: statusFilter === s ? "#4F46E5" : "#475569",
-                  fontWeight: statusFilter === s ? 600 : 400, textTransform: "capitalize" }}>
-                  {s === "all" ? "All Statuses" : s}
-                </span>
-              </label>
-            ))}
-          </FilterSection>
-
-          {/* Sub-status filter */}
-          <FilterSection label="Sub-Status" count={subStatusFilter !== "all" ? 1 : 0}>
-            {["all", ...subStatusOptions].map(s => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                <input type="radio" name="subStatus" checked={subStatusFilter === s}
-                  onChange={() => setSubStatusFilter(s)}
-                  style={{ accentColor: "#4F46E5" }} />
-                <span style={{ color: subStatusFilter === s ? "#4F46E5" : "#475569",
-                  fontWeight: subStatusFilter === s ? 600 : 400, textTransform: "capitalize" }}>
-                  {s === "all" ? "All Sub-Statuses" : s}
-                </span>
-              </label>
-            ))}
-          </FilterSection>
-
-          {/* FH Date range */}
-          <FilterSection label="FH Live Date" count={(fhDateFrom || fhDateTo) ? 1 : 0}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>FROM</div>
-                <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>TO</div>
-                <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              {(fhDateFrom || fhDateTo) && (
-                <button onClick={() => { setFhDateFrom(""); setFhDateTo(""); }}
-                  style={{ fontSize: 10, color: "#DC2626", background: "none", border: "none",
-                    cursor: "pointer", padding: 0, textAlign: "left", fontWeight: 600 }}>
-                  ✕ Clear dates
-                </button>
-              )}
+            {/* FH Status checkboxes */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#F8FAFC" }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginRight: 2 }}>FH:</span>
+              {["Live", "SoldOut", "Churned"].map(s => {
+                const checked = fhStatusFilter.includes(s);
+                return (
+                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11 }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
+                      style={{ accentColor: "#4F46E5", width: 11, height: 11 }} />
+                    <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>{s}</span>
+                  </label>
+                );
+              })}
             </div>
-          </FilterSection>
 
-          {/* OTA Date range */}
-          <FilterSection label="OTA Live Date" count={(otaDateFrom || otaDateTo) ? 1 : 0}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>FROM</div>
-                <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>TO</div>
-                <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              {(otaDateFrom || otaDateTo) && (
-                <button onClick={() => { setOtaDateFrom(""); setOtaDateTo(""); }}
-                  style={{ fontSize: 10, color: "#DC2626", background: "none", border: "none",
-                    cursor: "pointer", padding: 0, textAlign: "left", fontWeight: 600 }}>
-                  ✕ Clear dates
-                </button>
-              )}
+            {/* OTA Status */}
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: statusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: statusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Statuses</option>
+              {statusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+
+            {/* Sub-Status */}
+            <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: subStatusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: subStatusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Sub-Statuses</option>
+              {subStatusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+
+            {/* FH Live Date range */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>FH Date:</span>
+              <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateFrom ? "#EEF2FF" : "#F8FAFC", color: fhDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateTo ? "#EEF2FF" : "#F8FAFC", color: fhDateTo ? "#4F46E5" : "#374151" }} />
             </div>
-          </FilterSection>
-        </div>
 
-        {/* ── Main content ── */}
-        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            {/* OTA Live Date range */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>OTA Date:</span>
+              <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateFrom ? "#EEF2FF" : "#F8FAFC", color: otaDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateTo ? "#EEF2FF" : "#F8FAFC", color: otaDateTo ? "#4F46E5" : "#374151" }} />
+            </div>
+
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters}
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #FECACA",
+                  background: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", whiteSpace: "nowrap" }}>
+                ✕ Clear
+              </button>
+            )}
+          </div>
 
           {/* Stats bar */}
           <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "0 20px" }}>
