@@ -136,6 +136,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         {/* Admin */}
         <SectionHeader label="Admin" />
         <NavLink icon="🔄" label="Migration"      href="/admin/migration" />
+        <NavLink icon="🔑" label="API Keys"       href="/admin/api-keys" />
       </nav>
 
       {/* Footer */}

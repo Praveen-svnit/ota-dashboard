@@ -330,4 +330,16 @@ export async function initPostgresSchema() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_gmb_property_id ON gmb_tracker(property_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_gmb_status      ON gmb_tracker(gmb_status)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      key_hash    TEXT NOT NULL UNIQUE,
+      created_by  TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used   TIMESTAMPTZ,
+      revoked     BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `;
 }
