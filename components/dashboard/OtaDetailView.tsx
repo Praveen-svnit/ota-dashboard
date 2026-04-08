@@ -701,10 +701,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           {/* Status × Sub-status */}
           {(() => {
             const xPivot = dashData.ssStatusPivot[otaName] ?? {};
-            const ssCols = dashData.columns.filter(col => (dashData.pivot[otaName]?.[col] ?? 0) > 0);
+            // ssCols: only columns with count > 0 for this OTA (used for dynamic "Pending at X")
+            const ssCols    = dashData.columns.filter(col => (dashData.pivot[otaName]?.[col] ?? 0) > 0);
+            // allSsCols: all sub-status columns that exist globally (used for static groups)
+            const allSsCols = new Set(dashData.columns);
 
             const SS_COLS = [
-              { label: "Live",              subs: ssCols.filter(s => s === "Live" || s === "FH Live"), color: "#16A34A", bg: "#DCFCE7" },
+              { label: "Live",              subs: ["Live", "FH Live"].filter(s => allSsCols.has(s)), color: "#16A34A", bg: "#DCFCE7" },
               { label: "Supply/Operations", subs: ["Supply/Operations"],                               color: "#6D28D9", bg: "#F5F3FF" },
               { label: "Revenue",           subs: ["Revenue"],                                         color: "#C2410C", bg: "#FFF7ED" },
               { label: "OTA Team",          subs: ["OTA Team"],                                        color: "#B45309", bg: "#FEF3C7" },
@@ -717,10 +720,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               { label: "Exception",         subs: ["Exception"],                                       color: "#B45309", bg: "#FEF3C7" },
               { label: "Blank",             subs: ["Blank"],                                           color: "#64748B", bg: "#F1F5F9" },
               { label: "Churned",           subs: ["Churned"],                                         color: "#DC2626", bg: "#FEE2E2" },
-            ].filter(c => c.subs.some(s => ssCols.includes(s)));
+            ].filter(c => c.subs.some(s => allSsCols.has(s)));
 
             const colData = SS_COLS.map(col => {
-              const activeSubs = col.subs.filter(s => ssCols.includes(s));
+              const activeSubs = col.subs.filter(s => allSsCols.has(s));
               const colTotal = activeSubs.reduce((sum, ss) =>
                 sum + Object.values(xPivot[ss] ?? {}).reduce((s, n) => s + n, 0), 0);
               const stBreakdown: Record<string, number> = {};
