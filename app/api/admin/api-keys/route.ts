@@ -6,15 +6,29 @@ function hashKey(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
-function adminOnly() {
-  return Response.json({ error: "Forbidden" }, { status: 403 });
+async function ensureTable() {
+  const sql = getSql();
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      key_hash    TEXT NOT NULL UNIQUE,
+      created_by  TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used   TIMESTAMPTZ,
+      revoked     BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `;
 }
 
 // GET — list all keys
 export async function GET() {
   const session = await getSession();
-  if (!session || session.role !== "admin") return adminOnly();
+  if (!session || (session.role !== "admin" && session.role !== "head")) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
+  await ensureTable();
   const sql = getSql();
   const rows = await sql`
     SELECT id, name, created_by, created_at, last_used, revoked
@@ -27,14 +41,17 @@ export async function GET() {
 // POST — generate a new key
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session || session.role !== "admin") return adminOnly();
+  if (!session || (session.role !== "admin" && session.role !== "head")) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { name } = await req.json();
   if (!name?.trim()) return Response.json({ error: "Name is required" }, { status: 400 });
 
-  const raw    = "ota_" + randomBytes(32).toString("hex");
-  const hash   = hashKey(raw);
-  const id     = "key_" + randomBytes(8).toString("hex");
+  await ensureTable();
+  const raw  = "ota_" + randomBytes(32).toString("hex");
+  const hash = hashKey(raw);
+  const id   = "key_" + randomBytes(8).toString("hex");
 
   const sql = getSql();
   await sql`
@@ -48,7 +65,9 @@ export async function POST(req: Request) {
 // DELETE — revoke a key
 export async function DELETE(req: Request) {
   const session = await getSession();
-  if (!session || session.role !== "admin") return adminOnly();
+  if (!session || (session.role !== "admin" && session.role !== "head")) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");

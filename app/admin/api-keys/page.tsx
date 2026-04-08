@@ -20,6 +20,7 @@ export default function ApiKeysPage() {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [copied, setCopied]       = useState(false);
   const [revoking, setRevoking]   = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
 
   async function loadKeys() {
     setLoading(true);
@@ -36,15 +37,22 @@ export default function ApiKeysPage() {
   async function handleGenerate() {
     if (!newName.trim()) return;
     setGenerating(true);
-    const res = await fetch("/api/admin/api-keys", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim() }),
-    });
-    if (res.ok) {
-      const data = await res.json() as { key: string };
-      setGeneratedKey(data.key);
-      loadKeys();
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      const data = await res.json() as { key?: string; error?: string };
+      if (!res.ok) {
+        setError(data.error ?? `Error ${res.status}`);
+      } else {
+        setGeneratedKey(data.key!);
+        loadKeys();
+      }
+    } catch (e) {
+      setError(String(e));
     }
     setGenerating(false);
   }
@@ -149,6 +157,7 @@ export default function ApiKeysPage() {
               <>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#0F172A", marginBottom: 6 }}>Generate New API Key</div>
                 <div style={{ fontSize: 12, color: "#64748B", marginBottom: 18 }}>Give this key a name so you remember what it&apos;s for.</div>
+                {error && <div style={{ marginBottom: 12, padding: "8px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 8, fontSize: 12, color: "#DC2626" }}>{error}</div>}
                 <input
                   autoFocus
                   value={newName}
