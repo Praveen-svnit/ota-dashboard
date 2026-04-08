@@ -503,20 +503,6 @@ export default function CrmPage() {
 
             {statsOpen && (
               <div style={{ paddingBottom: 14 }}>
-                {/* KPI row */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <KpiTile label="Total" value={totalListings} color="#0F172A" bg="#F8FAFC" border="#E2E8F0" />
-                  <KpiTile label="Live" value={liveCount} color="#059669" bg="#F0FDF4" border="#BBF7D0" />
-                  <KpiTile label="Not Live" value={notLiveCount} color="#DC2626" bg="#FEF2F2" border="#FECACA" />
-                  <KpiTile label="Ready" value={readyCount} color="#854D0E" bg="#FEFCE8" border="#FDE68A" />
-                  <div style={{ width: 1, background: "#E2E8F0", margin: "0 4px" }} />
-                  <KpiTile label="Open Tasks" value={summary?.tasksOpen ?? 0} color="#2563EB" bg="#EFF6FF" border="#BFDBFE" />
-                  <KpiTile label="High Priority" value={summary?.tasksHigh ?? 0} color="#DC2626" bg="#FEF2F2" border="#FECACA" />
-                  <KpiTile label="Overdue" value={summary?.tasksOverdue ?? 0}
-                    color={(summary?.tasksOverdue ?? 0) > 0 ? "#C2410C" : "#059669"}
-                    bg={(summary?.tasksOverdue ?? 0) > 0 ? "#FFF7ED" : "#F0FDF4"}
-                    border={(summary?.tasksOverdue ?? 0) > 0 ? "#FED7AA" : "#BBF7D0"} />
-                </div>
 
                 {/* Listing Breakdown */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
