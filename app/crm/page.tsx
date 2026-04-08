@@ -291,89 +291,6 @@ export default function CrmPage() {
         {/* ── Main content ── */}
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
 
-          {/* ── Filter bar ── */}
-          <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-
-            {/* OTA */}
-            <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
-              disabled={!!summary?.userOta}
-              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
-                background: otaFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
-                color: otaFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
-              <option value="all">All OTAs</option>
-              {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-
-            {/* FH Status checkboxes */}
-            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#F8FAFC" }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginRight: 2 }}>FH:</span>
-              {["Live", "SoldOut", "Churned"].map(s => {
-                const checked = fhStatusFilter.includes(s);
-                return (
-                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11 }}>
-                    <input type="checkbox" checked={checked}
-                      onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
-                      style={{ accentColor: "#4F46E5", width: 11, height: 11 }} />
-                    <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>{s}</span>
-                  </label>
-                );
-              })}
-            </div>
-
-            {/* OTA Status */}
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
-                background: statusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
-                color: statusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
-              <option value="all">All Statuses</option>
-              {statusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
-            </select>
-
-            {/* Sub-Status */}
-            <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)}
-              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
-                background: subStatusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
-                color: subStatusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
-              <option value="all">All Sub-Statuses</option>
-              {subStatusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
-            </select>
-
-            {/* FH Live Date range */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>FH Date:</span>
-              <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
-                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
-                  background: fhDateFrom ? "#EEF2FF" : "#F8FAFC", color: fhDateFrom ? "#4F46E5" : "#374151" }} />
-              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
-              <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
-                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
-                  background: fhDateTo ? "#EEF2FF" : "#F8FAFC", color: fhDateTo ? "#4F46E5" : "#374151" }} />
-            </div>
-
-            {/* OTA Live Date range */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>OTA Date:</span>
-              <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
-                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
-                  background: otaDateFrom ? "#EEF2FF" : "#F8FAFC", color: otaDateFrom ? "#4F46E5" : "#374151" }} />
-              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
-              <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
-                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
-                  background: otaDateTo ? "#EEF2FF" : "#F8FAFC", color: otaDateTo ? "#4F46E5" : "#374151" }} />
-            </div>
-
-            {activeFilterCount > 0 && (
-              <button onClick={clearFilters}
-                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #FECACA",
-                  background: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600,
-                  cursor: "pointer", whiteSpace: "nowrap" }}>
-                ✕ Clear
-              </button>
-            )}
-          </div>
-
           {/* Stats bar */}
           <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "0 20px" }}>
             <button onClick={() => setStatsOpen(o => !o)}
@@ -536,6 +453,76 @@ export default function CrmPage() {
             </div>
           )}
 
+          {/* ── Filter bar ── */}
+          <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
+              disabled={!!summary?.userOta}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: otaFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: otaFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All OTAs</option>
+              {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#F8FAFC" }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginRight: 2 }}>FH:</span>
+              {["Live", "SoldOut", "Churned"].map(s => {
+                const checked = fhStatusFilter.includes(s);
+                return (
+                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11 }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
+                      style={{ accentColor: "#4F46E5", width: 11, height: 11 }} />
+                    <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>{s}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: statusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: statusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Statuses</option>
+              {statusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+            <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: subStatusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: subStatusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Sub-Statuses</option>
+              {subStatusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>FH Date:</span>
+              <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateFrom ? "#EEF2FF" : "#F8FAFC", color: fhDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateTo ? "#EEF2FF" : "#F8FAFC", color: fhDateTo ? "#4F46E5" : "#374151" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>OTA Date:</span>
+              <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateFrom ? "#EEF2FF" : "#F8FAFC", color: otaDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateTo ? "#EEF2FF" : "#F8FAFC", color: otaDateTo ? "#4F46E5" : "#374151" }} />
+            </div>
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters}
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #FECACA",
+                  background: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", whiteSpace: "nowrap" }}>
+                ✕ Clear
+              </button>
+            )}
+          </div>
+
           {/* List header */}
           <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10,
             background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
@@ -564,10 +551,10 @@ export default function CrmPage() {
               };
               return (
                 <div style={{ display: "grid",
-                  gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
+                  gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 90px 70px",
                   padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
                   gap: 8 }}>
-                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "Task Due", ""].map(h => {
+                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "OTA Live Date", "Task Due", ""].map(h => {
                     const sortKey = SORT_COLS[h];
                     return (
                       <div key={h}
@@ -604,7 +591,7 @@ export default function CrmPage() {
                   onMouseEnter={() => setHoveredRow(i)}
                   onMouseLeave={() => setHoveredRow(null)}
                   style={{ display: "grid",
-                    gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 90px 70px",
+                    gridTemplateColumns: "60px 2fr 100px 110px 90px 100px 110px 100px 90px 70px",
                     padding: "10px 20px", gap: 8, alignItems: "center",
                     borderBottom: "1px solid #F1F5F9",
                     background: isHovered ? "#F8FAFC" : "#fff",
@@ -652,6 +639,11 @@ export default function CrmPage() {
                   {/* Sub-Status */}
                   <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {singleOta?.subStatus || <span style={{ color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* OTA Live Date */}
+                  <div style={{ fontSize: 11, color: "#475569" }}>
+                    {singleOta?.liveDate ? fmtDate(singleOta.liveDate) : <span style={{ color: "#CBD5E1" }}>—</span>}
                   </div>
 
                   {/* Task due */}
