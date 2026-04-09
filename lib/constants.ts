@@ -25,6 +25,7 @@ export const OTAS = [
   "EaseMyTrip",
   "Indigo",
   "Hotelbeds",
+  "GMB",
 ];
 
 export const RNS_OTAS = [
@@ -82,3 +83,5 @@ export const INV_SHEET_ID  = "1VkFA4keBAT3tG5NkZwmSNRbLZJgx2neOhZ7Zuj2z_98";
 export const INV_SHEET_TAB = "Inventory";
 export const RNS_RAW_SHEET_ID  = "1xI0TjmZkmKwD27nNIhah7iaQtbpAmX5tfJYckbw2Jio";
 export const RNS_RAW_TAB       = "Raw_Data_New";
+export const GMB_SHEET_ID  = "16awDYKs1jdR0x5VDJTo8CokB_fqqjr7JRpmRY0tv4Fk";
+export const GMB_SHEET_TAB = "new tracker";

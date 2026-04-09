@@ -14,11 +14,11 @@ const OTA_LIST = [
   { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED", tab: "Clear Trip" },
   { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE", tab: "EMT" },
   { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF", noSheet: true },
-  { name: "GMB",            color: "#34A853", bg: "#F0FBF4", tab: "GMB", noSheet: true },
+  { name: "GMB",            color: "#34A853", bg: "#F0FBF4", tab: "new tracker" },
 ];
 
 // OTAs without a Google Sheet yet — only bootstrap available, no sync
-const NO_SHEET_OTAS = new Set(["Indigo", "GMB"]);
+const NO_SHEET_OTAS = new Set(["Indigo"]);
 
 type SyncState = {
   syncing: boolean;

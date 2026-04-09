@@ -1,6 +1,6 @@
 import { getSql } from "@/lib/db-postgres";
 import { parseCSV } from "@/lib/sheets";
-import { SHEET_ID } from "@/lib/constants";
+import { SHEET_ID, GMB_SHEET_ID, GMB_SHEET_TAB } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 
@@ -47,8 +47,8 @@ function clean(v: string | undefined): string | null {
   return t;
 }
 
-async function fetchTab(tab: string): Promise<{ cols: string[]; rows: string[][] }> {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+async function fetchTab(tab: string, sheetId: string = SHEET_ID): Promise<{ cols: string[]; rows: string[][] }> {
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch tab "${tab}": ${res.status}`);
   return parseCSV(await res.text());
@@ -181,6 +181,7 @@ async function batchUpsert(
 type OtaDef = {
   ota: string;
   tab: string;
+  sheetId?: string; // defaults to SHEET_ID if omitted
   updateSubStatus: boolean;
   updateOnly: boolean;
   buildRecords: (cols: string[], rows: string[][], propertyId?: string) => OtaRecord[];
@@ -287,6 +288,21 @@ const OTA_DEFS: OtaDef[] = [
       });
     },
   },
+  {
+    ota: "GMB", tab: GMB_SHEET_TAB, sheetId: GMB_SHEET_ID, updateSubStatus: true, updateOnly: false,
+    buildRecords(cols, rows, pid?) {
+      const pidC  = col(cols, "property_id");
+      const staC  = col(cols, "status");
+      const ssC   = col(cols, "gmb sub status");
+      const dateC = col(cols, "created_at");
+      const ppC   = col(cols, "pre/post");
+      const idC   = col(cols, "number");
+      return rows.flatMap(r => {
+        const p = clean(r[pidC]); if (!p || (pid && p !== pid)) return [];
+        return [{ property_id: p, ota: "GMB", status: clean(r[staC]), sub_status: clean(r[ssC]), live_date: parseDate(r[dateC]), ota_id: clean(r[idC]), pre_post: clean(r[ppC]) }];
+      });
+    },
+  },
 ];
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -317,9 +333,10 @@ export async function POST(req: NextRequest) {
   // Fetch tabs (de-duplicate in case multiple OTAs share a tab)
   const tabCache: Record<string, { cols: string[]; rows: string[][] }> = {};
   for (const def of defs) {
-    if (!tabCache[def.tab]) {
+    const cacheKey = `${def.sheetId ?? SHEET_ID}::${def.tab}`;
+    if (!tabCache[cacheKey]) {
       try {
-        tabCache[def.tab] = await fetchTab(def.tab);
+        tabCache[cacheKey] = await fetchTab(def.tab, def.sheetId);
       } catch (e) {
         errors.push(`Fetch "${def.tab}": ${e}`);
       }
@@ -328,7 +345,8 @@ export async function POST(req: NextRequest) {
 
   // Process each OTA
   for (const def of defs) {
-    const tabData = tabCache[def.tab];
+    const cacheKey = `${def.sheetId ?? SHEET_ID}::${def.tab}`;
+    const tabData = tabCache[cacheKey];
     if (!tabData) { errors.push(`${def.ota}: sheet not available`); continue; }
     try {
       const records = def.buildRecords(tabData.cols, tabData.rows, propertyId);
