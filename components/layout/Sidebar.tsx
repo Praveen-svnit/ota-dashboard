@@ -36,13 +36,13 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           display: "flex", alignItems: "center", gap: 8,
           padding: collapsed ? "9px 0" : indent ? "7px 10px 7px 22px" : "8px 10px",
           borderRadius: 7, marginBottom: 1,
-          background: active ? "#EFF6FF" : "transparent",
-          color: active ? "#2563EB" : indent ? "#9CA3AF" : "#64748B",
+          background: active ? "#5D87FF" : "transparent",
+          color: active ? "#FFFFFF" : indent ? "#9CA3AF" : "#64748B",
           textDecoration: "none", fontSize: indent ? 11 : 12,
           fontWeight: active ? 600 : 400,
           justifyContent: collapsed ? "center" : "flex-start",
           transition: "background 0.12s, color 0.12s",
-          borderLeft: active && !collapsed ? "3px solid #2563EB" : "3px solid transparent",
+          borderLeft: "none",
         }}
       >
         <span style={{ fontSize: indent ? 12 : 14, flexShrink: 0 }}>{icon}</span>
@@ -55,7 +55,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     if (collapsed) return <div style={{ height: 1, background: "#F1F5F9", margin: "8px 4px" }} />;
     return (
       <div style={{
-        fontSize: 9, fontWeight: 700, color: "#B0BAC9",
+        fontSize: 9, fontWeight: 700, color: "#A0AEC0",
         letterSpacing: "0.1em", textTransform: "uppercase",
         padding: "12px 8px 4px",
       }}>
@@ -84,7 +84,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 12px 10px", borderBottom: "1px solid #F1F5F9" }}>
         {!collapsed && (
           <span style={{ color: "#1E293B", fontWeight: 800, fontSize: 13, letterSpacing: "0.01em", whiteSpace: "nowrap" }}>
-            OTA Command
+            OTA Connect
           </span>
         )}
         <button
@@ -108,43 +108,42 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* Dashboards */}
         <SectionHeader label="Dashboards" />
-        <NavLink icon="▣" label="Production Dashboard" href="/" />
-        <NavLink icon="▤" label="Listing Dashboard"    href="/listing-dashboard" />
+        <NavLink icon="📊" label="Production Dashboard" href="/" />
+        <NavLink icon="🏠" label="Listing Dashboard"    href="/listing-dashboard" />
 
-        {/* Property Manager */}
-        <SectionHeader label="Property Manager" />
-        <NavLink icon="≡" label="Property Status" href="/listings" />
-        <NavLink icon="◈" label="Property CRM"    href="/crm" />
+        {/* CRM */}
+        <SectionHeader label="CRM" />
+        <NavLink icon="🏢" label="Property CRM"   href="/crm" />
+        <NavLink icon="📋" label="Property Status" href="/listings" />
+        <NavLink icon="✅" label="Tasks"          href="/tasks" />
+        <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
 
         {/* Team */}
-        {(sessionUser?.role === "admin" || sessionUser?.role === "head" || sessionUser?.role === "tl") && (<>
-          <SectionHeader label="Team & Workflow" />
-          <NavLink icon="◉" label="Team"             href="/team" />
-          <NavLink icon="◎" label="Team Performance"  href="/performance" />
-        </>)}
+        <SectionHeader label="Team & Workflow" />
+        <NavLink icon="👥" label="Team"           href="/team" />
+        <NavLink icon="📈" label="Team Performance" href="/performance" />
+
+        {/* BDC Reports */}
+        <SectionHeader label="BDC Reports" />
+        <NavLink icon="📅" label="Today's Tasks"  href="/todays-assigned-tasks" />
+        <NavLink icon="⭐" label="BDC Genius"      href="/reports/genius" />
+        <NavLink icon="🔍" label="BDC Hygiene"     href="/reports/hygiene" />
+
+        {/* MMT Reports */}
+        <SectionHeader label="MMT Reports" />
+        <NavLink icon="🧼" label="MMT Hygiene"   href="/reports/mmt-hygiene" />
 
         {/* Admin */}
-        {(sessionUser?.role === "admin" || sessionUser?.role === "head") && (<>
-          <SectionHeader label="Admin" />
-          <NavLink icon="⇡" label="Upload RNS Data"    href="/admin/upload-rns" />
-          <NavLink icon="⟳" label="OTA Migration"      href="/admin/migration" />
-          <NavLink icon="◈" label="Status Logic"        href="/admin/status-config" />
-        </>)}
-
-        {/* Reports */}
-        <SectionHeader label="Reports" />
-        <NavLink icon="◉" label="OTA Analytics"         href="/ota-analytics" />
-        <NavLink icon="✦" label="Today's Assigned Tasks" href="/todays-assigned-tasks" />
-        <NavLink icon="⚠" label="Incomplete Data"        href="/incomplete" />
-        <NavLink icon="★" label="BDC Genius"             href="/reports/genius" />
-        <NavLink icon="✦" label="BDC Hygiene"            href="/reports/hygiene" />
+        <SectionHeader label="Admin" />
+        <NavLink icon="🔄" label="Migration"      href="/admin/migration" />
+        <NavLink icon="🔑" label="API Keys"       href="/admin/api-keys" />
       </nav>
 
       {/* Footer */}
       <div style={{ padding: collapsed ? "10px 6px" : "10px 10px 14px", borderTop: "1px solid #F1F5F9" }}>
 
         {!collapsed && (
-          <div style={{ marginTop: 6, fontSize: 10, color: "#94A3B8" }}>
+          <div style={{ marginBottom: 8, fontSize: 10, color: "#94A3B8" }}>
             {lastRefreshed
               ? `Updated ${lastRefreshed.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
               : "Not yet loaded"}
@@ -153,11 +152,11 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* User info + logout */}
         {sessionUser && !collapsed && (
-          <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid #F1F5F9",
+          <div style={{ paddingTop: 8, borderTop: "1px solid #F1F5F9",
             display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EFF6FF",
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#EEF2FF",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 800, color: "#2563EB", flexShrink: 0 }}>
+              fontSize: 11, fontWeight: 800, color: "#5D87FF", flexShrink: 0 }}>
               {sessionUser.name[0].toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -184,10 +183,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           </button>
         )}
       </div>
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </aside>
   );
 }

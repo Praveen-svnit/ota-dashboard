@@ -127,16 +127,14 @@ export async function POST() {
     const sql = getSql();
 
     // Delete last 7 days from both tables, then re-insert fresh data
-    await sql`DELETE FROM sold_rns WHERE date >= NOW()::DATE - INTERVAL '7 days'`;
-    await sql`DELETE FROM stay_rns WHERE date >= NOW()::DATE - INTERVAL '7 days'`;
+    await sql`DELETE FROM sold_rns WHERE checkin >= NOW()::DATE - INTERVAL '7 days'`;
+    await sql`DELETE FROM stay_rns WHERE checkin >= NOW()::DATE - INTERVAL '7 days'`;
 
     let soldCount = 0;
     for (const r of soldRows) {
       await sql`
-        INSERT INTO sold_rns (date, channel, rns, revenue, initial_prop_id, final_prop_id, synced_at)
+        INSERT INTO sold_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
         VALUES (${r.date}::date, ${r.channel}, ${r.rns}, ${r.revenue}, ${r.initId}, ${r.finalId}, NOW())
-        ON CONFLICT (date, channel, initial_prop_id, final_prop_id) DO UPDATE SET
-          rns = EXCLUDED.rns, revenue = EXCLUDED.revenue, synced_at = NOW()
       `;
       soldCount++;
     }
@@ -144,10 +142,8 @@ export async function POST() {
     let stayCount = 0;
     for (const r of stayRows) {
       await sql`
-        INSERT INTO stay_rns (date, channel, rns, revenue, initial_prop_id, final_prop_id, status, synced_at)
-        VALUES (${r.date}::date, ${r.channel}, ${r.rns}, ${r.revenue}, ${r.initId}, ${r.finalId}, ${r.status}, NOW())
-        ON CONFLICT (date, channel, initial_prop_id, final_prop_id) DO UPDATE SET
-          rns = EXCLUDED.rns, revenue = EXCLUDED.revenue, status = EXCLUDED.status, synced_at = NOW()
+        INSERT INTO stay_rns (checkin, ota_booking_source_desc, rns, rev, initial_property_id, property_id, synced_at)
+        VALUES (${r.date}::date, ${r.channel}, ${r.rns}, ${r.revenue}, ${r.initId}, ${r.finalId}, NOW())
       `;
       stayCount++;
     }

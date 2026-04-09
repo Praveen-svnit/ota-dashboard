@@ -74,7 +74,7 @@ type LauncherState = LauncherPrefill & {
 
 function routeLabel(pathname: string) {
   if (pathname === "/") return "Production Dashboard";
-  if (pathname === "/production-dashboard-2" || pathname === "/ota-analytics") return "OTA Analytics";
+  if (pathname === "/production-dashboard-2") return "Production Dashboard 2";
   if (pathname === "/todays-assigned-tasks") return "Today's Assigned Tasks";
   if (pathname.startsWith("/crm")) return "Property CRM";
   if (pathname.startsWith("/listings")) return "Property Status";

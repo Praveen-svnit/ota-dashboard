@@ -11,7 +11,7 @@ const OTA_SLUG_MAP: Record<string, string> = {
   "Indigo":"indigo",
 };
 
-const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo"];
+const OTA_LIST_ORDER = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo","GMB"];
 
 const T = {
   pageBg:   "#F4F7FB",
@@ -32,6 +32,8 @@ const T = {
 };
 
 const OTA_COLORS: Record<string, string> = {
+  "Overview":      "#5D87FF",
+  "GMB":           "#34A853",
   "GoMMT":         "#E83F6F",
   "Booking.com":   "#2563EB",
   "Agoda":         "#7C3AED",
@@ -96,15 +98,29 @@ interface CatRow { ota: string; live: number; exception: number; readyToGoLive: 
 interface TatStat { avgTat: number; d0_7: number; d8_15: number; d16_30: number; d31_60: number; d60p: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: Stats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; }
 
+/* ── Listing Tracker constants ──────────────────────────────────────────── */
+const LT_OTAS = [
+  "GoMMT", "Expedia", "Cleartrip", "Indigo",
+  "Agoda", "Yatra", "Ixigo", "Akbar Travels", "EaseMyTrip",
+  "Booking.com",
+  "GMB",
+];
+const LT_UNSIGNED = new Set(["Ixigo", "Akbar Travels"]);
+
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [view,        setView]        = useState<"overview" | "gmb" | "ota">("overview");
-  const [selectedOta, setSelectedOta] = useState<string | null>(null);
+  const [selectedOta, setSelectedOta] = useState<string>("Overview");
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   const [liveExpanded, setLiveExpanded] = useState(false);
   const [tatExpanded, setTatExpanded]   = useState(false);
+  // ── Listing Tracker state ──
+  const [ltView,   setLtView]   = useState<"mom" | "dod">("mom");
+  const [ltL12m,   setLtL12m]   = useState<{ months: string[]; byOta: Record<string, number[]> }>({ months: [], byOta: {} });
+  const [ltDod,    setLtDod]    = useState<{ labels: string[]; byOta: Record<string, number[]> }>({ labels: [], byOta: {} });
+  const [ltRtgl,   setLtRtgl]   = useState<Record<string, number>>({});
+  const [ltLoading, setLtLoading] = useState(true);
   type PopupInfo = { type: "live" } | { type: "ota"; ota: string } | { type: "tatExhausted" };
   const [popup,    setPopup]    = useState<PopupInfo | null>(null);
   const [popupPos, setPopupPos] = useState({ x: 240, y: 160 });
@@ -169,6 +185,21 @@ export default function ListingDashboardPage() {
 
   useEffect(() => { load(); loadNl(); }, []);
 
+  useEffect(() => {
+    let done = 0;
+    const tryFinish = () => { if (++done === 2) setLtLoading(false); };
+    fetch("/api/dashboard-data")
+      .then(r => r.json())
+      .then(d => { if (d.l12mOtaLive && d.l12mMonths) setLtL12m({ months: d.l12mMonths, byOta: d.l12mOtaLive }); })
+      .catch(console.error)
+      .finally(tryFinish);
+    fetch("/api/perf-data")
+      .then(r => r.json())
+      .then(p => { if (p.rtglCounts) setLtRtgl(p.rtglCounts); if (p.dod) setLtDod(p.dod); })
+      .catch(console.error)
+      .finally(tryFinish);
+  }, []);
+
   return (
     <div style={{ padding: "22px 24px", background: "linear-gradient(180deg, #F7FAFD 0%, #EEF4FA 100%)", minHeight: "100vh" }}>
       <style>{`
@@ -185,86 +216,34 @@ export default function ListingDashboardPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
           </div>
         </div>
-        {/* View toggle — Overview / GMB / OTA Wise */}
-        <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 10, padding: 3 }}>
-          {([
-            { key: "overview", label: "Overview" },
-            { key: "gmb",      label: "GMB" },
-            { key: "ota",      label: "OTA Wise" },
-          ] as { key: "overview" | "gmb" | "ota"; label: string }[]).map(({ key, label }) => {
-            const active = view === key;
+        {/* OTA tab strip */}
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+          {["Overview", ...OTA_LIST_ORDER].map(name => {
+            const active = selectedOta === name;
+            const color  = OTA_COLORS[name] ?? T.orange;
             return (
               <button
-                key={key}
-                onClick={() => setView(key)}
+                key={name}
+                onClick={() => setSelectedOta(name)}
                 style={{
-                  padding: "7px 18px", fontSize: 11, fontWeight: 700,
-                  borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit",
-                  background: active ? "#FFFFFF" : "transparent",
-                  color:      active ? T.textPri : "#94A3B8",
-                  boxShadow: active ? "0 1px 4px rgba(15,23,42,0.10)" : "none",
+                  padding: "5px 13px", fontSize: 11, fontWeight: 700,
+                  border: `1px solid ${active ? color : T.cardBdr}`,
+                  borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
+                  background: active ? color : "#FFFFFF",
+                  color:      active ? "#FFFFFF" : "#64748B",
                   transition: "all 0.13s ease",
                 }}
               >
-                {label}
+                {name}
               </button>
             );
           })}
         </div>
       </div>
 
-      {view === "gmb" ? (
+      {selectedOta === "GMB" ? (
         <GmbTab />
-      ) : view === "ota" ? (
-        /* ── OTA Wise view ── */
-        <div>
-          {/* OTA filter row */}
-          <div style={{
-            display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center",
-            marginBottom: 18, padding: "12px 16px",
-            background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
-            borderRadius: 14, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
-          }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>Select OTA</span>
-            {OTA_LIST_ORDER.map(name => {
-              const active = selectedOta === name;
-              const color  = OTA_COLORS[name] ?? T.orange;
-              return (
-                <button
-                  key={name}
-                  onClick={() => setSelectedOta(active ? null : name)}
-                  style={{
-                    padding: "6px 14px", fontSize: 11, fontWeight: 700,
-                    border: `1px solid ${active ? color : T.cardBdr}`,
-                    borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
-                    background: active ? color : "#FFFFFF",
-                    color:      active ? "#FFFFFF" : "#64748B",
-                    boxShadow: active ? `0 4px 12px ${color}30` : "none",
-                    transition: "all 0.13s ease",
-                  }}
-                >
-                  {name}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* OTA detail or empty state */}
-          {selectedOta ? (
-            <OtaDetailView otaName={selectedOta} />
-          ) : (
-            <div style={{
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              padding: "60px 24px", background: "#FFFFFF", border: `1px solid ${T.cardBdr}`,
-              borderRadius: 18, boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
-            }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>◈</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: T.textPri, marginBottom: 6 }}>Select an OTA to view analytics</div>
-              <div style={{ fontSize: 11, color: T.textMut }}>Month-wise TAT · Not Live Properties · Sub-status breakdown</div>
-            </div>
-          )}
-        </div>
-      ) : (
+      ) : selectedOta === "Overview" ? (
         <>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
@@ -283,55 +262,25 @@ export default function ListingDashboardPage() {
 
         return (
           <>
-            {/* ── KPI Cards ── */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-
-              {/* Live Props */}
-              <div style={{ ...kpi, flex: "2 1 200px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", color: T.textSec }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.live }}>Live</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.live, background: T.liveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.live.toLocaleString()}
-                    </span>
-                  </span>
-                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.notLive }}>Sold Out</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 16, fontWeight: 900, color: T.notLive, background: T.notLiveL, padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.soldOut.toLocaleString()}
-                    </span>
-                  </span>
-                  <span style={{ color: T.textMut, fontSize: 11, fontWeight: 700 }}>||</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: T.textSec }}>Total</span>
-                    <span style={{ minWidth: 58, textAlign: "center", fontSize: 14, fontWeight: 800, color: T.textSec, background: "#F1F5F9", padding: "3px 10px", borderRadius: 7, lineHeight: 1.1 }}>
-                      {data.stats.total.toLocaleString()}
-                    </span>
-                  </span>
-                </div>
+          {/* ── KPI Cards ── */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+            {[
+              { label: "Live",          value: data.stats.live,               accent: "#16A34A" },
+              { label: "Sold Out",      value: data.stats.soldOut,            accent: "#DC2626" },
+              { label: "Total",         value: data.stats.total,              accent: "#475569" },
+              { label: `Onboarded · ${new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}`,
+                                        value: data.stats.onboardedThisMonth, accent: "#0F766E" },
+              { label: "MTD Listings",  value: data.stats.mtdListings,        accent: "#5D87FF" },
+              { label: "Live %",        value: `${grandPct.toFixed(1)}%`,     accent: liveColor(grandPct).text, isStr: true },
+            ].map(({ label, value, accent, isStr }) => (
+              <div key={label} style={{ ...kpi, flex: "1 1 110px", minWidth: 100 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1 }}>{isStr ? value : (value as number).toLocaleString()}</div>
               </div>
+            ))}
+          </div>
 
-              {/* Onboarded */}
-              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: `3px solid ${T.orange}` }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: T.orange, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-                  Onboarded · {new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}
-                </div>
-                <span style={{ fontSize: 19, fontWeight: 900, color: T.orange, background: T.orangeL, padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
-                  {data.stats.onboardedThisMonth.toLocaleString()}
-                </span>
-              </div>
-
-              {/* MTD */}
-              <div style={{ ...kpi, flex: "1 1 110px", borderLeft: "3px solid #7C3AED" }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>MTD New Listings</div>
-                <span style={{ fontSize: 19, fontWeight: 900, color: "#7C3AED", background: "#EDE9FE", padding: "2px 10px", borderRadius: 7, display: "inline-block", lineHeight: 1.1 }}>
-                  {data.stats.mtdListings.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            {/* ── OTA Listing Status Table ── */}
+          {/* ── OTA Listing Status Table ── */}
             {(() => {
               const cats       = data.categories;
               const otasSorted = cats.map(r => r.ota);
@@ -344,6 +293,7 @@ export default function ListingDashboardPage() {
                 tatExhausted: acc.tatExhausted + r.tatExhausted,
               }), { live: 0, exception: 0, readyToGoLive: 0, inProcess: 0, tatExhausted: 0 });
               const grandTot = totals.live + totals.exception + totals.readyToGoLive + totals.inProcess + totals.tatExhausted;
+              const overallLivePct = grandTot > 0 ? ((totals.live + totals.exception) / grandTot) * 100 : 0;
 
               const ROWS = [
                 { key: "live",         label: "Live", color: "#166534", bg: "#F2FBF5", accent: "#22C55E" },
@@ -353,50 +303,51 @@ export default function ListingDashboardPage() {
                 { key: "tatExhausted", label: "TAT Exhausted", color: "#B42318", bg: "#FFF4F2", accent: "#F97066" },
               ] as const;
               const TABLE_THEME = {
-                shellBg: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
-                shellBorder: "#D6E0EB",
-                headerBg: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)",
-                headerBorder: "#D8E4EE",
-                title: "#0F172A",
+                shellBg: "#FFFFFF",
+                shellBorder: "#E2E8F0",
+                headerBg: "rgba(15, 118, 110, 0.06)",
+                headerBorder: "#D1FAE5",
+                title: "#1E293B",
                 subtitle: "#64748B",
-                badgeBg: "#EEF7F6",
-                badgeText: "#0F766E",
-                sectionBg: "#F6FAFD",
-                sectionBorder: "#DCE6EF",
-                stickyBg: "#FFFFFF",
-                stickyMutedBg: "#F4F9F8",
-                gridSoft: "#E2EAF2",
-                totalRowBg: "#EDF7F5",
-                totalCellBg: "#E4F3EF",
-                totalText: "#0F766E",
+                badgeBg: "rgba(59, 130, 246, 0.10)",
+                badgeText: "#2563EB",
+                sectionBg: "#FFFFFF",
+                sectionBorder: "#E2E8F0",
+                stickyBg: "#F8FAFC",
+                stickyMutedBg: "#F1F5F9",
+                gridSoft: "#E2E8F0",
+                totalRowBg: "#F1F5F9",
+                totalCellBg: "#F8FAFC",
+                totalText: "#0F172A",
                 mutedText: "#64748B",
-                headerText: "#4A5E75",
+                headerText: "#1E293B",
               };
 
               const TH_STICKY: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 2,
-                padding: "9px 14px", textAlign: "left", fontSize: 10, fontWeight: 700,
-                color: TABLE_THEME.headerText, background: TABLE_THEME.sectionBg,
-                borderBottom: `1px solid ${TABLE_THEME.sectionBorder}`, borderRight: `1px solid ${TABLE_THEME.sectionBorder}`,
+                padding: "11px 14px", textAlign: "left", fontSize: 10, fontWeight: 700,
+                color: TABLE_THEME.headerText, background: TABLE_THEME.stickyBg,
+                borderBottom: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
                 whiteSpace: "nowrap", minWidth: 130,
               };
               const TH_CELL: React.CSSProperties = {
                 padding: "9px 10px", textAlign: "center", fontSize: 10, fontWeight: 700,
                 color: TABLE_THEME.headerText, background: TABLE_THEME.sectionBg,
-                borderBottom: `1px solid ${TABLE_THEME.sectionBorder}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`, whiteSpace: "nowrap", minWidth: 76,
+                borderBottom: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`, whiteSpace: "nowrap", minWidth: 86,
               };
               const TD_STICKY: React.CSSProperties = {
                 position: "sticky", left: 0, zIndex: 1,
                 padding: "9px 14px", fontSize: 11, fontWeight: 600,
-                background: TABLE_THEME.stickyBg, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
+                background: TABLE_THEME.stickyMutedBg, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
                 whiteSpace: "nowrap", minWidth: 220,
               };
               const TD_CELL: React.CSSProperties = {
                 padding: "9px 10px", textAlign: "center", borderTop: `1px solid ${TABLE_THEME.gridSoft}`, borderRight: `1px solid ${TABLE_THEME.gridSoft}`,
+                background: TABLE_THEME.sectionBg,
               };
               const INLINE_WRAP: React.CSSProperties = {
                 padding: "12px 14px",
-                background: "#FCFCFD",
+                background: "#F8FAFC",
                 borderTop: `1px solid ${TABLE_THEME.gridSoft}`,
                 borderBottom: `1px solid ${TABLE_THEME.gridSoft}`,
               };
@@ -405,7 +356,8 @@ export default function ListingDashboardPage() {
                 textAlign: "center",
                 fontWeight: 700,
                 border: `1px solid ${TABLE_THEME.gridSoft}`,
-                background: "#F8FAFC",
+                background: "#0A1120",
+                color: TABLE_THEME.headerText,
                 whiteSpace: "nowrap",
               };
               const INLINE_TD: React.CSSProperties = {
@@ -423,26 +375,26 @@ export default function ListingDashboardPage() {
               ] as const;
 
               return (
-                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
+                <div style={{ background: TABLE_THEME.shellBg, border: `1px solid ${TABLE_THEME.shellBorder}`, borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 20px 40px rgba(15, 23, 42, 0.25)", padding: 0 }}>
 
                   {/* Header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 5px #D6F5EF" }} />
-                      <div style={{ fontSize: 14, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.01em" }}>OTA Listing Status</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: TABLE_THEME.badgeText, background: TABLE_THEME.badgeBg, padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid rgba(15, 118, 110, 0.12)" }}>
-                        {grandTot.toLocaleString()} listings
-                      </span>
-                      <span style={{ fontSize: 10, color: "#166534", background: "#ECFDF3", padding: "3px 9px", borderRadius: 99, fontWeight: 700, border: "1px solid #D1FADF" }}>
-                        {(grandTot > 0 ? ((totals.live + totals.exception) / grandTot) * 100 : 0).toFixed(1)}% live rate
-                      </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${TABLE_THEME.headerBorder}`, background: TABLE_THEME.headerBg, flexWrap: "wrap", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 6px rgba(16, 185, 129, 0.22)" }} />
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: TABLE_THEME.title, letterSpacing: "-0.02em" }}>OTA Listing Status</div>
                     </div>
                   </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: TABLE_THEME.title }}>{grandTot.toLocaleString()} listings</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: liveColor(overallLivePct).text }}>
+                      {overallLivePct.toFixed(1)}% live rate
+                    </span>
+                  </div>
+                </div>
 
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                    <div style={{ overflowX: "auto", padding: "0 16px 16px" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", minWidth: 860, color: TABLE_THEME.headerText }}>
                       <thead>
                         <tr style={{ background: TABLE_THEME.sectionBg }}>
                           <th style={{ ...TH_STICKY }}>
@@ -470,12 +422,9 @@ export default function ListingDashboardPage() {
 
                         {/* Live % row */}
                         <tr style={{ background: TABLE_THEME.sectionBg, borderBottom: `2px solid ${TABLE_THEME.sectionBorder}` }}>
-                          <td style={{ ...TD_STICKY, background: TABLE_THEME.stickyMutedBg, color: "#5B708A" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
-                                <span style={{ fontSize: 12 }}>%</span> Live Rate
-                              </span>
-                              <span style={{ fontSize: 9, color: TABLE_THEME.mutedText }}>Live + exception as share of total</span>
+                          <td style={{ ...TD_STICKY, background: TABLE_THEME.stickyMutedBg, color: TABLE_THEME.headerText }}>
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>Live Rate</span>
                             </div>
                           </td>
                           {otasSorted.map(ota => {
@@ -517,7 +466,7 @@ export default function ListingDashboardPage() {
                               <span style={{ display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
                                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: row.accent, flexShrink: 0 }} />
                                 {row.label}
-                                {(isLiveRow || isTatRow) && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", fontSize: 10, lineHeight: 1, color: row.color, background: row.bg, border: `1px solid ${row.accent}40`, flexShrink: 0 }}>{expanded ? "v" : ">"}</span>}
+                                {(isLiveRow || isTatRow) && <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", fontSize: 12, lineHeight: 1, color: row.color, background: row.bg, border: `1px solid ${row.accent}40`, flexShrink: 0 }}>{expanded ? "▾" : "▸"}</span>}
                               </span>
                             </td>
                             {otasSorted.map(ota => {
@@ -657,6 +606,233 @@ export default function ListingDashboardPage() {
               );
             })()}
 
+            {/* ── Listing Tracker (MoM / DoD) ─────────────────────────────────── */}
+            {(() => {
+              const LT_GRID   = "#E2E8F0";
+              const LT_HDR_BG = "rgba(15, 118, 110, 0.06)";
+              const LT_HDR_BR = "#D1FAE5";
+              const LT_TH_S: React.CSSProperties = {
+                position: "sticky", left: 0, zIndex: 2,
+                padding: "6px 10px", textAlign: "left", fontSize: 9, fontWeight: 700,
+                color: "#1E293B", background: "#F8FAFC",
+                borderBottom: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
+                whiteSpace: "nowrap", minWidth: 110,
+              };
+              const LT_TH_C: React.CSSProperties = {
+                padding: "6px 7px", textAlign: "center", fontSize: 9, fontWeight: 700,
+                color: "#1E293B", background: "#FFFFFF",
+                borderBottom: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
+                whiteSpace: "nowrap", minWidth: 42,
+              };
+              const LT_TD_S: React.CSSProperties = {
+                position: "sticky", left: 0, zIndex: 1,
+                padding: "5px 10px", fontSize: 10, fontWeight: 600,
+                background: "#F1F5F9", borderRight: `1px solid ${LT_GRID}`,
+                whiteSpace: "nowrap",
+              };
+              const LT_TD_C: React.CSSProperties = {
+                padding: "5px 7px", textAlign: "center",
+                borderTop: `1px solid ${LT_GRID}`, borderRight: `1px solid ${LT_GRID}`,
+                background: "#FFFFFF",
+              };
+              const revMonths = [...ltL12m.months].reverse();
+              const revLabels = [...ltDod.labels].reverse();
+              const colTotals = revMonths.map((_, mi) => {
+                const origIdx = ltL12m.months.length - 1 - mi;
+                return LT_OTAS.reduce((s, ota) => s + ((ltL12m.byOta[ota] ?? [])[origIdx] ?? 0), 0);
+              });
+              return (
+                <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 18, overflow: "hidden", marginBottom: 20, boxShadow: "0 20px 40px rgba(15, 23, 42, 0.25)", padding: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: `1px solid ${LT_HDR_BR}`, background: LT_HDR_BG, flexWrap: "wrap", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 6px rgba(16, 185, 129, 0.22)" }} />
+                      <div style={{ fontSize: 15, fontWeight: 800, color: "#1E293B", letterSpacing: "-0.02em" }}>Listing Tracker</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 3, background: "#F1F5F9", borderRadius: 8, padding: 3 }}>
+                      {(["mom", "dod"] as const).map((v) => {
+                        const active = ltView === v;
+                        return (
+                          <button key={v} onClick={() => setLtView(v)} style={{
+                            padding: "4px 14px", fontSize: 10, fontWeight: 700, borderRadius: 6,
+                            border: "none", cursor: "pointer", fontFamily: "inherit",
+                            background: active ? "#FFFFFF" : "transparent",
+                            color: active ? "#0F172A" : "#94A3B8",
+                            boxShadow: active ? "0 1px 3px rgba(15,23,42,0.10)" : "none",
+                            transition: "all 0.12s",
+                          }}>
+                            {v === "mom" ? "L12M" : "L15D"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {ltView === "mom" && ltL12m.months.length > 0 && (
+                    <div style={{ overflowX: "auto", padding: "0 16px 16px" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", color: "#1E293B" }}>
+                        <thead>
+                          <tr style={{ background: "#F8FAFC" }}>
+                            <th style={{ ...LT_TH_S }}>OTA</th>
+                            {revMonths.map((mo, mi) => {
+                              const isCm = mi === 0;
+                              return (
+                                <th key={mo} style={{
+                                  ...LT_TH_C,
+                                  background:   isCm ? "#EEF2FF" : "#F8FAFC",
+                                  color:        isCm ? "#6366F1" : "#64748B",
+                                  borderLeft:   isCm ? "2px solid #C7D2FE" : undefined,
+                                  borderRight:  isCm ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}`,
+                                  borderBottom: isCm ? "2px solid #6366F1" : `1px solid ${LT_GRID}`,
+                                  fontWeight:   isCm ? 800 : 700,
+                                }}>{mo}</th>
+                              );
+                            })}
+                            <th style={{ ...LT_TH_C, background: "#F0FDF4", color: "#16A34A", minWidth: 60 }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...LT_OTAS].sort((a, b) => {
+                            const totalA = (ltL12m.byOta[a] ?? []).reduce((s, v) => s + v, 0);
+                            const totalB = (ltL12m.byOta[b] ?? []).reduce((s, v) => s + v, 0);
+                            return totalB - totalA;
+                          }).map((ota) => {
+                            const otaColor = OTA_COLORS[ota] ?? "#64748B";
+                            const origVals = ltL12m.byOta[ota] ?? Array(ltL12m.months.length).fill(0);
+                            const vals     = [...origVals].reverse();
+                            const rowTotal = vals.reduce((s, v) => s + v, 0);
+                            const maxVal   = Math.max(...vals, 1);
+                            const logo     = OTA_LOGO_STYLE[ota] ?? { mark: ota.slice(0, 2), bg: "#F2F4F7", text: "#344054", ring: "#D0D5DD" };
+                            return (
+                              <tr key={ota} className="trow" style={{ borderBottom: `1px solid ${LT_GRID}` }}>
+                                <td style={{ ...LT_TD_S, borderBottom: `1px solid ${LT_GRID}`, borderLeft: `3px solid ${otaColor}` }}>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
+                                    <span style={{ width: 16, height: 16, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
+                                    <span style={{ fontSize: 9, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
+                                  </div>
+                                </td>
+                                {vals.map((cnt, mi) => {
+                                  const isCm      = mi === 0;
+                                  const rtgl      = isCm && LT_UNSIGNED.has(ota) ? (ltRtgl[ota] ?? 0) : 0;
+                                  const intensity = cnt > 0 ? Math.round((cnt / maxVal) * 80) + 20 : 0;
+                                  const bg = cnt === 0 ? (isCm ? "#EEF2FF" : "#FFFFFF") : `${otaColor}${intensity.toString(16).padStart(2, "0")}`;
+                                  return (
+                                    <td key={mi} style={{ ...LT_TD_C, background: bg, borderLeft: isCm ? "2px solid #C7D2FE" : undefined, borderRight: isCm ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
+                                      <span style={{ fontSize: 10, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isCm ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
+                                    </td>
+                                  );
+                                })}
+                                <td style={{ ...LT_TD_C, background: "#F0FDF4", borderRight: `1px solid ${LT_GRID}` }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background: "#F1F5F9", borderTop: `2px solid ${LT_GRID}` }}>
+                            <td style={{ ...LT_TD_S, background: "#F1F5F9", fontWeight: 800, fontSize: 10, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${LT_GRID}` }}>Total</td>
+                            {colTotals.map((ct, mi) => {
+                              const isCm = mi === 0;
+                              return (
+                                <td key={mi} style={{ ...LT_TD_C, background: isCm ? "#EEF2FF" : "#F1F5F9", borderLeft: isCm ? "2px solid #C7D2FE" : undefined, borderRight: isCm ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
+                                  <span style={{ fontSize: 12, fontWeight: 800, color: ct > 0 ? (isCm ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : ct || "·"}</span>
+                                </td>
+                              );
+                            })}
+                            <td style={{ ...LT_TD_C, background: "#DCFCE7", borderRight: `1px solid ${LT_GRID}` }}>
+                              <span style={{ fontSize: 12, fontWeight: 900, color: "#16A34A" }}>{ltLoading ? "—" : colTotals.reduce((s, v) => s + v, 0)}</span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  {ltView === "dod" && (
+                    <div style={{ overflowX: "auto", padding: "0 16px 16px" }}>
+                      <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", color: "#1E293B" }}>
+                        <thead>
+                          <tr style={{ background: "#F8FAFC" }}>
+                            <th style={{ ...LT_TH_S }}>OTA</th>
+                            <th style={{ ...LT_TH_C, background: "#F0FDF4", color: "#16A34A", minWidth: 46 }}>Total</th>
+                            {revLabels.map((lbl, i) => {
+                              const isToday = i === 0;
+                              return (
+                                <th key={lbl} style={{
+                                  ...LT_TH_C,
+                                  background:   isToday ? "#EEF2FF" : "#F8FAFC",
+                                  color:        isToday ? "#6366F1" : "#64748B",
+                                  borderBottom: isToday ? "2px solid #6366F1" : `1px solid ${LT_GRID}`,
+                                  fontWeight:   isToday ? 800 : 700,
+                                }}>{lbl}</th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...LT_OTAS].sort((a, b) => {
+                            const totalA = (ltDod.byOta[a] ?? []).reduce((s, v) => s + v, 0);
+                            const totalB = (ltDod.byOta[b] ?? []).reduce((s, v) => s + v, 0);
+                            return totalB - totalA;
+                          }).map((ota) => {
+                            const otaColor   = OTA_COLORS[ota] ?? "#64748B";
+                            const origCounts = ltDod.byOta[ota] ?? Array(15).fill(0);
+                            const counts     = [...origCounts].reverse();
+                            const rowTotal   = counts.reduce((s, v) => s + v, 0);
+                            const maxVal     = Math.max(...counts, 1);
+                            const logo       = OTA_LOGO_STYLE[ota] ?? { mark: ota.slice(0, 2), bg: "#F2F4F7", text: "#344054", ring: "#D0D5DD" };
+                            return (
+                              <tr key={ota} className="trow" style={{ borderBottom: `1px solid ${LT_GRID}` }}>
+                                <td style={{ ...LT_TD_S, borderBottom: `1px solid ${LT_GRID}`, borderLeft: `3px solid ${otaColor}` }}>
+                                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
+                                    <span style={{ width: 16, height: 16, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
+                                    <span style={{ fontSize: 9, fontWeight: 800, color: otaColor, whiteSpace: "nowrap" }}>{OTA_SHORT[ota] ?? ota}</span>
+                                  </div>
+                                </td>
+                                <td style={{ ...LT_TD_C, background: "#F0FDF4", borderRight: `1px solid ${LT_GRID}` }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: rowTotal > 0 ? "#16A34A" : "#CBD5E1" }}>{ltLoading ? "—" : rowTotal}</span>
+                                </td>
+                                {counts.map((cnt, di) => {
+                                  const isToday   = di === 0;
+                                  const rtgl      = isToday && LT_UNSIGNED.has(ota) ? (ltRtgl[ota] ?? 0) : 0;
+                                  const intensity = cnt > 0 ? Math.round((cnt / maxVal) * 100) : 0;
+                                  const bg = cnt === 0 ? (isToday ? "#EEF2FF" : "#FFFFFF") : `${otaColor}${Math.max(18, intensity).toString(16).padStart(2, "0")}`;
+                                  return (
+                                    <td key={di} style={{ ...LT_TD_C, background: bg, borderLeft: isToday ? "2px solid #C7D2FE" : undefined, borderRight: isToday ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
+                                      <span style={{ fontSize: 10, fontWeight: cnt > 0 ? 700 : 400, color: cnt > 0 ? (isToday ? "#6366F1" : otaColor) : "#CBD5E1" }}>{ltLoading ? "—" : cnt || "·"}</span>
+                                      {!ltLoading && rtgl > 0 && <div style={{ fontSize: 7, fontWeight: 700, color: "#D97706", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, padding: "0 4px", marginTop: 2, whiteSpace: "nowrap" }}>+{rtgl} RTGL</div>}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background: "#F1F5F9", borderTop: `2px solid ${LT_GRID}` }}>
+                            <td style={{ ...LT_TD_S, background: "#F1F5F9", fontWeight: 800, fontSize: 9, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${LT_GRID}` }}>Total</td>
+                            <td style={{ ...LT_TD_C, background: "#DCFCE7", borderRight: `1px solid ${LT_GRID}` }}>
+                              <span style={{ fontSize: 11, fontWeight: 900, color: "#16A34A" }}>{ltLoading ? "—" : LT_OTAS.reduce((s, ota) => s + (ltDod.byOta[ota] ?? []).reduce((a, v) => a + v, 0), 0)}</span>
+                            </td>
+                            {revLabels.map((_, di) => {
+                              const origDi   = revLabels.length - 1 - di;
+                              const dayTotal = LT_OTAS.reduce((s, ota) => s + ((ltDod.byOta[ota] ?? [])[origDi] ?? 0), 0);
+                              const isToday  = di === 0;
+                              return (
+                                <td key={di} style={{ ...LT_TD_C, background: isToday ? "#EEF2FF" : "#F1F5F9", borderLeft: isToday ? "2px solid #C7D2FE" : undefined, borderRight: isToday ? "2px solid #C7D2FE" : `1px solid ${LT_GRID}` }}>
+                                  <span style={{ fontSize: 10, fontWeight: dayTotal > 0 ? 800 : 400, color: dayTotal > 0 ? (isToday ? "#6366F1" : "#374151") : "#CBD5E1" }}>{ltLoading ? "—" : dayTotal || "·"}</span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ── Floating Popup ── */}
             {popup && (() => {
@@ -896,6 +1072,8 @@ export default function ListingDashboardPage() {
       })()}
 
         </>
+      ) : (
+        <OtaDetailView otaName={selectedOta} />
       )}
     </div>
   );
@@ -1103,6 +1281,7 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
                 { label: "Sub Status", key: "subStatus" as SortKey },
                 { label: "OTA Live", key: "liveDate" as SortKey },
                 { label: "TAT (days)", key: "tat" as SortKey },
+                { label: "Open" },
               ].map((h, i) => {
                 const sortable = !!h.key;
                 return (
@@ -1136,7 +1315,7 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
             )}
             {!loading && sortedRows.map((row, i) => {
               const sc = getSSColor(row.subStatus ?? "");
@@ -1167,11 +1346,18 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
                       ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span>
                       : <span style={{ color: T.textMut }}>—</span>}
                   </td>
+                  <td style={{ ...NL_TD, textAlign: "center" }}>
+                    <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700,
+                      background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40",
+                      borderRadius: 6, textDecoration: "none", whiteSpace: "nowrap",
+                    }}>Open ↗</a>
+                  </td>
                 </tr>
               );
             })}
             {!loading && data?.rows.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
             )}
           </tbody>
         </table>
@@ -1243,11 +1429,12 @@ function actionBtn(bg: string, color: string, disabled: boolean): React.CSSPrope
 }
 
 const kpi: React.CSSProperties = {
-  background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)",
-  border: "1px solid #D8E1EC",
-  borderRadius: 16,
-  padding: "8px 10px",
-  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.06)",
+  background: "#FFFFFF",
+  border: `1px solid #E2E8F0`,
+  borderRadius: 12,
+  padding: "10px 14px",
+  boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
+  color: "#1E293B",
 };
 
 const TH_STICKY: React.CSSProperties = {

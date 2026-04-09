@@ -125,9 +125,10 @@ export default function TasksPage() {
         {/* Tab strip */}
         <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 10, padding: 4, gap: 2 }}>
           {([
-            ["CRM",          "/crm",         false],
-            ["Task Manager", "/tasks",        true ],
-            ["Performance",  "/performance",  false],
+            ["CRM",           "/crm",                false],
+            ["Task Manager",  "/tasks",               true ],
+            ["Performance",   "/performance",         false],
+            ["Status Config", "/admin/status-config", false],
           ] as [string, string, boolean][]).map(([label, href, active]) => (
             <Link key={label} href={href} style={{
               padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,

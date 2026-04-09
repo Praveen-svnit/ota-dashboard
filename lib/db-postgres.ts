@@ -1,24 +1,40 @@
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
-let _sql: ReturnType<typeof neon> | null = null;
+let _pool: Pool | null = null;
 
-export function getSql() {
+type SqlFn = {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<Record<string, unknown>[]>;
+  query(text: string, params?: unknown[]): Promise<Record<string, unknown>[]>;
+};
+
+let _sql: SqlFn | null = null;
+
+export function getSql(): SqlFn {
   if (!_sql) {
     const raw = process.env.DATABASE_URL;
     if (!raw) throw new Error("DATABASE_URL not set");
 
-    // neon() requires postgresql:// — Railway often provides postgres://
-    // Also strip unsupported options (channel_binding) and trim whitespace
-    let url = raw.trim().replace(/^postgres:\/\//, "postgresql://");
+    _pool = new Pool({
+      connectionString: raw,
+      ssl: false,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      options: '-c search_path=public',
+    });
 
-    // Remove channel_binding param — not supported by neon HTTP client
-    try {
-      const u = new URL(url);
-      u.searchParams.delete("channel_binding");
-      url = u.toString();
-    } catch { /* keep url as-is if URL parse fails */ }
+    const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.reduce((acc, str, i) =>
+        acc + str + (i < values.length ? `$${i + 1}` : ""), "");
+      const res = await _pool!.query(text, values);
+      return res.rows as Record<string, unknown>[];
+    };
 
-    _sql = neon(url);
+    sql.query = async (text: string, params: unknown[] = []) => {
+      const res = await _pool!.query(text, params);
+      return res.rows as Record<string, unknown>[];
+    };
+
+    _sql = sql;
   }
   return _sql;
 }
@@ -45,40 +61,51 @@ export async function initPostgresSchema() {
 
   await sql`
     CREATE TABLE IF NOT EXISTS stay_rns (
-      id               SERIAL PRIMARY KEY,
-      date             DATE NOT NULL,
-      channel          TEXT NOT NULL,
-      rns              INTEGER NOT NULL DEFAULT 0,
-      revenue          NUMERIC(12,2) NOT NULL DEFAULT 0,
-      initial_prop_id  TEXT NOT NULL DEFAULT '',
-      final_prop_id    TEXT NOT NULL DEFAULT '',
-      status           TEXT,
-      synced_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (date, channel, initial_prop_id, final_prop_id)
+      id                      SERIAL PRIMARY KEY,
+      property_id             BIGINT,
+      initial_property_id     BIGINT,
+      booking_id              VARCHAR(64),
+      created_at              DATE,
+      checkin                 DATE,
+      checkout                DATE,
+      guest_status_desc       VARCHAR(128),
+      booking_source_desc     VARCHAR(128),
+      ota_booking_source_desc VARCHAR(128),
+      ota_booking_source      INT,
+      rns                     INT             NOT NULL DEFAULT 0,
+      rev                     NUMERIC(18,4)   NOT NULL DEFAULT 0,
+      zone                    TEXT,
+      synced_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
     )
   `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_date    ON stay_rns(date)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_channel ON stay_rns(channel)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_final   ON stay_rns(final_prop_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_stayrns_initial ON stay_rns(initial_prop_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_checkin  ON stay_rns(checkin)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_ota      ON stay_rns(ota_booking_source_desc)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_stay_property ON stay_rns(property_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_stay_booking_id ON stay_rns(booking_id) WHERE booking_id IS NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS sold_rns (
-      id               SERIAL PRIMARY KEY,
-      date             DATE NOT NULL,
-      channel          TEXT NOT NULL,
-      rns              INTEGER NOT NULL DEFAULT 0,
-      revenue          NUMERIC(12,2) NOT NULL DEFAULT 0,
-      initial_prop_id  TEXT NOT NULL DEFAULT '',
-      final_prop_id    TEXT NOT NULL DEFAULT '',
-      synced_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (date, channel, initial_prop_id, final_prop_id)
+      id                      SERIAL PRIMARY KEY,
+      property_id             BIGINT,
+      initial_property_id     BIGINT,
+      booking_id              VARCHAR(64),
+      created_at              DATE,
+      checkin                 DATE,
+      checkout                DATE,
+      guest_status_desc       VARCHAR(128),
+      booking_source_desc     VARCHAR(128),
+      ota_booking_source_desc VARCHAR(128),
+      ota_booking_source      INT,
+      rns                     INT             NOT NULL DEFAULT 0,
+      rev                     NUMERIC(18,4)   NOT NULL DEFAULT 0,
+      zone                    TEXT,
+      synced_at               TIMESTAMPTZ     NOT NULL DEFAULT NOW()
     )
   `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_date    ON sold_rns(date)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_channel ON sold_rns(channel)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_final   ON sold_rns(final_prop_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_soldrns_initial ON sold_rns(initial_prop_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_checkin  ON sold_rns(checkin)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_ota      ON sold_rns(ota_booking_source_desc)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_sold_property ON sold_rns(property_id)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_booking_id ON sold_rns(booking_id) WHERE booking_id IS NOT NULL`;
 
   // ── Users ──────────────────────────────────────────────────────────────────
   await sql`
@@ -103,7 +130,7 @@ export async function initPostgresSchema() {
   if (Number(rows[0].n) === 0) {
     await sql`
       INSERT INTO users (id, username, password_hash, name, role, created_at)
-      VALUES ('user_admin_1', 'admin', '$2b$10$/xPJxWaZgPZ0SKyRLUSQ/OhQbKmp.7BltjTR4i3D7y0Hy4VwapTky', 'Admin', 'admin', NOW())
+      VALUES ('user_admin_1', 'Admin', '$2b$10$AHZlj64k3tp37a3JEX0HQ.cAcrhCCJnjRsnbfzfgFRJp0mawvzvey', 'Admin', 'admin', NOW())
     `;
   }
 
@@ -303,4 +330,16 @@ export async function initPostgresSchema() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS idx_gmb_property_id ON gmb_tracker(property_id)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_gmb_status      ON gmb_tracker(gmb_status)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      key_hash    TEXT NOT NULL UNIQUE,
+      created_by  TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used   TIMESTAMPTZ,
+      revoked     BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `;
 }

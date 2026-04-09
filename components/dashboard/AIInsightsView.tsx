@@ -65,7 +65,7 @@ export default function AIInsightsView() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/ota-analytics-ai", {
+      const res = await fetch("/api/ai-insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -348,16 +348,25 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
 
+  const [propTab,   setPropTab]   = useState<"notlive" | "live">("live");
+
+  // OTA Metrics (quality KPIs)
+  type MetricAgg = { value: string; count: number }[];
+  type MetricProp = { propertyId: string; name: string; city: string; subStatus: string | null; liveDate: string | null; metrics: Record<string, string> };
+  const [metricsAgg,   setMetricsAgg]   = useState<Record<string, MetricAgg>>({});
+  const [metricsProps, setMetricsProps] = useState<MetricProp[]>([]);
+  const [metricsTab,   setMetricsTab]   = useState<"agg" | "props">("agg");
+
   const [nlData,    setNlData]    = useState<NLData | null>(null);
   const [nlLoading, setNlLoading] = useState(true);
   const [nlSearch,  setNlSearch]  = useState("");
   const [nlCategory,setNlCat]     = useState("");
   const [nlSss,     setNlSss]     = useState<string[]>([]);
   const [nlFhMonth, setNlFhMonth] = useState("");
-  const [nlFhStatus,  setNlFhStatus]  = useState<string[]>([]);
-  const [nlStatus,    setNlStatus]    = useState("");
-  const [nlFhDateFrom,setNlFhDateFrom]= useState("");
-  const [nlFhDateTo,  setNlFhDateTo]  = useState("");
+  const [nlFhStatus,  setNlFhStatus]   = useState<string[]>([]);
+  const [nlStatus,    setNlStatus]     = useState("");
+  const [nlFhDateFrom,setNlFhDateFrom] = useState("");
+  const [nlFhDateTo,  setNlFhDateTo]   = useState("");
   const [nlOtaDateFrom,setNlOtaDateFrom]= useState("");
   const [nlOtaDateTo,  setNlOtaDateTo]  = useState("");
   const [nlSortBy,  setNlSortBy]  = useState<NLSortKey>("tat");
@@ -365,17 +374,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [ssActiveGroup, setSsActiveGroup] = useState<string | null>(null);
   const [nlPage,    setNlPage]    = useState(1);
 
-  // Live properties section
   const [liveData,    setLiveData]    = useState<NLData | null>(null);
   const [liveLoading, setLiveLoading] = useState(true);
   const [liveSearch,  setLiveSearch]  = useState("");
   const [liveSss,     setLiveSss]     = useState<string[]>([]);
-  const [liveFhStatus,  setLiveFhStatus]  = useState<string[]>([]);
-  const [liveStatus,    setLiveStatus]    = useState("");
-  const [liveFhDateFrom,setLiveFhDateFrom]= useState("");
-  const [liveFhDateTo,  setLiveFhDateTo]  = useState("");
+  const [liveFhStatus,  setLiveFhStatus]   = useState<string[]>([]);
+  const [liveStatus,    setLiveStatus]     = useState("");
+  const [liveFhDateFrom,setLiveFhDateFrom] = useState("");
+  const [liveFhDateTo,  setLiveFhDateTo]   = useState("");
   const [liveOtaDateFrom,setLiveOtaDateFrom]= useState("");
   const [liveOtaDateTo,  setLiveOtaDateTo]  = useState("");
+  const [liveSortBy,  setLiveSortBy]  = useState<NLSortKey>("liveDate");
+  const [liveSortDir, setLiveSortDir] = useState<"asc" | "desc">("desc");
   const [livePage,    setLivePage]    = useState(1);
 
   const nlSortedRows = useMemo(() => {
@@ -398,44 +408,64 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setNlSortBy(key); setNlSortDir(key === "tat" ? "desc" : "asc");
   }
 
-  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss, fhMonth = nlFhMonth,
-    fhStatus = nlFhStatus, status = nlStatus, fhFrom = nlFhDateFrom, fhTo = nlFhDateTo, otaFrom = nlOtaDateFrom, otaTo = nlOtaDateTo) {
-    setNlLoading(true);
-    const p = new URLSearchParams({ otas: otaName, page: String(page), size: "50" });
-    if (search)        p.set("search", search);
-    if (category)      p.set("category", category);
-    if (sss.length)    p.set("sss", sss.join(","));
-    if (fhMonth)       p.set("fhMonth", fhMonth);
-    if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
-    if (status)        p.set("status", status);
-    if (fhFrom)        p.set("fhFrom", fhFrom);
-    if (fhTo)          p.set("fhTo", fhTo);
-    if (otaFrom)       p.set("otaFrom", otaFrom);
-    if (otaTo)         p.set("otaTo", otaTo);
-    fetch(`/api/listing-dashboard/not-live?${p}`)
-      .then(r => r.json())
-      .then(d => { setNlData(d); setNlPage(page); })
-      .catch(() => {})
-      .finally(() => setNlLoading(false));
+  const liveSortedRows = useMemo(() => {
+    if (!liveData?.rows) return [];
+    return [...liveData.rows].sort((a, b) => {
+      let av: string | number = "";
+      let bv: string | number = "";
+      if (liveSortBy === "status")    { av = (a.status ?? "").toLowerCase(); bv = (b.status ?? "").toLowerCase(); }
+      else if (liveSortBy === "subStatus") { av = (a.subStatus ?? "").toLowerCase(); bv = (b.subStatus ?? "").toLowerCase(); }
+      else if (liveSortBy === "liveDate")  { av = a.liveDate ? new Date(a.liveDate).getTime() : -1; bv = b.liveDate ? new Date(b.liveDate).getTime() : -1; }
+      else { av = a.tat ?? -1; bv = b.tat ?? -1; }
+      if (av < bv) return liveSortDir === "asc" ? -1 : 1;
+      if (av > bv) return liveSortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [liveData?.rows, liveSortBy, liveSortDir]);
+
+  function liveToggleSort(key: NLSortKey) {
+    if (liveSortBy === key) { setLiveSortDir(d => d === "asc" ? "desc" : "asc"); return; }
+    setLiveSortBy(key); setLiveSortDir(key === "tat" ? "desc" : "asc");
   }
 
   function loadLive(page = 1, search = liveSearch, sss = liveSss,
     fhStatus = liveFhStatus, status = liveStatus, fhFrom = liveFhDateFrom, fhTo = liveFhDateTo, otaFrom = liveOtaDateFrom, otaTo = liveOtaDateTo) {
     setLiveLoading(true);
     const p = new URLSearchParams({ otas: otaName, category: "live", page: String(page), size: "50" });
-    if (search)        p.set("search", search);
-    if (sss.length)    p.set("sss", sss.join(","));
+    if (search)          p.set("search", search);
+    if (sss.length)      p.set("sss", sss.join(","));
     if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
-    if (status)        p.set("status", status);
-    if (fhFrom)        p.set("fhFrom", fhFrom);
-    if (fhTo)          p.set("fhTo", fhTo);
-    if (otaFrom)       p.set("otaFrom", otaFrom);
-    if (otaTo)         p.set("otaTo", otaTo);
+    if (status)          p.set("status", status);
+    if (fhFrom)          p.set("fhFrom", fhFrom);
+    if (fhTo)            p.set("fhTo", fhTo);
+    if (otaFrom)         p.set("otaFrom", otaFrom);
+    if (otaTo)           p.set("otaTo", otaTo);
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
       .then(d => { setLiveData(d); setLivePage(page); })
       .catch(() => {})
       .finally(() => setLiveLoading(false));
+  }
+
+  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss, fhMonth = nlFhMonth,
+    fhStatus = nlFhStatus, status = nlStatus, fhFrom = nlFhDateFrom, fhTo = nlFhDateTo, otaFrom = nlOtaDateFrom, otaTo = nlOtaDateTo) {
+    setNlLoading(true);
+    const p = new URLSearchParams({ otas: otaName, page: String(page), size: "50" });
+    if (search)          p.set("search", search);
+    if (category)        p.set("category", category);
+    if (sss.length)      p.set("sss", sss.join(","));
+    if (fhMonth)         p.set("fhMonth", fhMonth);
+    if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
+    if (status)          p.set("status", status);
+    if (fhFrom)          p.set("fhFrom", fhFrom);
+    if (fhTo)            p.set("fhTo", fhTo);
+    if (otaFrom)         p.set("otaFrom", otaFrom);
+    if (otaTo)           p.set("otaTo", otaTo);
+    fetch(`/api/listing-dashboard/not-live?${p}`)
+      .then(r => r.json())
+      .then(d => { setNlData(d); setNlPage(page); })
+      .catch(() => {})
+      .finally(() => setNlLoading(false));
   }
 
   function load() {
@@ -466,7 +496,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       })
       .catch(() => {});
     loadNl(1, "", "", []);
-    loadLive(1, "", []);
+    loadLive(1, "");
+    fetch(`/api/ota-metrics-summary?ota=${encodeURIComponent(otaName)}`)
+      .then(r => r.json())
+      .then(d => { setMetricsAgg(d.agg ?? {}); setMetricsProps(d.properties ?? []); })
+      .catch(() => {});
   }
 
   useEffect(() => {
@@ -475,6 +509,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
     setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo("");
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+    setPropTab("live");
+    setMetricsAgg({}); setMetricsProps([]);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -646,18 +682,36 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         .ss-clickable-num:hover { opacity: 0.8; }
       `}</style>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+      {/* Header + Tab Strip */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 3, height: 22, background: otaColor, borderRadius: 2 }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>OTA Detail · listing analytics</span>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {([
+            { key: "live",    label: "Live",     count: liveData?.total, color: T.live,    bg: T.liveL   },
+            { key: "notlive", label: "Not Live", count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
+          ] as const).map(tab => {
+            const active = propTab === tab.key;
+            return (
+              <button key={tab.key} onClick={() => setPropTab(tab.key)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
+                  borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
+                  background: active ? tab.color : "#FFFFFF", color: active ? "#FFFFFF" : T.textSec,
+                  cursor: "pointer", transition: "all 0.13s" }}>
+                {tab.label}
+                {tab.count != null && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 99, background: active ? "rgba(255,255,255,0.25)" : tab.bg, color: active ? "#FFFFFF" : tab.color }}>{tab.count.toLocaleString()}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
       {error   && <div style={{ padding: "8px 14px", background: T.notLiveL, border: "1px solid #FECACA", borderRadius: 8, fontSize: 11, color: T.notLive, marginBottom: 14 }}>⚠ {error}</div>}
 
-      {dashData && (
+      {dashData && propTab === "notlive" && (
         <>
           {/* KPI Tiles — compact horizontal */}
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
@@ -677,26 +731,28 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           {/* Status × Sub-status */}
           {(() => {
             const xPivot = dashData.ssStatusPivot[otaName] ?? {};
+            // only sub-statuses with count > 0 for this OTA
             const ssCols = dashData.columns.filter(col => (dashData.pivot[otaName]?.[col] ?? 0) > 0);
 
-            const SS_COLS = [
-              { label: "Live",              subs: ssCols.filter(s => s === "Live" || s === "FH Live"), color: "#16A34A", bg: "#DCFCE7" },
-              { label: "Supply/Operations", subs: ["Supply/Operations"],                               color: "#6D28D9", bg: "#F5F3FF" },
-              { label: "Revenue",           subs: ["Revenue"],                                         color: "#C2410C", bg: "#FFF7ED" },
-              { label: "OTA Team",          subs: ["OTA Team"],                                        color: "#B45309", bg: "#FEF3C7" },
-              ...ssCols.filter(s => s.startsWith("Pending at ")).map(s => ({
-                label: s,
-                subs:  [s],
-                color: "#1D4ED8",
-                bg:    "#DBEAFE",
-              })),
-              { label: "Exception",         subs: ["Exception"],                                       color: "#B45309", bg: "#FEF3C7" },
-              { label: "Blank",             subs: ["Blank"],                                           color: "#64748B", bg: "#F1F5F9" },
-              { label: "Churned",           subs: ["Churned"],                                         color: "#DC2626", bg: "#FEE2E2" },
-            ].filter(c => c.subs.some(s => ssCols.includes(s)));
+            const SS_STYLE: Record<string, { color: string; bg: string }> = {
+              "Live":              { color: "#16A34A", bg: "#DCFCE7" },
+              "FH Live":           { color: "#16A34A", bg: "#DCFCE7" },
+              "Supply/Operations": { color: "#6D28D9", bg: "#F5F3FF" },
+              "Revenue":           { color: "#C2410C", bg: "#FFF7ED" },
+              "OTA Team":          { color: "#B45309", bg: "#FEF3C7" },
+              "Exception":         { color: "#B45309", bg: "#FEF3C7" },
+              "Blank":             { color: "#64748B", bg: "#F1F5F9" },
+              "Churned":           { color: "#DC2626", bg: "#FEE2E2" },
+            };
+
+            // Build SS_COLS dynamically from all sub-statuses with count > 0
+            const SS_COLS = ssCols.map(s => {
+              const style = SS_STYLE[s] ?? (s.startsWith("Pending at ") ? { color: "#1D4ED8", bg: "#DBEAFE" } : { color: "#475569", bg: "#F1F5F9" });
+              return { label: s, subs: [s], ...style };
+            });
 
             const colData = SS_COLS.map(col => {
-              const activeSubs = col.subs.filter(s => ssCols.includes(s));
+              const activeSubs = col.subs;
               const colTotal = activeSubs.reduce((sum, ss) =>
                 sum + Object.values(xPivot[ss] ?? {}).reduce((s, n) => s + n, 0), 0);
               const stBreakdown: Record<string, number> = {};
@@ -846,307 +902,348 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         </>
       )}
 
-      {/* Month-wise Breakdown — merged */}
-      {mergedMonthData.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <MergedMonthTable
-            title={`Month-wise · ${otaName}`}
-            rows={mergedMonthData}
-            onMonthClick={goToMonth}
-          />
-        </div>
+      {/* Live tab: TAT + month table + quality metrics + live properties */}
+      {dashData && propTab === "live" && (
+        <>
+          {/* TAT KPI chips */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            {TAT_CHIPS.map(chip => (
+              <div key={chip.label} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, background: chip.bg, border: `1px solid ${chip.color}30` }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: chip.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>{chip.label}</span>
+                <span style={{ fontSize: 15, fontWeight: 900, color: chip.color }}>{String(chip.value)}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Month-wise table */}
+          {mergedMonthData.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <MergedMonthTable title={`Month-wise · ${otaName}`} rows={mergedMonthData} onMonthClick={goToMonth} />
+            </div>
+          )}
+
+          {/* Quality Metrics (live tab) */}
+          {Object.keys(metricsAgg).length > 0 && (
+            <div style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 12, marginBottom: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(15,23,42,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 14px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>Quality Metrics · {otaName}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {([{ key: "agg", label: "Summary" }, { key: "props", label: "Per Property" }] as const).map(tab => (
+                    <button key={tab.key} onClick={() => setMetricsTab(tab.key)}
+                      style={{ padding: "3px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
+                        border: `1px solid ${metricsTab === tab.key ? otaColor : T.cardBdr}`,
+                        background: metricsTab === tab.key ? otaColor : "#FFFFFF",
+                        color: metricsTab === tab.key ? "#FFFFFF" : T.textSec }}>
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {metricsTab === "agg" && (
+                <div style={{ padding: "12px 14px", display: "flex", flexWrap: "wrap", gap: 16 }}>
+                  {Object.entries(metricsAgg).map(([key, vals]) => (
+                    <div key={key} style={{ minWidth: 160 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>{key.replace(/_/g, " ")}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {vals.map(v => {
+                          const isYes = ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(v.value.toLowerCase());
+                          const isNo  = ["no","false","0","inactive","not enrolled","not requested"].includes(v.value.toLowerCase());
+                          const color = isYes ? "#16A34A" : isNo ? "#DC2626" : otaColor;
+                          const bg    = isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}15`;
+                          return (
+                            <div key={v.value} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "4px 10px", borderRadius: 7, background: bg }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color }}>{v.value}</span>
+                              <span style={{ fontSize: 13, fontWeight: 800, color, minWidth: 28, textAlign: "right" }}>{v.count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {metricsTab === "props" && (() => {
+                const keys = Object.keys(metricsAgg);
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                      <thead>
+                        <tr style={{ background: T.headerBg }}>
+                          {["ID", "Property", "City", ...keys.map(k => k.replace(/_/g, " ")), "Open"].map((h, i) => (
+                            <th key={h} style={{ padding: "6px 12px", fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase", letterSpacing: "0.07em", textAlign: i <= 2 ? "left" : "center", borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`, whiteSpace: "nowrap", background: T.headerBg }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {metricsProps.map((p, i) => (
+                          <tr key={p.propertyId} style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: otaColor }}>{p.propertyId}</td>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.name}>{p.name}</td>
+                            <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, textAlign: "center" }}>{p.city || "—"}</td>
+                            {keys.map(k => {
+                              const val = p.metrics[k];
+                              const isYes = val && ["yes","true","1","active","enrolled","level 1","level 2","level 3","preferred"].includes(val.toLowerCase());
+                              const isNo  = val && ["no","false","0","inactive","not enrolled","not requested"].includes(val.toLowerCase());
+                              const color = !val ? T.textMut : isYes ? "#16A34A" : isNo ? "#DC2626" : T.textSec;
+                              const bg    = !val ? "transparent" : isYes ? "#DCFCE7" : isNo ? "#FEE2E2" : `${otaColor}12`;
+                              return (
+                                <td key={k} style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                                  {val ? <span style={{ fontSize: 10, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 5 }}>{val}</span> : <span style={{ color: T.textMut }}>—</span>}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                              <a href={`/crm/${p.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                            </td>
+                          </tr>
+                        ))}
+                        {metricsProps.length === 0 && (
+                          <tr><td colSpan={keys.length + 4} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No metric data entered yet</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </>
       )}
 
+      {/* Properties Card */}
+      <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 16px rgba(15,23,42,0.06)" }}>
 
-      {/* Property List */}
-      <div id="prop-section" style={{ background: "linear-gradient(180deg, #FFFFFF 0%, #FBFDFC 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
-        {/* Header + Filters */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg, #F8FCFB 0%, #F2F7FB 100%)", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: T.textPri }}>Not Live Properties · {otaName}</span>
-            {nlData && <span style={{ fontSize: 10, color: T.notLive, background: T.notLiveL, padding: "3px 9px", borderRadius: 999, fontWeight: 700, border: "1px solid #FECACA" }}>{nlData.total.toLocaleString()} records</span>}
-            {nlFhMonth && <span style={{ fontSize: 10, fontWeight: 600, color: "#2563EB", background: "#EFF6FF", padding: "3px 9px", borderRadius: 999, border: "1px solid #BFDBFE" }}>📅 {nlFhMonth}</span>}
-            {nlCategory && <span style={{ fontSize: 10, fontWeight: 600, color: T.orange, background: T.orangeL, padding: "3px 9px", borderRadius: 999, border: `1px solid ${T.orange}30` }}>{CAT_LABELS[nlCategory] ?? nlCategory}</span>}
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Filter bar — Not Live */}
+        {propTab === "notlive" && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, flexWrap: "wrap", gap: 8 }}>
             {([
               { val: "",             label: "All" },
               { val: "inProcess",    label: "In Process" },
               { val: "tatExhausted", label: "TAT Exhausted" },
             ] as const).map(btn => (
               <button key={btn.val} onClick={() => { setNlCat(btn.val); loadNl(1, nlSearch, btn.val, nlSss); }}
-                style={{ padding: "5px 11px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
+                style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
                   border: `1px solid ${nlCategory === btn.val ? T.orange : T.cardBdr}`,
                   background: nlCategory === btn.val ? T.orangeL : "#FFFFFF",
                   color: nlCategory === btn.val ? T.orange : T.textSec }}>
                 {btn.label}
               </button>
             ))}
-            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            {/* FH Status */}
             <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={nlFhStatus}
               onChange={v => { setNlFhStatus(v); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, v, nlStatus, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }} />
-            {/* OTA Status */}
             <input value={nlStatus} onChange={e => { setNlStatus(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, e.target.value, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }}
               placeholder="Status…"
-              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${nlStatus ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", width: 100, color: T.textPri, background: nlStatus ? T.orangeL : "#FFFFFF" }} />
+              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${nlStatus ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", width: 90, color: T.textPri, background: nlStatus ? T.orangeL : "#FFF" }} />
             {ssOptions.length > 0 && (
               <CheckboxDropdown label="Sub-Status" options={ssOptions} selected={nlSss}
                 onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
             )}
-            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            {/* FH Date range */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>FH</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut }}>FH</span>
               <input type="date" value={nlFhDateFrom} onChange={e => { setNlFhDateFrom(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, e.target.value, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlFhDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${nlFhDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
               <span style={{ fontSize: 10, color: T.textMut }}>–</span>
               <input type="date" value={nlFhDateTo} onChange={e => { setNlFhDateTo(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, e.target.value, nlOtaDateFrom, nlOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlFhDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${nlFhDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
             </div>
-            {/* OTA Date range */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>OTA</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut }}>OTA</span>
               <input type="date" value={nlOtaDateFrom} onChange={e => { setNlOtaDateFrom(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, nlFhDateTo, e.target.value, nlOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlOtaDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${nlOtaDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
               <span style={{ fontSize: 10, color: T.textMut }}>–</span>
               <input type="date" value={nlOtaDateTo} onChange={e => { setNlOtaDateTo(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, e.target.value); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlOtaDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${nlOtaDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
             </div>
-            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
-              <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
-                placeholder="Search name / ID…"
-                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
-            </div>
+            <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
+              placeholder="Search…"
+              style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 140, color: T.textPri, background: "#FFFFFF" }} />
             {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth || nlFhStatus.length > 0 || nlStatus || nlFhDateFrom || nlFhDateTo || nlOtaDateFrom || nlOtaDateTo) && (
               <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo(""); loadNl(1, "", "", [], "", [], "", "", "", "", ""); }}
-                style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
+                style={{ padding: "4px 10px", fontSize: 10, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
                 Clear
               </button>
             )}
           </div>
-        </div>
-
-        {/* Table */}
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-            <thead>
-              <tr style={{ background: T.headerBg }}>
-                {[
-                  { label: "FH ID" },
-                  { label: "Property Name" },
-                  { label: "City" },
-                  { label: "FH Live" },
-                  { label: "OTA" },
-                  { label: "Status",     key: "status"    as NLSortKey },
-                  { label: "Sub Status", key: "subStatus" as NLSortKey },
-                  { label: "OTA Live",   key: "liveDate"  as NLSortKey },
-                  { label: "TAT (days)", key: "tat"       as NLSortKey },
-                ].map((h, i) => {
-                  const sortable = !!h.key;
-                  return (
-                    <th key={h.label} onClick={sortable ? () => nlToggleSort(h.key!) : undefined}
-                      style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
-                        color: sortable && nlSortBy === h.key ? T.orange : T.textMut,
-                        textTransform: "uppercase", letterSpacing: "0.08em",
-                        textAlign: i <= 1 ? "left" : "center",
-                        borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
-                        whiteSpace: "nowrap", background: T.headerBg,
-                        cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        {h.label}
-                        {sortable && <span style={{ fontSize: 10, color: nlSortBy === h.key ? T.orange : T.textMut }}>
-                          {nlSortBy === h.key ? (nlSortDir === "asc" ? "↑" : "↓") : "↕"}
-                        </span>}
-                      </span>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {nlLoading && (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>
-              )}
-              {!nlLoading && nlSortedRows.map((row, i) => {
-                const sc = getSSColor(row.subStatus ?? "");
-                const otaCol = OTA_COLORS[row.ota] ?? T.orange;
-                const isTatError = (row.tatError ?? 0) > 0;
-                return (
-                  <tr key={`${row.propertyId}-${row.ota}-${i}`} style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.orange, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 700, color: otaCol }}>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: otaCol, flexShrink: 0 }} />{row.ota}
-                      </span>
-                    </td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.status ?? ""}>{row.status || "—"}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                      {row.subStatus
-                        ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>{row.subStatus}</span>
-                        : <span style={{ color: T.textMut }}>—</span>}
-                    </td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                      {row.tat > 0
-                        ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span>
-                        : <span style={{ color: T.textMut }}>—</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-              {!nlLoading && nlData?.rows.length === 0 && (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {nlData && nlData.pages > 1 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
-            <span style={{ fontSize: 10, color: T.textMut }}>
-              {((nlData.page - 1) * 50 + 1).toLocaleString()}–{Math.min(nlData.page * 50, nlData.total).toLocaleString()} of {nlData.total.toLocaleString()}
-            </span>
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              {([
-                { label: "«", p: 1,               dis: nlData.page === 1 },
-                { label: "‹", p: nlData.page - 1, dis: nlData.page === 1 },
-                { label: "›", p: nlData.page + 1, dis: nlData.page === nlData.pages },
-                { label: "»", p: nlData.pages,    dis: nlData.page === nlData.pages },
-              ] as const).map(({ label, p, dis }) => (
-                <button key={label} onClick={() => loadNl(p)} disabled={dis}
-                  style={{ padding: "3px 9px", fontSize: 11, fontWeight: 700,
-                    background: dis ? "#F1F5F9" : T.orange, color: dis ? T.textMut : "#FFFFFF",
-                    border: "none", borderRadius: 5, cursor: dis ? "not-allowed" : "pointer" }}>
-                  {label}
-                </button>
-              ))}
-              <span style={{ padding: "3px 8px", fontSize: 10, color: T.textSec, fontWeight: 600 }}>
-                {nlData.page} / {nlData.pages}
-              </span>
-            </div>
-          </div>
         )}
-      </div>
 
-      {/* Live Properties Section */}
-      <div style={{ marginTop: 16, background: "linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%)", border: `1px solid ${T.liveL}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.liveL}`, background: "linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 40%)", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: "#166534" }}>Live Properties · {otaName}</span>
-            {liveData && <span style={{ fontSize: 10, color: T.live, background: T.liveL, padding: "3px 9px", borderRadius: 999, fontWeight: 700, border: "1px solid #86EFAC" }}>{liveData.total.toLocaleString()} records</span>}
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {/* Filter bar — Live */}
+        {propTab === "live" && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, gap: 8 }}>
             <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={liveFhStatus}
               onChange={v => { setLiveFhStatus(v); loadLive(1, liveSearch, liveSss, v, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }} />
             <input value={liveStatus} onChange={e => { setLiveStatus(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, e.target.value, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
               placeholder="Status…"
-              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${liveStatus ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", width: 100, color: T.textPri, background: liveStatus ? T.liveL : "#FFF" }} />
+              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${liveStatus ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", width: 90, color: T.textPri, background: liveStatus ? T.liveL : "#FFF" }} />
             <CheckboxDropdown label="Sub-Status" options={["Live","Exception"]} selected={liveSss}
               onChange={v => { setLiveSss(v); loadLive(1, liveSearch, v); }} />
-            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>FH</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut }}>FH</span>
               <input type="date" value={liveFhDateFrom} onChange={e => { setLiveFhDateFrom(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, e.target.value, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveFhDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${liveFhDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
               <span style={{ fontSize: 10, color: T.textMut }}>–</span>
               <input type="date" value={liveFhDateTo} onChange={e => { setLiveFhDateTo(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, e.target.value, liveOtaDateFrom, liveOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveFhDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${liveFhDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>OTA</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut }}>OTA</span>
               <input type="date" value={liveOtaDateFrom} onChange={e => { setLiveOtaDateFrom(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, e.target.value, liveOtaDateTo); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveOtaDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${liveOtaDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
               <span style={{ fontSize: 10, color: T.textMut }}>–</span>
               <input type="date" value={liveOtaDateTo} onChange={e => { setLiveOtaDateTo(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, e.target.value); }}
-                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveOtaDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+                style={{ padding: "4px 5px", fontSize: 10, border: `1px solid ${liveOtaDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
             </div>
-            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
-              <input value={liveSearch} onChange={e => { setLiveSearch(e.target.value); loadLive(1, e.target.value, liveSss); }}
-                placeholder="Search name / ID…"
-                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
-            </div>
+            <input value={liveSearch} onChange={e => { setLiveSearch(e.target.value); loadLive(1, e.target.value); }}
+              placeholder="Search…"
+              style={{ padding: "5px 10px", fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 140, color: T.textPri, background: "#FFFFFF" }} />
             {(liveSearch || liveSss.length > 0 || liveFhStatus.length > 0 || liveStatus || liveFhDateFrom || liveFhDateTo || liveOtaDateFrom || liveOtaDateTo) && (
               <button onClick={() => { setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo(""); loadLive(1, "", [], [], "", "", "", "", ""); }}
-                style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
+                style={{ padding: "4px 10px", fontSize: 10, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
                 Clear
               </button>
             )}
           </div>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-            <thead>
-              <tr style={{ background: T.liveL }}>
-                {["FH ID","Property Name","City","FH Live","Status","Sub Status","OTA Live","TAT (days)"].map((h, i) => (
-                  <th key={h} style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700, color: "#166534",
-                    textTransform: "uppercase", letterSpacing: "0.08em", textAlign: i <= 1 ? "left" : "center",
-                    borderBottom: `1px solid ${T.liveL}`, borderRight: `1px solid ${T.liveL}`, whiteSpace: "nowrap" }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {liveLoading && <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
-              {!liveLoading && (liveData?.rows ?? []).map((row, i) => {
-                const sc = getSSColor(row.subStatus ?? "");
-                return (
-                  <tr key={`${row.propertyId}-${i}`} style={{ borderBottom: `1px solid ${T.liveL}`, background: i % 2 === 0 ? "#FFFFFF" : "#F0FDF4" }}>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.live, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.status || "—"}</td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, textAlign: "center" }}>
-                      {row.subStatus
-                        ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>{row.subStatus}</span>
-                        : <span style={{ color: T.textMut }}>—</span>}
-                    </td>
-                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
-                    <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                      {row.tat > 0 ? <span style={{ fontWeight: 700, color: T.live }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-              {!liveLoading && (liveData?.rows.length ?? 0) === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {liveData && liveData.pages > 1 && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.liveL}`, background: "#F0FDF4" }}>
-            <span style={{ fontSize: 10, color: T.textMut }}>
-              {((liveData.page - 1) * 50 + 1).toLocaleString()}–{Math.min(liveData.page * 50, liveData.total).toLocaleString()} of {liveData.total.toLocaleString()}
-            </span>
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              {([
-                { label: "«", p: 1,                 dis: liveData.page === 1 },
-                { label: "‹", p: liveData.page - 1, dis: liveData.page === 1 },
-                { label: "›", p: liveData.page + 1, dis: liveData.page === liveData.pages },
-                { label: "»", p: liveData.pages,    dis: liveData.page === liveData.pages },
-              ] as const).map(({ label, p, dis }) => (
-                <button key={label} onClick={() => loadLive(p)} disabled={dis}
-                  style={{ padding: "3px 9px", fontSize: 11, fontWeight: 700,
-                    background: dis ? "#F1F5F9" : T.live, color: dis ? T.textMut : "#FFFFFF",
-                    border: "none", borderRadius: 5, cursor: dis ? "not-allowed" : "pointer" }}>
-                  {label}
-                </button>
+        )}
+
+        {/* Not Live table */}
+        {propTab === "notlive" && (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+              <thead>
+                <tr style={{ background: T.headerBg }}>
+                  {[
+                    { label: "FH ID" }, { label: "Property Name" }, { label: "City" }, { label: "FH Live" },
+                    { label: "Status", key: "status" as NLSortKey }, { label: "Sub Status", key: "subStatus" as NLSortKey },
+                    { label: "OTA Live", key: "liveDate" as NLSortKey }, { label: "TAT", key: "tat" as NLSortKey },
+                    { label: "Open" },
+                  ].map((h, i) => {
+                    const sortable = !!h.key;
+                    return (
+                      <th key={h.label} onClick={sortable ? () => nlToggleSort(h.key!) : undefined}
+                        style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
+                          color: sortable && nlSortBy === h.key ? T.orange : T.textMut,
+                          textTransform: "uppercase", letterSpacing: "0.08em",
+                          textAlign: i <= 1 ? "left" : "center",
+                          borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
+                          whiteSpace: "nowrap", background: T.headerBg,
+                          cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          {h.label}
+                          {sortable && <span style={{ fontSize: 9 }}>{nlSortBy === h.key ? (nlSortDir === "asc" ? "↑" : "↓") : "↕"}</span>}
+                        </span>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {nlLoading && <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
+                {!nlLoading && nlSortedRows.map((row, i) => {
+                  const sc = getSSColor(row.subStatus ?? "");
+                  const isTatError = (row.tatError ?? 0) > 0;
+                  return (
+                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.orange, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.status || "—"}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                        {row.subStatus ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text }}>{row.subStatus}</span> : <span style={{ color: T.textMut }}>—</span>}
+                      </td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                        {row.tat > 0 ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
+                      </td>
+                      <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                        <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!nlLoading && (nlData?.rows.length === 0) && <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Not Live pagination */}
+        {propTab === "notlive" && nlData && nlData.pages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
+            <span style={{ fontSize: 10, color: T.textMut }}>{((nlData.page-1)*50+1).toLocaleString()}–{Math.min(nlData.page*50,nlData.total).toLocaleString()} of {nlData.total.toLocaleString()}</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {([{ label:"«",p:1,dis:nlData.page===1},{ label:"‹",p:nlData.page-1,dis:nlData.page===1},{ label:"›",p:nlData.page+1,dis:nlData.page===nlData.pages},{ label:"»",p:nlData.pages,dis:nlData.page===nlData.pages}] as const).map(({label,p,dis})=>(
+                <button key={label} onClick={()=>loadNl(p)} disabled={dis} style={{ padding:"3px 9px",fontSize:11,fontWeight:700,background:dis?"#F1F5F9":T.orange,color:dis?T.textMut:"#FFFFFF",border:"none",borderRadius:5,cursor:dis?"not-allowed":"pointer" }}>{label}</button>
               ))}
-              <span style={{ padding: "3px 8px", fontSize: 10, color: T.textSec, fontWeight: 600 }}>
-                {liveData.page} / {liveData.pages}
-              </span>
+              <span style={{ padding:"3px 8px",fontSize:10,color:T.textSec,fontWeight:600 }}>{nlData.page}/{nlData.pages}</span>
             </div>
+          </div>
+        )}
+
+        {/* Live properties table */}
+        {propTab === "live" && (
+          <div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                <thead>
+                  <tr style={{ background: T.headerBg }}>
+                    {[
+                      { label: "FH ID" }, { label: "Property Name" }, { label: "City" }, { label: "FH Live" },
+                      { label: "OTA Live", key: "liveDate" as NLSortKey }, { label: "TAT (days)", key: "tat" as NLSortKey },
+                      { label: "Open" },
+                    ].map((h, i) => {
+                      const sortable = !!h.key;
+                      return (
+                        <th key={h.label} onClick={sortable ? () => liveToggleSort(h.key!) : undefined}
+                          style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
+                            color: sortable && liveSortBy === h.key ? T.live : T.textMut,
+                            textTransform: "uppercase", letterSpacing: "0.08em",
+                            textAlign: i <= 1 ? "left" : "center",
+                            borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
+                            whiteSpace: "nowrap", background: T.headerBg,
+                            cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            {h.label}
+                            {sortable && <span style={{ fontSize: 9 }}>{liveSortBy === h.key ? (liveSortDir === "asc" ? "↑" : "↓") : "↕"}</span>}
+                          </span>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveLoading && <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
+                  {!liveLoading && liveSortedRows.map((row, i) => (
+                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.live, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
+                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
+                        {row.tat > 0 ? <span style={{ fontWeight: 700, color: row.tat <= 7 ? T.live : row.tat <= 15 ? "#B45309" : row.tat <= 30 ? "#C2410C" : T.notLive }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
+                      </td>
+                      <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                        <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#16A34A18", color: "#16A34A", border: "1px solid #16A34A40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                      </td>
+                    </tr>
+                  ))}
+                  {!liveLoading && (liveData?.rows.length === 0) && <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No live properties found</td></tr>}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Live pagination */}
+            {liveData && liveData.pages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.cardBdr}`, background: T.headerBg }}>
+                <span style={{ fontSize: 10, color: T.textMut }}>{((liveData.page-1)*50+1).toLocaleString()}–{Math.min(liveData.page*50,liveData.total).toLocaleString()} of {liveData.total.toLocaleString()}</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {([{label:"«",p:1,dis:liveData.page===1},{label:"‹",p:liveData.page-1,dis:liveData.page===1},{label:"›",p:liveData.page+1,dis:liveData.page===liveData.pages},{label:"»",p:liveData.pages,dis:liveData.page===liveData.pages}] as const).map(({label,p,dis})=>(
+                    <button key={label} onClick={()=>loadLive(p)} disabled={dis} style={{ padding:"3px 9px",fontSize:11,fontWeight:700,background:dis?"#F1F5F9":T.live,color:dis?T.textMut:"#FFFFFF",border:"none",borderRadius:5,cursor:dis?"not-allowed":"pointer" }}>{label}</button>
+                  ))}
+                  <span style={{ padding:"3px 8px",fontSize:10,color:T.textSec,fontWeight:600 }}>{liveData.page}/{liveData.pages}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

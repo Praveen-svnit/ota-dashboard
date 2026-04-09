@@ -225,13 +225,6 @@ export default function GmbTab() {
           {cities.map((c) => <option key={c} value={c}>{c === "all" ? "All Cities" : c}</option>)}
         </select>
         <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>{filtered.length} of {rows.length} shown</span>
-        {syncMsg && <span style={{ fontSize: 10, color: syncErr ? "#DC2626" : "#059669" }}>{syncMsg}</span>}
-        <button onClick={runSync} disabled={syncing} style={{
-          padding: "6px 14px", borderRadius: 8, border: "none", cursor: syncing ? "default" : "pointer",
-          background: syncing ? "#F1F5F9" : "#EEF2FF", color: syncing ? "#94A3B8" : "#6366F1",
-          fontSize: 11, fontWeight: 700 }}>
-          {syncing ? "Syncing…" : "⇅ Sync GMB"}
-        </button>
       </div>
 
       {/* Table */}
@@ -241,7 +234,7 @@ export default function GmbTab() {
         ) : empty ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", marginBottom: 6 }}>No GMB data yet</div>
-            <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 16 }}>Click "Sync GMB" above to load data.</div>
+            <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 16 }}>Go to Migration page and run Sync All OTAs to load GMB data.</div>
           </div>
         ) : (
           <div style={{ overflowX: "auto", maxHeight: "60vh", overflowY: "auto" }}>

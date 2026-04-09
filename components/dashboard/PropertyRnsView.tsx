@@ -67,16 +67,13 @@ interface ListingProp {
   fhId: string; name: string; city: string; fhLiveDate: string | null;
   otas: Record<string, OtaListing>;
 }
-interface RnsProp {
-  name: string;
-  otas: Record<string, { cm: number; lm: number }>;
-}
 
 interface MergedRow {
   fhId: string; name: string; city: string; ota: string;
   fhLiveDate: string | null; subStatus: string | null; status: string | null;
   liveDate: string | null; otaId: string | null;
   cm: number; lm: number; tat: number;
+  liveOtaCount: number; // # of OTAs with live sub-status
 }
 
 type Tab = "all" | "strong" | "noProd" | "drops";
@@ -103,6 +100,7 @@ export default function PropertyRnsView({ ota }: Props) {
   const [sortCol,     setSortCol]     = useState<"lm" | "cm" | "delta" | null>(null);
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("desc");
   const [showDetails, setShowDetails] = useState(false);
+  const [propType,    setPropType]    = useState<"final" | "initial">("final");
 
   useEffect(() => { setOtaFilter(ota ?? ""); }, [ota]);
   useEffect(() => { setPage(1); }, [search, otaFilter, statusFilter, rnsMin, rnsMax, tab, sortCol, sortDir]);
@@ -120,56 +118,89 @@ export default function PropertyRnsView({ ota }: Props) {
     setLoading(true); setError(null);
     Promise.all([
       fetch("/api/listing-data").then(r => r.json()),
-      fetch("/api/rns-property-list").then(r => r.json()),
+      fetch(`/api/rns-property-list?type=${propType}`).then(r => r.json()),
     ]).then(([listingRes, rnsRes]) => {
       if (listingRes.error) throw new Error(listingRes.error);
       setListingProps(listingRes.properties ?? []);
 
-      // Build map: lowercase(name) → otaRns
+      // Build map: property_id → otaRns
       const map = new Map<string, Record<string, { cm: number; lm: number }>>();
-      for (const p of (rnsRes.properties ?? []) as RnsProp[]) {
-        map.set(p.name.toLowerCase().trim(), p.otas);
+      for (const p of (rnsRes.properties ?? []) as { id: string; otas: Record<string, { cm: number; lm: number }> }[]) {
+        map.set(p.id, p.otas);
       }
       setRnsMap(map);
       setMonth(rnsRes.month ?? "");
       setLmMonth(rnsRes.lmMonth ?? "");
     }).catch(e => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [propType]);
 
-  /* Merge listing + RNS into flat rows (only live entries) */
+  /* Unique OTAs present in loaded data */
+  const availableOtas = useMemo(() => {
+    const set = new Set<string>();
+    for (const prop of listingProps) {
+      for (const o of Object.keys(prop.otas)) set.add(o);
+    }
+    // Return in OTA_LIST order, then any extras
+    return [
+      ...OTA_LIST.filter(o => set.has(o)),
+      ...[...set].filter(o => !OTA_LIST.includes(o)).sort(),
+    ];
+  }, [listingProps]);
+
+  /* One row per property — aggregated across OTAs (or single OTA when filtered) */
   const allRows = useMemo<MergedRow[]>(() => {
     const rows: MergedRow[] = [];
-    const otas = ota ? [ota] : OTA_LIST;
+    const activeOta = ota || otaFilter; // locked OTA (from prop) or filter selection
+
     for (const prop of listingProps) {
-      const rnsOtas = rnsMap.get(prop.name.toLowerCase().trim()) ?? {};
-      for (const o of otas) {
-        const listing = prop.otas[o];
-        if (!listing) continue;
-        const ss = listing.subStatus?.toLowerCase().trim() ?? "";
-        // Only include entries that have some listing data or RNS data
-        if (!listing.status && !listing.subStatus && !rnsOtas[o]) continue;
-        const rns = rnsOtas[o] ?? { cm: 0, lm: 0 };
-        rows.push({
-          fhId: prop.fhId, name: prop.name, city: prop.city, ota: o,
-          fhLiveDate: prop.fhLiveDate,
-          subStatus: listing.subStatus, status: listing.status,
-          liveDate: listing.liveDate, otaId: listing.otaId,
-          cm: rns.cm, lm: rns.lm,
-          tat: daysBetween(prop.fhLiveDate, listing.liveDate),
-        });
+      const rnsOtas = rnsMap.get(prop.fhId) ?? {};
+
+      // Count live OTAs across all canonical OTAs
+      let liveOtaCount = 0;
+      for (const o of OTA_LIST) {
+        if (prop.otas[o]?.subStatus?.toLowerCase().trim() === "live") liveOtaCount++;
       }
+
+      // Aggregate cm/lm for target OTAs
+      const targetOtas = activeOta ? [activeOta] : OTA_LIST;
+      let totalCm = 0, totalLm = 0;
+      let filteredListing: OtaListing | null = null;
+      for (const o of targetOtas) {
+        const rns = rnsOtas[o] ?? { cm: 0, lm: 0 };
+        totalCm += rns.cm;
+        totalLm += rns.lm;
+        if (activeOta === o) filteredListing = prop.otas[o] ?? null;
+      }
+
+      // Skip properties with no data at all
+      const hasAny = OTA_LIST.some(o => prop.otas[o]?.subStatus || rnsOtas[o]);
+      if (!hasAny) continue;
+
+      rows.push({
+        fhId: prop.fhId, name: prop.name, city: prop.city,
+        ota: activeOta || "",
+        fhLiveDate: prop.fhLiveDate,
+        subStatus: activeOta ? (filteredListing?.subStatus ?? null) : null,
+        status:    activeOta ? (filteredListing?.status    ?? null) : null,
+        liveDate:  activeOta ? (filteredListing?.liveDate  ?? null) : null,
+        otaId:     activeOta ? (filteredListing?.otaId     ?? null) : null,
+        cm: totalCm, lm: totalLm,
+        tat: activeOta ? daysBetween(prop.fhLiveDate, filteredListing?.liveDate ?? null) : 0,
+        liveOtaCount,
+      });
     }
     return rows;
-  }, [listingProps, rnsMap, ota]);
+  }, [listingProps, rnsMap, ota, otaFilter]);
 
-  const liveRows = useMemo(() =>
-    allRows.filter(r => r.subStatus?.toLowerCase().trim() === "live"),
-  [allRows]);
+  const isLive = (r: MergedRow) => (ota || otaFilter)
+    ? r.subStatus?.toLowerCase().trim() === "live"
+    : r.liveOtaCount > 0;
+
+  const liveRows = useMemo(() => allRows.filter(isLive), [allRows]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const otaF = otaFilter;
     const minRns = rnsMin !== "" ? parseInt(rnsMin) : null;
     const maxRns = rnsMax !== "" ? parseInt(rnsMax) : null;
 
@@ -177,8 +208,7 @@ export default function PropertyRnsView({ ota }: Props) {
     const base = tab === "all" ? allRows : liveRows;
     let rows = base;
     if (q)    rows = rows.filter(r => r.name.toLowerCase().includes(q) || r.fhId.toLowerCase().includes(q));
-    if (otaF) rows = rows.filter(r => r.ota === otaF);
-    if (statusFilter === "live")    rows = rows.filter(r => r.subStatus?.toLowerCase().trim() === "live");
+    if (statusFilter === "live")    rows = rows.filter(r => isLive(r));
     if (statusFilter === "soldout") rows = rows.filter(r => r.subStatus?.toLowerCase().trim() === "sold out" || r.subStatus?.toLowerCase().trim() === "soldout");
     if (minRns !== null && !isNaN(minRns)) rows = rows.filter(r => r.cm >= minRns);
     if (maxRns !== null && !isNaN(maxRns)) rows = rows.filter(r => r.cm <= maxRns);
@@ -189,8 +219,8 @@ export default function PropertyRnsView({ ota }: Props) {
     else if (tab === "drops")   result = [...rows].filter(r => r.lm > 0 && r.cm < r.lm * 0.5)
                                            .sort((a, b) => (a.cm / a.lm) - (b.cm / b.lm));
     else result = [...rows].sort((a, b) => {
-      const aLive = a.subStatus?.toLowerCase().trim() === "live" ? 0 : 1;
-      const bLive = b.subStatus?.toLowerCase().trim() === "live" ? 0 : 1;
+      const aLive = isLive(a) ? 0 : 1;
+      const bLive = isLive(b) ? 0 : 1;
       if (aLive !== bLive) return aLive - bLive;
       return b.cm - a.cm;
     });
@@ -215,17 +245,15 @@ export default function PropertyRnsView({ ota }: Props) {
 
   const counts = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const otaF = otaFilter;
     const minRns = rnsMin !== "" ? parseInt(rnsMin) : null;
     const maxRns = rnsMax !== "" ? parseInt(rnsMax) : null;
     let base = allRows;
     if (q)    base = base.filter(r => r.name.toLowerCase().includes(q) || r.fhId.toLowerCase().includes(q));
-    if (otaF) base = base.filter(r => r.ota === otaF);
-    if (statusFilter === "live")    base = base.filter(r => r.subStatus?.toLowerCase().trim() === "live");
+    if (statusFilter === "live")    base = base.filter(r => isLive(r));
     if (statusFilter === "soldout") base = base.filter(r => r.subStatus?.toLowerCase().trim() === "sold out" || r.subStatus?.toLowerCase().trim() === "soldout");
     if (minRns !== null && !isNaN(minRns)) base = base.filter(r => r.cm >= minRns);
     if (maxRns !== null && !isNaN(maxRns)) base = base.filter(r => r.cm <= maxRns);
-    const live = base.filter(r => r.subStatus?.toLowerCase().trim() === "live");
+    const live = base.filter(r => isLive(r));
     return {
       all:    base.length,
       strong: live.filter(r => r.cm >= 60).length,
@@ -250,18 +278,65 @@ export default function PropertyRnsView({ ota }: Props) {
     borderBottom: "1px solid #E5E7EB", minWidth,
   });
 
+  function downloadCsv() {
+    const activeOta = ota || otaFilter;
+    const headers = [
+      "FH ID", "Property Name", "City",
+      ...(activeOta ? ["OTA", "Sub Status", "Live Date"] : ["Live OTAs"]),
+      "FH Live Date", "LM RNs", "CM RNs", "Delta %",
+    ];
+    const rows = filtered.map(r => {
+      const delta = r.lm > 0 ? ((r.cm - r.lm) / r.lm * 100).toFixed(1) : "";
+      return [
+        r.fhId, r.name, r.city,
+        ...(activeOta ? [r.ota, r.subStatus ?? "", r.liveDate ?? ""] : [String(r.liveOtaCount)]),
+        r.fhLiveDate ?? "", String(r.lm), String(r.cm), delta,
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    });
+    const csv  = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `property-production-${propType}-${month || "current"}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
   return (
     <div style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
 
       {/* Header */}
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>Property Production</span>
+        {/* Initial / Final tab strip */}
+        <div style={{ display: "flex", background: "#F1F5F9", borderRadius: 7, padding: 3, gap: 2 }}>
+          {(["final", "initial"] as const).map(t => (
+            <button key={t} onClick={() => setPropType(t)} style={{
+              padding: "3px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer",
+              borderRadius: 5, fontFamily: "inherit", transition: "all 0.15s",
+              background: propType === t ? "#FFFFFF" : "transparent",
+              color:      propType === t ? "#2563EB" : "#64748B",
+              boxShadow:  propType === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+            }}>
+              {t === "final" ? "Final Property" : "Initial Property"}
+            </button>
+          ))}
+        </div>
         {month && (
           <span style={{ fontSize: 11, color: "#6B7280", background: "#F3F4F6", padding: "2px 8px", borderRadius: 99 }}>
             {month} vs {lmMonth}
           </span>
         )}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={downloadCsv}
+            style={{
+              padding: "4px 10px", fontSize: 11, fontWeight: 600,
+              border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer",
+              background: "#F9FAFB", color: "#374151", fontFamily: "inherit",
+            }}
+          >
+            ↓ CSV
+          </button>
           <button
             onClick={() => setShowDetails(v => !v)}
             style={{
@@ -297,7 +372,7 @@ export default function PropertyRnsView({ ota }: Props) {
           <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
             style={{ padding: "6px 10px", fontSize: 11, border: "1px solid #E5E7EB", borderRadius: 6, background: "#FFFFFF", color: "#374151", cursor: "pointer", outline: "none" }}>
             <option value="">All OTAs</option>
-            {OTA_LIST.map(o => <option key={o} value={o}>{o}</option>)}
+            {availableOtas.map(o => <option key={o} value={o}>{o}</option>)}
           </select>
         )}
 
@@ -359,7 +434,10 @@ export default function PropertyRnsView({ ota }: Props) {
                   <th style={TH("left", 60)}>FH ID</th>
                   <th style={TH("left", 190)}>Property Name</th>
                   <th style={TH("left", 85)}>City</th>
-                  {!ota && <th style={TH("center", 80)}>OTA</th>}
+                  {!ota && (otaFilter
+                    ? <th style={TH("center", 80)}>OTA</th>
+                    : <th style={TH("center", 80)}>Live OTAs</th>
+                  )}
                   {showDetails && <th style={TH("center", 95)}>FH Live Date</th>}
                   {showDetails && <th style={TH("center", 95)}>OTA Live Date</th>}
                   {showDetails && <th style={TH("center", 80)}>OTA ID</th>}
@@ -393,13 +471,20 @@ export default function PropertyRnsView({ ota }: Props) {
                       <td style={{ padding: "6px 12px", color: "#2563EB", fontWeight: 700, whiteSpace: "nowrap", fontSize: 10 }}>{row.fhId}</td>
                       <td style={{ padding: "6px 14px", color: "#111827", fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</td>
                       <td style={{ padding: "6px 12px", color: "#6B7280", whiteSpace: "nowrap", fontSize: 11 }}>{row.city || "—"}</td>
-                      {!ota && (
+                      {!ota && (otaFilter ? (
                         <td style={{ padding: "6px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                           <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: otaColor + "15", color: otaColor, border: `1px solid ${otaColor}30` }}>
                             {OTA_SHORT[row.ota] ?? row.ota}
                           </span>
                         </td>
-                      )}
+                      ) : (
+                        <td style={{ padding: "6px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: row.liveOtaCount > 0 ? "#16A34A" : "#9CA3AF" }}>
+                            {row.liveOtaCount}
+                          </span>
+                          <span style={{ fontSize: 10, color: "#D1D5DB" }}>/{OTA_LIST.length}</span>
+                        </td>
+                      ))}
                       {showDetails && <td style={{ padding: "6px 12px", textAlign: "center", color: "#475569", fontSize: 10, whiteSpace: "nowrap" }}>{fmtDate(row.fhLiveDate)}</td>}
                       {showDetails && <td style={{ padding: "6px 12px", textAlign: "center", color: "#475569", fontSize: 10, whiteSpace: "nowrap" }}>{fmtDate(row.liveDate)}</td>}
                       {showDetails && (

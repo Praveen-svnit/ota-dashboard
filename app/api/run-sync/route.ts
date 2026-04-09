@@ -7,7 +7,7 @@ export async function POST() {
   if (running) return Response.json({ error: "Sync already in progress" }, { status: 409 });
   running = true;
 
-  const syncDir = path.resolve(process.cwd(), "..", "ota-inv-db");
+  const syncDir = path.resolve(process.cwd());
 
   return new Promise<Response>((resolve) => {
     execFile("node", ["sync.js"], { cwd: syncDir, timeout: 300_000 }, (err, stdout, stderr) => {

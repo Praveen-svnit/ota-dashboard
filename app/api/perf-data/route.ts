@@ -139,7 +139,10 @@ export async function GET() {
     for (const row of dodRows) {
       const d = typeof row.d === "string" ? row.d : (row.d as Date).toISOString().slice(0, 10);
       const idx = refDates.indexOf(d);
-      if (idx !== -1 && dodByOta[row.ota]) dodByOta[row.ota][idx] = Number(row.cnt);
+      if (idx !== -1) {
+        if (!dodByOta[row.ota]) dodByOta[row.ota] = new Array(15).fill(0);
+        dodByOta[row.ota][idx] = Number(row.cnt);
+      }
     }
 
     const tatCounts: Record<string, { inTat: number; afterTat: number; avgTat: number | null }> = {};

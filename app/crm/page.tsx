@@ -19,11 +19,13 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; dot: string }> 
   "closed":                { bg: "#F1F5F9", color: "#475569", dot: "#94A3B8" },
 };
 
+interface OtaChip {
+  ota: string; otaId: string | null; status: string; subStatus: string; liveDate: string | null;
+}
+
 interface Row {
   id: string; name: string; city: string; fhStatus: string; fhLiveDate: string;
-  ota: string; status: string; subStatus: string; liveDate: string;
-  tat: number; tatError: number; assignedTo: string; crmNote: string;
-  assignedName: string; taskDueDate: string | null;
+  otas: OtaChip[]; taskDueDate: string | null;
 }
 
 interface Summary {
@@ -77,38 +79,6 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-// ── Filter sidebar section ─────────────────────────────────────────────────
-
-function FilterSection({ label, count, children }: { label: string; count?: number; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div style={{ borderBottom: "1px solid #F1F5F9" }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-          width: "100%", padding: "10px 14px", background: "none", border: "none",
-          cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#374151", textAlign: "left" }}>
-        <span>{label}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          {count ? <span style={{ background: "#4F46E5", color: "#fff", borderRadius: 10,
-            fontSize: 9, fontWeight: 700, padding: "1px 6px" }}>{count}</span> : null}
-          <span style={{ color: "#9CA3AF", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
-        </div>
-      </button>
-      {open && <div style={{ padding: "0 14px 10px" }}>{children}</div>}
-    </div>
-  );
-}
-
-// ── KPI tile ──────────────────────────────────────────────────────────────
-
-function KpiTile({ label, value, color, bg, border }: { label: string; value: number; color: string; bg: string; border: string }) {
-  return (
-    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: "10px 14px", flex: 1, minWidth: 100 }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1 }}>{value.toLocaleString()}</div>
-      <div style={{ fontSize: 10, fontWeight: 600, color, opacity: 0.8, marginTop: 3 }}>{label}</div>
-    </div>
-  );
-}
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
@@ -122,6 +92,7 @@ export default function CrmPage() {
   const [otaFilter,       setOtaFilter]       = useState("all");
   const [statusFilter,    setStatusFilter]    = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
+  const [fhStatusFilter,  setFhStatusFilter]  = useState<string[]>(["Live", "SoldOut"]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fhDateFrom,   setFhDateFrom]   = useState("");
   const [fhDateTo,     setFhDateTo]     = useState("");
@@ -138,6 +109,8 @@ export default function CrmPage() {
   const [hoveredRow,   setHoveredRow]   = useState<number | null>(null);
   const otaDropRef = useRef<HTMLDivElement>(null);
   const [otaDropOpen, setOtaDropOpen] = useState(false);
+  const [sortBy,  setSortBy]  = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -145,6 +118,15 @@ export default function CrmPage() {
   }, [search]);
 
   useEffect(() => { fetch("/api/crm/summary").then(r => r.json()).then(setSummary); }, []);
+
+  // Auto-set OTA filter for interns so OTA Status/Sub-Status columns populate
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.user?.role === "intern" && d.user.ota) {
+        setOtaFilter(d.user.ota);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const q = breakdownOtas.length > 0 ? `?otas=${encodeURIComponent(breakdownOtas.join(","))}` : "";
@@ -163,13 +145,23 @@ export default function CrmPage() {
   }, []);
 
   const buildParams = useCallback((extra?: Record<string, string>) => {
-    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter };
+    const q: Record<string, string> = { search: debouncedSearch, ota: otaFilter, status: statusFilter, subStatus: subStatusFilter, fhStatus: fhStatusFilter.join(","), sortBy, sortDir };
     if (fhDateFrom)  q.fhFrom  = fhDateFrom;
     if (fhDateTo)    q.fhTo    = fhDateTo;
     if (otaDateFrom) q.otaFrom = otaDateFrom;
     if (otaDateTo)   q.otaTo   = otaDateTo;
     return new URLSearchParams({ ...q, ...extra });
-  }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo, sortBy, sortDir]);
+
+  function handleSort(col: string) {
+    if (sortBy === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -180,7 +172,7 @@ export default function CrmPage() {
   }, [buildParams, page]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, otaFilter, statusFilter, subStatusFilter, fhStatusFilter, fhDateFrom, fhDateTo, otaDateFrom, otaDateTo]);
 
   const [csvLoading, setCsvLoading] = useState(false);
   const downloadCsv = () => {
@@ -204,9 +196,9 @@ export default function CrmPage() {
 
   const totalPages = Math.ceil(total / 50);
 
-  const liveCount     = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
-  const notLiveCount  = summary?.statusCounts.find(s => s.subStatus === "not live")?.cnt ?? 0;
   const totalListings = summary?.statusCounts.reduce((a, b) => a + b.cnt, 0) ?? 0;
+  const liveCount     = summary?.statusCounts.find(s => s.subStatus === "live")?.cnt ?? 0;
+  const notLiveCount  = totalListings - liveCount;
   const readyCount    = summary?.statusTopCounts.find(s => s.status === "ready to go live")?.cnt ?? 0;
 
   const availableOtas = summary?.userOta
@@ -215,11 +207,12 @@ export default function CrmPage() {
 
   const activeFilterCount = [
     otaFilter !== "all", statusFilter !== "all", subStatusFilter !== "all",
+    !(fhStatusFilter.length === 2 && fhStatusFilter.includes("Live") && fhStatusFilter.includes("SoldOut")),
     !!fhDateFrom || !!fhDateTo, !!otaDateFrom || !!otaDateTo,
   ].filter(Boolean).length;
 
   function clearFilters() {
-    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all");
+    setOtaFilter("all"); setStatusFilter("all"); setSubStatusFilter("all"); setFhStatusFilter(["Live", "SoldOut"]);
     setFhDateFrom(""); setFhDateTo(""); setOtaDateFrom(""); setOtaDateTo("");
     setSearch("");
   }
@@ -249,9 +242,10 @@ export default function CrmPage() {
         {/* Nav tabs */}
         <div style={{ display: "flex", gap: 1 }}>
           {([
-            ["CRM",         "/crm",        true],
-            ["Tasks",       "/tasks",       false],
-            ["Performance", "/performance", false],
+            ["CRM",           "/crm",                  true],
+            ["Tasks",         "/tasks",                 false],
+            ["Performance",   "/performance",           false],
+            ["Status Config", "/admin/status-config",   false],
           ] as [string, string, boolean][]).map(([label, href, active]) => (
             <Link key={label} href={href} style={{
               padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600,
@@ -291,165 +285,8 @@ export default function CrmPage() {
         </button>
       </div>
 
-      {/* ── Body: sidebar + main ── */}
+      {/* ── Body ── */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-
-        {/* ── Left filter sidebar ── */}
-        <div style={{ width: 230, background: "#fff", borderRight: "1px solid #E2E8F0",
-          overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-
-          {/* Sidebar header */}
-          <div style={{ padding: "12px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Filters
-              {activeFilterCount > 0 && (
-                <span style={{ marginLeft: 6, background: "#4F46E5", color: "#fff",
-                  borderRadius: 10, fontSize: 9, padding: "1px 6px" }}>
-                  {activeFilterCount}
-                </span>
-              )}
-            </span>
-            {activeFilterCount > 0 && (
-              <button onClick={clearFilters}
-                style={{ fontSize: 10, color: "#4F46E5", background: "none", border: "none",
-                  cursor: "pointer", padding: 0, fontWeight: 600 }}>
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {/* Quick views */}
-          <div style={{ padding: "0 14px 10px", borderBottom: "1px solid #F1F5F9" }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginBottom: 6, textTransform: "uppercase" }}>
-              Quick View
-            </div>
-            {[
-              { label: "All Listings",    val: "all",               count: totalListings },
-              { label: "Live",            val: "live_ss",            count: liveCount },
-              { label: "Not Live",        val: "not live_ss",        count: notLiveCount },
-              { label: "Ready to Go Live",val: "ready to go live",   count: readyCount },
-            ].map(qv => {
-              const isActive = qv.val === "all"
-                ? statusFilter === "all" && subStatusFilter === "all"
-                : qv.val.endsWith("_ss")
-                  ? subStatusFilter === qv.val.replace("_ss","")
-                  : statusFilter === qv.val;
-              return (
-                <button key={qv.label} onClick={() => {
-                  if (qv.val === "all") { setStatusFilter("all"); setSubStatusFilter("all"); }
-                  else if (qv.val.endsWith("_ss")) { setSubStatusFilter(qv.val.replace("_ss","")); setStatusFilter("all"); }
-                  else { setStatusFilter(qv.val); setSubStatusFilter("all"); }
-                }}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
-                    width: "100%", padding: "5px 8px", borderRadius: 6, border: "none",
-                    background: isActive ? "#EEF2FF" : "none", cursor: "pointer",
-                    fontSize: 11, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? "#4F46E5" : "#475569", marginBottom: 1, textAlign: "left" }}>
-                  <span>{qv.label}</span>
-                  <span style={{ fontSize: 10, color: isActive ? "#4F46E5" : "#9CA3AF", fontWeight: 600 }}>
-                    {qv.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* OTA filter */}
-          <FilterSection label="OTA" count={otaFilter !== "all" ? 1 : 0}>
-            <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
-              disabled={!!summary?.userOta}
-              style={{ width: "100%", padding: "6px 8px", border: "1px solid #E2E8F0",
-                borderRadius: 6, fontSize: 11, background: "#F8FAFC", color: "#374151",
-                outline: "none" }}>
-              <option value="all">All OTAs</option>
-              {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-          </FilterSection>
-
-          {/* Status filter */}
-          <FilterSection label="Status" count={statusFilter !== "all" ? 1 : 0}>
-            {["all", ...statusOptions].map(s => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                <input type="radio" name="status" checked={statusFilter === s}
-                  onChange={() => setStatusFilter(s)}
-                  style={{ accentColor: "#4F46E5" }} />
-                <span style={{ color: statusFilter === s ? "#4F46E5" : "#475569",
-                  fontWeight: statusFilter === s ? 600 : 400, textTransform: "capitalize" }}>
-                  {s === "all" ? "All Statuses" : s}
-                </span>
-              </label>
-            ))}
-          </FilterSection>
-
-          {/* Sub-status filter */}
-          <FilterSection label="Sub-Status" count={subStatusFilter !== "all" ? 1 : 0}>
-            {["all", ...subStatusOptions].map(s => (
-              <label key={s} style={{ display: "flex", alignItems: "center", gap: 7,
-                padding: "3px 0", cursor: "pointer", fontSize: 11 }}>
-                <input type="radio" name="subStatus" checked={subStatusFilter === s}
-                  onChange={() => setSubStatusFilter(s)}
-                  style={{ accentColor: "#4F46E5" }} />
-                <span style={{ color: subStatusFilter === s ? "#4F46E5" : "#475569",
-                  fontWeight: subStatusFilter === s ? 600 : 400, textTransform: "capitalize" }}>
-                  {s === "all" ? "All Sub-Statuses" : s}
-                </span>
-              </label>
-            ))}
-          </FilterSection>
-
-          {/* FH Date range */}
-          <FilterSection label="FH Live Date" count={(fhDateFrom || fhDateTo) ? 1 : 0}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>FROM</div>
-                <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>TO</div>
-                <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              {(fhDateFrom || fhDateTo) && (
-                <button onClick={() => { setFhDateFrom(""); setFhDateTo(""); }}
-                  style={{ fontSize: 10, color: "#DC2626", background: "none", border: "none",
-                    cursor: "pointer", padding: 0, textAlign: "left", fontWeight: 600 }}>
-                  ✕ Clear dates
-                </button>
-              )}
-            </div>
-          </FilterSection>
-
-          {/* OTA Date range */}
-          <FilterSection label="OTA Live Date" count={(otaDateFrom || otaDateTo) ? 1 : 0}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>FROM</div>
-                <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 9, color: "#9CA3AF", marginBottom: 3 }}>TO</div>
-                <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
-                  style={{ width: "100%", padding: "5px 8px", border: "1px solid #E2E8F0",
-                    borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              {(otaDateFrom || otaDateTo) && (
-                <button onClick={() => { setOtaDateFrom(""); setOtaDateTo(""); }}
-                  style={{ fontSize: 10, color: "#DC2626", background: "none", border: "none",
-                    cursor: "pointer", padding: 0, textAlign: "left", fontWeight: 600 }}>
-                  ✕ Clear dates
-                </button>
-              )}
-            </div>
-          </FilterSection>
-        </div>
 
         {/* ── Main content ── */}
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
@@ -467,20 +304,6 @@ export default function CrmPage() {
 
             {statsOpen && (
               <div style={{ paddingBottom: 14 }}>
-                {/* KPI row */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  <KpiTile label="Total" value={totalListings} color="#0F172A" bg="#F8FAFC" border="#E2E8F0" />
-                  <KpiTile label="Live" value={liveCount} color="#059669" bg="#F0FDF4" border="#BBF7D0" />
-                  <KpiTile label="Not Live" value={notLiveCount} color="#DC2626" bg="#FEF2F2" border="#FECACA" />
-                  <KpiTile label="Ready" value={readyCount} color="#854D0E" bg="#FEFCE8" border="#FDE68A" />
-                  <div style={{ width: 1, background: "#E2E8F0", margin: "0 4px" }} />
-                  <KpiTile label="Open Tasks" value={summary?.tasksOpen ?? 0} color="#2563EB" bg="#EFF6FF" border="#BFDBFE" />
-                  <KpiTile label="High Priority" value={summary?.tasksHigh ?? 0} color="#DC2626" bg="#FEF2F2" border="#FECACA" />
-                  <KpiTile label="Overdue" value={summary?.tasksOverdue ?? 0}
-                    color={(summary?.tasksOverdue ?? 0) > 0 ? "#C2410C" : "#059669"}
-                    bg={(summary?.tasksOverdue ?? 0) > 0 ? "#FFF7ED" : "#F0FDF4"}
-                    border={(summary?.tasksOverdue ?? 0) > 0 ? "#FED7AA" : "#BBF7D0"} />
-                </div>
 
                 {/* Listing Breakdown */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -556,11 +379,28 @@ export default function CrmPage() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {visible.map(item => {
                         const s = STATUS_COLORS[item.label?.toLowerCase()] ?? { bg: "#F1F5F9", color: "#475569", dot: "#9CA3AF" };
+                        const isActive = statusView === "status"
+                          ? statusFilter === item.label
+                          : subStatusFilter === item.label;
                         return (
-                          <div key={item.label} style={{ background: s.bg, border: `1px solid ${s.dot}30`,
-                            borderRadius: 7, padding: "6px 10px", minWidth: 80 }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: s.color, lineHeight: 1 }}>{item.cnt}</div>
-                            <div style={{ fontSize: 9, fontWeight: 600, color: s.color, opacity: 0.8, marginTop: 2, textTransform: "capitalize" }}>
+                          <div key={item.label}
+                            onClick={() => {
+                              if (statusView === "status") {
+                                setStatusFilter(f => f === item.label ? "all" : item.label);
+                                setSubStatusFilter("all");
+                              } else {
+                                setSubStatusFilter(f => f === item.label ? "all" : item.label);
+                                setStatusFilter("all");
+                              }
+                              setPage(1);
+                            }}
+                            style={{ background: isActive ? s.dot : s.bg,
+                              border: `2px solid ${isActive ? s.dot : s.dot + "40"}`,
+                              borderRadius: 7, padding: "6px 10px", minWidth: 80,
+                              cursor: "pointer", transition: "all 0.12s",
+                              boxShadow: isActive ? `0 0 0 3px ${s.dot}30` : "none" }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: isActive ? "#fff" : s.color, lineHeight: 1 }}>{item.cnt}</div>
+                            <div style={{ fontSize: 9, fontWeight: 600, color: isActive ? "#fff" : s.color, opacity: isActive ? 1 : 0.8, marginTop: 2, textTransform: "capitalize" }}>
                               {item.label || "—"}
                             </div>
                           </div>
@@ -613,11 +453,81 @@ export default function CrmPage() {
             </div>
           )}
 
+          {/* ── Filter bar ── */}
+          <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <select value={otaFilter} onChange={e => setOtaFilter(e.target.value)}
+              disabled={!!summary?.userOta}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: otaFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: otaFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All OTAs</option>
+              {(summary?.userOta ? [summary.userOta] : OTA_LIST).map(o => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", border: "1px solid #E2E8F0", borderRadius: 6, background: "#F8FAFC" }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", marginRight: 2 }}>FH:</span>
+              {["Live", "SoldOut", "Churned"].map(s => {
+                const checked = fhStatusFilter.includes(s);
+                return (
+                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 3, cursor: "pointer", fontSize: 11 }}>
+                    <input type="checkbox" checked={checked}
+                      onChange={() => setFhStatusFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}
+                      style={{ accentColor: "#4F46E5", width: 11, height: 11 }} />
+                    <span style={{ color: checked ? "#4F46E5" : "#475569", fontWeight: checked ? 600 : 400 }}>{s}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: statusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: statusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Statuses</option>
+              {statusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+            <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)}
+              style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11,
+                background: subStatusFilter !== "all" ? "#EEF2FF" : "#F8FAFC",
+                color: subStatusFilter !== "all" ? "#4F46E5" : "#374151", outline: "none", cursor: "pointer" }}>
+              <option value="all">All Sub-Statuses</option>
+              {subStatusOptions.map(s => <option key={s} value={s} style={{ textTransform: "capitalize" }}>{s}</option>)}
+            </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>FH Date:</span>
+              <input type="date" value={fhDateFrom} onChange={e => setFhDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateFrom ? "#EEF2FF" : "#F8FAFC", color: fhDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={fhDateTo} onChange={e => setFhDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: fhDateTo ? "#EEF2FF" : "#F8FAFC", color: fhDateTo ? "#4F46E5" : "#374151" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF" }}>OTA Date:</span>
+              <input type="date" value={otaDateFrom} onChange={e => setOtaDateFrom(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateFrom ? "#EEF2FF" : "#F8FAFC", color: otaDateFrom ? "#4F46E5" : "#374151" }} />
+              <span style={{ fontSize: 10, color: "#9CA3AF" }}>–</span>
+              <input type="date" value={otaDateTo} onChange={e => setOtaDateTo(e.target.value)}
+                style={{ padding: "4px 6px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none",
+                  background: otaDateTo ? "#EEF2FF" : "#F8FAFC", color: otaDateTo ? "#4F46E5" : "#374151" }} />
+            </div>
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters}
+                style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #FECACA",
+                  background: "#FEF2F2", color: "#DC2626", fontSize: 11, fontWeight: 600,
+                  cursor: "pointer", whiteSpace: "nowrap" }}>
+                ✕ Clear
+              </button>
+            )}
+          </div>
+
           {/* List header */}
           <div style={{ padding: "10px 20px", display: "flex", alignItems: "center", gap: 10,
             background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
-              {loading ? "Loading…" : `${total.toLocaleString()} listing${total !== 1 ? "s" : ""}`}
+              {loading ? "Loading…" : `${total.toLocaleString()} propert${total !== 1 ? "ies" : "y"}`}
             </span>
             {activeFilterCount > 0 && (
               <span style={{ fontSize: 10, color: "#4F46E5", background: "#EEF2FF",
@@ -630,15 +540,36 @@ export default function CrmPage() {
           {/* ── Property list ── */}
           <div style={{ flex: 1 }}>
             {/* Column headers */}
-            <div style={{ display: "grid",
-              gridTemplateColumns: "2fr 100px 80px 90px 130px 130px 120px 80px 80px",
-              padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
-              gap: 8 }}>
-              {["Property", "OTA", "Status", "Sub-Status", "FH Live Date", "OTA Live Date", "Assigned To", "Task Due", ""].map(h => (
-                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF",
-                  textTransform: "uppercase", letterSpacing: 0.4 }}>{h}</div>
-              ))}
-            </div>
+            {(() => {
+              const SORT_COLS: Record<string, string> = {
+                "Property Name": "name", "City": "city",
+                "FH Live Date": "fhLiveDate", "FH Status": "fhStatus", "Task Due": "taskDue",
+              };
+              const arrow = (col: string) => {
+                if (sortBy !== SORT_COLS[col]) return <span style={{ color: "#D1D5DB", marginLeft: 3 }}>↕</span>;
+                return <span style={{ color: "#5D87FF", marginLeft: 3 }}>{sortDir === "asc" ? "↑" : "↓"}</span>;
+              };
+              return (
+                <div style={{ display: "grid",
+                  gridTemplateColumns: "55px minmax(120px,2fr) 90px 95px 80px 90px 100px 90px 110px 85px 60px",
+                  padding: "7px 20px", background: "#F1F5F9", borderBottom: "1px solid #E2E8F0",
+                  gap: 8 }}>
+                  {["ID", "Property Name", "City", "FH Live Date", "FH Status", "OTA Status", "Sub-Status", "OTA Live Date", "OTA ID", "Task Due", ""].map(h => {
+                    const sortKey = SORT_COLS[h];
+                    return (
+                      <div key={h}
+                        onClick={sortKey ? () => handleSort(sortKey) : undefined}
+                        style={{ fontSize: 10, fontWeight: 700, color: sortBy === sortKey ? "#5D87FF" : "#9CA3AF",
+                          textTransform: "uppercase", letterSpacing: 0.4,
+                          cursor: sortKey ? "pointer" : "default",
+                          userSelect: "none", display: "flex", alignItems: "center" }}>
+                        {h}{sortKey && arrow(h)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {loading ? (
               <div style={{ padding: 60, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
@@ -649,76 +580,75 @@ export default function CrmPage() {
                 <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>Try adjusting your filters</div>
               </div>
             ) : rows.map((row, i) => {
-              const otaCol = OTA_COLORS[row.ota] ?? "#64748B";
               const isHovered = hoveredRow === i;
               const isOverdue = row.taskDueDate && new Date(row.taskDueDate) < new Date(new Date().toDateString());
+              // Show OTA status/sub-status when a single OTA is selected, or when there's only one OTA on the property
+              const singleOta = otaFilter !== "all"
+                ? (row.otas ?? []).find(o => o.ota === otaFilter) ?? null
+                : (row.otas ?? []).length === 1 ? (row.otas ?? [])[0] : null;
               return (
                 <div key={i}
                   onMouseEnter={() => setHoveredRow(i)}
                   onMouseLeave={() => setHoveredRow(null)}
                   style={{ display: "grid",
-                    gridTemplateColumns: "2fr 100px 80px 90px 130px 130px 120px 80px 80px",
+                    gridTemplateColumns: "55px minmax(120px,2fr) 90px 95px 80px 90px 100px 90px 110px 85px 60px",
                     padding: "10px 20px", gap: 8, alignItems: "center",
                     borderBottom: "1px solid #F1F5F9",
                     background: isHovered ? "#F8FAFC" : "#fff",
                     transition: "background 0.1s" }}>
 
-                  {/* Property */}
+                  {/* ID */}
+                  <div style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{row.id}</div>
+
+                  {/* Property Name */}
                   <div style={{ minWidth: 0 }}>
-                    <Link href={`/crm/${row.id}?ota=${encodeURIComponent(row.ota)}`}
+                    <Link href={`/crm/${row.id}`}
                       style={{ fontSize: 13, fontWeight: 700, color: "#0F172A",
                         textDecoration: "none", display: "block",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       title={row.name}>
-                      {row.name}
+                      {row.name || <span style={{ color: "#CBD5E1" }}>—</span>}
                     </Link>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2 }}>
-                      <span style={{ fontSize: 10, color: "#9CA3AF" }}>#{row.id}</span>
-                      {row.city && <span style={{ fontSize: 10, color: "#9CA3AF" }}>· {row.city}</span>}
-                      {row.crmNote && (
-                        <span style={{ fontSize: 10, color: "#64748B",
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          maxWidth: 160 }} title={row.crmNote}>
-                          · {row.crmNote}
-                        </span>
-                      )}
-                    </div>
                   </div>
 
-                  {/* OTA */}
-                  <div>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12,
-                      background: otaCol + "18", color: otaCol, border: `1px solid ${otaCol}30`,
-                      whiteSpace: "nowrap" }}>
-                      {row.ota}
-                    </span>
-                  </div>
-
-                  {/* Status */}
-                  <div><StatusDot status={row.status} /></div>
-
-                  {/* Sub-status */}
+                  {/* City */}
                   <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {row.subStatus || <span style={{ color: "#CBD5E1" }}>—</span>}
+                    {row.city || <span style={{ color: "#CBD5E1" }}>—</span>}
                   </div>
 
                   {/* FH Live Date */}
                   <div style={{ fontSize: 11, color: "#475569" }}>{fmtDate(row.fhLiveDate)}</div>
 
-                  {/* OTA Live Date */}
-                  <div style={{ fontSize: 11, color: "#475569" }}>{fmtDate(row.liveDate)}</div>
+                  {/* FH Status */}
+                  <div>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                      background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9",
+                      color: row.fhStatus === "Live" ? "#15803D" : "#64748B",
+                      border: `1px solid ${row.fhStatus === "Live" ? "#BBF7D0" : "#E2E8F0"}` }}>
+                      {row.fhStatus || "—"}
+                    </span>
+                  </div>
 
-                  {/* Assigned to */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    {row.assignedName ? (
-                      <>
-                        <Avatar name={row.assignedName} size={22} />
-                        <span style={{ fontSize: 11, color: "#374151", overflow: "hidden",
-                          textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {row.assignedName.split(" ")[0]}
-                        </span>
-                      </>
-                    ) : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
+                  {/* OTA Status */}
+                  <div>
+                    {singleOta
+                      ? <StatusDot status={singleOta.status} />
+                      : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* Sub-Status */}
+                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {singleOta?.subStatus || <span style={{ color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* OTA Live Date */}
+                  <div style={{ fontSize: 11, color: "#475569" }}>
+                    {singleOta?.liveDate ? fmtDate(singleOta.liveDate) : <span style={{ color: "#CBD5E1" }}>—</span>}
+                  </div>
+
+                  {/* OTA ID */}
+                  <div style={{ fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {singleOta?.otaId ? <span style={{ fontWeight: 600 }}>{singleOta.otaId}</span> : <span style={{ color: "#CBD5E1" }}>—</span>}
                   </div>
 
                   {/* Task due */}
@@ -736,7 +666,7 @@ export default function CrmPage() {
 
                   {/* Action */}
                   <div style={{ opacity: isHovered ? 1 : 0, transition: "opacity 0.15s" }}>
-                    <Link href={`/crm/${row.id}?ota=${encodeURIComponent(row.ota)}`}
+                    <Link href={`/crm/${row.id}`} target="_blank" rel="noopener noreferrer"
                       style={{ fontSize: 11, fontWeight: 600, color: "#fff",
                         background: "#4F46E5", borderRadius: 6, padding: "4px 10px",
                         textDecoration: "none", whiteSpace: "nowrap" }}>

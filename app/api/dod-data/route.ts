@@ -1,26 +1,10 @@
 import { getSql } from "@/lib/db";
+import { RNS_OTAS, CHANNEL_TO_OTA, OTA_CHANNELS } from "@/lib/constants";
 
-const OTAS = ["GoMMT", "Booking.com", "Agoda", "Expedia", "Cleartrip", "EaseMyTrip", "Yatra", "Ixigo", "Akbar Travels"];
-
-// DB stores GoMMT as separate channels — map them to canonical OTA names
-const DB_TO_OTA: Record<string, string> = {
-  "MakeMyTrip":    "GoMMT",
-  "Goibibo":       "GoMMT",
-  "MyBiz":         "GoMMT",
-  "Booking.com":   "Booking.com",
-  "Agoda":         "Agoda",
-  "Expedia":       "Expedia",
-  "Cleartrip":     "Cleartrip",
-  "EaseMyTrip":    "EaseMyTrip",
-  "Yatra":         "Yatra",
-  "Travelguru":    "Yatra",
-  "Ixigo":         "Ixigo",
-  "Akbar Travels": "Akbar Travels",
-};
-
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const sql = getSql();
+    const sql  = getSql();
+    const type = new URL(req.url).searchParams.get("type") ?? "occupied"; // "sold" | "stay" | "occupied"
 
     const end   = new Date();
     const start = new Date();
@@ -35,43 +19,64 @@ export async function GET() {
       dayMap.set(fmt(d), {});
     }
 
-    const populate = (rows: { sold_date: string; ota: string; rns: number }[]) => {
+    const populate = (rows: { day: string; ota: string; rns: number }[]) => {
       for (const row of rows) {
-        const canonical = DB_TO_OTA[row.ota];
+        const canonical = CHANNEL_TO_OTA[row.ota];
         if (!canonical) continue;
-        const day = dayMap.get(row.sold_date);
-        if (day) day[canonical] = (day[canonical] ?? 0) + row.rns;
+        const day = dayMap.get(row.day);
+        if (!day) continue;
+        // Canonical total
+        day[canonical] = (day[canonical] ?? 0) + Number(row.rns);
+        // Sub-source value for expand view
+        day[`${canonical}.${row.ota}`] = (day[`${canonical}.${row.ota}`] ?? 0) + Number(row.rns);
       }
     };
 
-    const soldRows = await sql`
-      SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
-      FROM sold_rns
-      WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
-      GROUP BY date, channel
-      ORDER BY date ASC
-    ` as { sold_date: string; ota: string; rns: number }[];
-
-    if (soldRows.length > 0) {
-      populate(soldRows);
-    } else {
-      // fallback to stay_rns
-      const stayRows = await sql`
-        SELECT date AS sold_date, channel AS ota, SUM(rns) as rns
+    if (type === "occupied") {
+      const rows = await sql`
+        SELECT
+          d::date::text AS day,
+          ota_booking_source_desc AS ota,
+          ROUND(SUM(rns::numeric / NULLIF(checkout::date - checkin::date, 0))) AS rns
+        FROM stay_rns,
+          LATERAL generate_series(checkin::date, checkout::date - 1, '1 day'::interval) d
+        WHERE guest_status_desc IN ('Checkin', 'Checkout')
+          AND checkin <= ${fmt(end)}::date
+          AND checkout  > ${fmt(start)}::date
+          AND d::date  >= ${fmt(start)}::date
+          AND d::date  <= ${fmt(end)}::date
+        GROUP BY d::date, ota_booking_source_desc
+        ORDER BY d::date ASC
+      ` as { day: string; ota: string; rns: number }[];
+      populate(rows);
+    } else if (type === "stay") {
+      const rows = await sql`
+        SELECT checkin::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
         FROM stay_rns
-        WHERE date >= ${fmt(start)} AND date <= ${fmt(end)}
-        GROUP BY date, channel
-        ORDER BY date ASC
-      ` as { sold_date: string; ota: string; rns: number }[];
-      populate(stayRows);
+        WHERE checkin >= ${fmt(start)} AND checkin <= ${fmt(end)}
+          AND guest_status_desc IN ('Checkin', 'Checkout')
+        GROUP BY checkin, ota_booking_source_desc
+        ORDER BY checkin ASC
+      ` as { day: string; ota: string; rns: number }[];
+      populate(rows);
+    } else {
+      const rows = await sql`
+        SELECT created_at::text AS day, ota_booking_source_desc AS ota, SUM(rns) AS rns
+        FROM sold_rns
+        WHERE created_at >= ${fmt(start)} AND created_at <= ${fmt(end)}
+          AND guest_status_desc IN ('Checkin', 'Checkout')
+        GROUP BY created_at, ota_booking_source_desc
+        ORDER BY created_at ASC
+      ` as { day: string; ota: string; rns: number }[];
+      populate(rows);
     }
 
     const days = Array.from(dayMap.entries()).map(([date, otaMap]) => ({
       date,
-      ...Object.fromEntries(OTAS.map((o) => [o, otaMap[o] ?? 0])),
+      ...otaMap,
     }));
 
-    return Response.json({ days, otas: OTAS });
+    return Response.json({ days, otas: RNS_OTAS, groups: OTA_CHANNELS });
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });
   }

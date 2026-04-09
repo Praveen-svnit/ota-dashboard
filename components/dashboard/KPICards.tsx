@@ -14,30 +14,24 @@ function KPICard({
   subtitle: string;
   accent: string;
 }) {
-  const circleBg = accent + "22";
   return (
     <div
       style={{
-        background: "#FFFFFF",
-        border: "1px solid #E2E8F0",
+        background: accent + "18",
+        border: `1px solid ${accent}30`,
         borderRadius: 12,
         padding: "20px 20px 16px",
-        position: "relative",
-        overflow: "hidden",
         flex: 1,
         minWidth: 0,
       }}
     >
-      <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: circleBg }} />
-      <div style={{ position: "relative" }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#64748B", marginBottom: 8, letterSpacing: "0.03em" }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 30, fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 6 }}>
-          {value}
-        </div>
-        <div style={{ fontSize: 11, color: "#94A3B8" }}>{subtitle}</div>
+      <div style={{ fontSize: 11, fontWeight: 500, color: "#64748B", marginBottom: 8, letterSpacing: "0.03em" }}>
+        {label}
       </div>
+      <div style={{ fontSize: 30, fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 6 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11, color: "#94A3B8" }}>{subtitle}</div>
     </div>
   );
 }
@@ -54,19 +48,15 @@ function KPICardSplit({
   return (
     <div
       style={{
-        background: "#FFFFFF",
-        border: "1px solid #E2E8F0",
+        background: accent + "18",
+        border: `1px solid ${accent}30`,
         borderRadius: 12,
         padding: "20px 20px 16px",
-        position: "relative",
-        overflow: "hidden",
         flex: 1,
         minWidth: 0,
       }}
     >
-      <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: accent + "22" }} />
-      <div style={{ position: "relative" }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: "#64748B", marginBottom: 14, letterSpacing: "0.03em" }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: "#64748B", marginBottom: 14, letterSpacing: "0.03em" }}>
           {label}
         </div>
         <div style={{ display: "flex", gap: 0 }}>
@@ -86,7 +76,6 @@ function KPICardSplit({
             </div>
           ))}
         </div>
-      </div>
     </div>
   );
 }

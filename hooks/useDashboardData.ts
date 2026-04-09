@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import {
   OTA_STATUS, MTD_LISTINGS, L12M_OTA_LIVE, L12M_MONTHS, L12M_ONBOARDED, FH_PLATFORM_LIVE
 } from "@/lib/data";
-import type { RNPDEntry, MoMStayEntry } from "@/lib/rns-sheet-parser";
-
 type RNSMonthlyEntry = { lmMTD: number; cmMTD: number; lmTotal: number };
 type RNSMonthlyData  = Record<string, Record<string, RNSMonthlyEntry>>;
 export type SoldMonthlyData = Record<string, Record<string, { cmMTD: number; lmMTD: number; lmTotal: number }>>;
 export type RevMonthlyData  = Record<string, Record<string, { cmMTD: number; lmMTD: number; lmTotal: number }>>;
+
+type RNPDChannelEntry = { cmRNs: number; lmSameDayRNs: number; lmTotalRNs: number };
+type RNPDEntry = { cmRNs: number; lmSameDayRNs: number; lmTotalRNs: number; channels?: Record<string, RNPDChannelEntry> };
 
 export interface DashboardData {
   fhLiveCount:          number;
@@ -17,7 +18,6 @@ export interface DashboardData {
   fhSoldOutCount:       number;
   fhOnboardedThisMonth: number;
   rnpdLive:          Record<string, RNPDEntry> | null;
-  momStay:           Record<string, MoMStayEntry> | null;
   rnsPerDayCmAvg:    number | null;
   rnsLiveMonthly:    RNSMonthlyData | null;
   rnsSoldMonthly:    SoldMonthlyData | null;
@@ -38,7 +38,6 @@ const SEED_DATA: DashboardData = {
   fhSoldOutCount:       0,
   fhOnboardedThisMonth: 0,
   rnpdLive:          null,
-  momStay:           null,
   rnsPerDayCmAvg:    null,
   rnsLiveMonthly:    null,
   rnsSoldMonthly:    null,
@@ -74,8 +73,7 @@ export function useDashboardData() {
     }
   }, []);
 
-  // Auto-fetch on mount (page load)
-  useEffect(() => { refresh(); }, [refresh]);
+  // No auto-fetch — user clicks Fetch button to load stay_rns/sold_rns data
 
   return { data, isLoading, lastRefreshed, refresh };
 }

@@ -14,6 +14,7 @@ const OTA_LIST = [
   { name: "Cleartrip",      color: "#F97316", bg: "#FFF7ED", tab: "Clear Trip" },
   { name: "EaseMyTrip",     color: "#06B6D4", bg: "#F0FFFE", tab: "EMT" },
   { name: "Indigo",         color: "#6B2FA0", bg: "#F5F0FF", noSheet: true },
+  { name: "GMB",            color: "#34A853", bg: "#F0FBF4", tab: "new tracker" },
 ];
 
 // OTAs without a Google Sheet yet — only bootstrap available, no sync
@@ -136,6 +137,7 @@ export default function MigrationPage() {
     setSyncAllBusy(true);
     setSyncAllLog([]);
     for (const { name } of OTA_LIST) {
+      if (NO_SHEET_OTAS.has(name)) continue; // skip OTAs without a sheet
       setSyncAllLog(p => [...p, `Syncing ${name}…`]);
       try {
         const res  = await fetch(`/api/sync-ota-listings?ota=${encodeURIComponent(name)}`, { method: "POST" });
@@ -146,6 +148,15 @@ export default function MigrationPage() {
       } catch (e) {
         setSyncAllLog(p => [...p.slice(0, -1), `✗ ${name}: ${e}`]);
       }
+    }
+    // Sync GMB separately
+    setSyncAllLog(p => [...p, `Syncing GMB…`]);
+    try {
+      const res  = await fetch("/api/sync-gmb", { method: "POST" });
+      const json = await res.json();
+      setSyncAllLog(p => [...p.slice(0, -1), `✓ GMB: ${json.log ?? "done"}`]);
+    } catch (e) {
+      setSyncAllLog(p => [...p.slice(0, -1), `✗ GMB: ${e}`]);
     }
     setSyncAllBusy(false);
   }

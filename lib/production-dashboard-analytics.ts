@@ -462,7 +462,7 @@ export async function buildProductionDashboard2Snapshot(): Promise<ProductionDas
   const sql = getSql();
   const now = new Date();
 
-  const [latestSoldDateRow] = await sql`SELECT MAX(date)::text AS "maxDate" FROM sold_rns`;
+  const [latestSoldDateRow] = await sql`SELECT MAX(checkin)::text AS "maxDate" FROM sold_rns`;
   const latestSoldDate = (latestSoldDateRow as { maxDate: string | null }).maxDate
     ? new Date(`${(latestSoldDateRow as { maxDate: string }).maxDate}T00:00:00`)
     : now;
@@ -506,46 +506,46 @@ export async function buildProductionDashboard2Snapshot(): Promise<ProductionDas
       GROUP BY ota
     `,
     sql`
-      SELECT date::text AS date, channel AS ota, SUM(rns) AS value
+      SELECT checkin::text AS date, ota_booking_source_desc AS ota, SUM(rns) AS value
       FROM sold_rns
-      WHERE date >= ${formatDate(recentWindowStart)}::date AND date <= ${formatDate(now)}::date
-      GROUP BY date, channel
+      WHERE checkin >= ${formatDate(recentWindowStart)}::date AND checkin <= ${formatDate(now)}::date
+      GROUP BY checkin, ota_booking_source_desc
     `,
     sql`
-      SELECT date::text AS date, channel AS ota, SUM(rns) AS value
+      SELECT checkin::text AS date, ota_booking_source_desc AS ota, SUM(rns) AS value
       FROM stay_rns
-      WHERE date >= ${formatDate(previousMonthStart)}::date AND date <= ${formatDate(now)}::date
-        AND UPPER(status) = 'CICO'
-      GROUP BY date, channel
+      WHERE checkin >= ${formatDate(previousMonthStart)}::date AND checkin <= ${formatDate(now)}::date
+        AND LOWER(guest_status_desc) = 'checkout'
+      GROUP BY checkin, ota_booking_source_desc
     `,
     sql`
-      SELECT date::text AS date, channel AS ota, SUM(revenue) AS value
+      SELECT checkin::text AS date, ota_booking_source_desc AS ota, SUM(rev) AS value
       FROM stay_rns
-      WHERE date >= ${formatDate(previousMonthStart)}::date AND date <= ${formatDate(now)}::date
-        AND UPPER(status) = 'CICO'
-      GROUP BY date, channel
+      WHERE checkin >= ${formatDate(previousMonthStart)}::date AND checkin <= ${formatDate(now)}::date
+        AND LOWER(guest_status_desc) = 'checkout'
+      GROUP BY checkin, ota_booking_source_desc
     `,
     sql`
       SELECT COUNT(*) AS n FROM ota_listing
       WHERE live_date IS NOT NULL AND live_date::date >= ${formatDate(currentMonthStart)}::date
     `,
     sql`
-      SELECT date::text AS date, SUM(rns) AS value
+      SELECT checkin::text AS date, SUM(rns) AS value
       FROM sold_rns
-      WHERE date >= ${formatDate(comparisonCurrentMonthStart)}::date AND date <= ${formatDate(comparisonEnd)}::date
-      GROUP BY date
+      WHERE checkin >= ${formatDate(comparisonCurrentMonthStart)}::date AND checkin <= ${formatDate(comparisonEnd)}::date
+      GROUP BY checkin
     `,
     sql`
-      SELECT date::text AS date, SUM(rns) AS value
+      SELECT checkin::text AS date, SUM(rns) AS value
       FROM sold_rns
-      WHERE date >= ${formatDate(comparisonPreviousMonthStart)}::date AND date <= ${formatDate(comparisonPreviousMonthEnd)}::date
-      GROUP BY date
+      WHERE checkin >= ${formatDate(comparisonPreviousMonthStart)}::date AND checkin <= ${formatDate(comparisonPreviousMonthEnd)}::date
+      GROUP BY checkin
     `,
     sql`
-      SELECT date::text AS date, SUM(rns) AS value
+      SELECT checkin::text AS date, SUM(rns) AS value
       FROM sold_rns
-      WHERE date >= ${formatDate(comparisonLastYearMonthStart)}::date AND date <= ${formatDate(comparisonLastYearEnd)}::date
-      GROUP BY date
+      WHERE checkin >= ${formatDate(comparisonLastYearMonthStart)}::date AND checkin <= ${formatDate(comparisonLastYearEnd)}::date
+      GROUP BY checkin
     `,
   ]);
 
