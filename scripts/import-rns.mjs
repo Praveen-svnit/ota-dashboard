@@ -1,7 +1,7 @@
 import { readFileSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
 import { parse } from "csv-parse/sync";
-import { neon } from "@neondatabase/serverless";
+import pkg from "pg";
 import { config } from "dotenv";
 
 config({ path: ".env.local" });
@@ -13,7 +13,8 @@ if (!tableArg || !pathArg || !["stay", "sold"].includes(tableArg)) {
 }
 
 const TABLE = tableArg === "stay" ? "stay_rns" : "sold_rns";
-const sql   = neon(process.env.DATABASE_URL);
+const pool  = new pkg.Pool({ connectionString: process.env.DATABASE_URL });
+const sql   = { query: (q) => pool.query(q) };
 const BATCH = 500;
 
 // Resolve list of CSV files
@@ -79,3 +80,4 @@ for (const file of files) {
 }
 
 console.log(`\nTotal inserted/upserted: ${totalInserted} rows → ${TABLE}`);
+await pool.end();
