@@ -666,28 +666,6 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   </div>
                 </div>
 
-                {/* ── Note input card ── */}
-                <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", padding: "16px 20px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Add Note</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      value={noteInput[activeListing.id] ?? ""}
-                      onChange={(e) => setNoteInput((p) => ({ ...p, [activeListing.id]: e.target.value }))}
-                      placeholder="Type a note or update…"
-                      onKeyDown={(e) => e.key === "Enter" && addNote(activeListing.id)}
-                      style={{ flex: 1, padding: "8px 12px", borderRadius: 8,
-                        border: "1px solid #E2E8F0", fontSize: 12, outline: "none",
-                        background: "#F8FAFC" }}
-                    />
-                    <button onClick={() => addNote(activeListing.id)}
-                      disabled={saving || !(noteInput[activeListing.id]?.trim())}
-                      style={{ padding: "8px 20px", borderRadius: 8, border: "none",
-                        background: color, color: "#FFF", fontSize: 12, fontWeight: 700,
-                        cursor: "pointer", opacity: !(noteInput[activeListing.id]?.trim()) ? 0.4 : 1 }}>
-                      Add
-                    </button>
-                  </div>
-                </div>
 
               </>
             );
@@ -750,88 +728,102 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
             );
           })()}
 
-          {/* Activity timeline — full width in left column */}
+          {/* Activity timeline */}
           <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>Activity</span>
-              <span style={{ fontSize: 10, color: "#94A3B8" }}>{otaLogs.length} entries</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A", letterSpacing: "-0.01em" }}>Activity</span>
+              <span style={{ fontSize: 10, fontWeight: 500, color: "#94A3B8" }}>{otaLogs.length} entries</span>
             </div>
-            <div style={{ maxHeight: 400, overflowY: "auto" }}>
+            <div style={{ maxHeight: 420, overflowY: "auto" }}>
               {otaLogs.length === 0 ? (
-                <div style={{ padding: "24px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>No activity yet</div>
-              ) : otaLogs.map((log) => {
-                const actionColor = ACTION_COLORS[log.action] ?? "#64748B";
-                const icon = log.action === "note_added" ? "✎" : log.action === "assigned" ? "◎" : log.action === "metric_updated" ? "◆" : "↻";
+                <div style={{ padding: "32px 16px", textAlign: "center", color: "#CBD5E1", fontSize: 12 }}>No activity yet</div>
+              ) : otaLogs.map((log, idx) => {
+                const isNote = log.action === "note_added";
+                const actionColor = isNote ? "#7C3AED" : ACTION_COLORS[log.action] ?? "#64748B";
+                type LogWithSub = Log & { subStatusChange?: { old: string; new: string } };
+                const lx = log as LogWithSub;
+                const dateMatch = log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/);
+                const noteText  = log.note?.replace(/^\[Date: \d{4}-\d{2}-\d{2}\]\s*/, "") ?? "";
+                const fieldLabel = log.field === "status" ? "Status" : log.field === "subStatus" ? "Sub-Status" : log.field;
+                const isLast = idx === otaLogs.length - 1;
                 return (
-                  <div key={log.id} style={{ padding: "10px 16px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
-                      background: actionColor + "18", display: "flex", alignItems: "center",
-                      justifyContent: "center", fontSize: 11, color: actionColor }}>
-                      {icon}
+                  <div key={log.id} style={{ display: "flex", gap: 12, padding: "12px 16px", position: "relative" }}>
+                    {/* Timeline line */}
+                    {!isLast && (
+                      <div style={{ position: "absolute", left: 27, top: 38, bottom: 0, width: 1, background: "#F1F5F9", zIndex: 0 }} />
+                    )}
+                    {/* Avatar */}
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, zIndex: 1,
+                      background: actionColor + "15", border: `1.5px solid ${actionColor}40`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 10, fontWeight: 700, color: actionColor, marginTop: 1 }}>
+                      {isNote ? "N" : log.action === "assigned" ? "A" : log.action === "metric_updated" ? "M" : "U"}
                     </div>
+                    {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>{log.userName || "System"}</span>
-                          {isPropertyView && log.otaListingId && (() => {
-                            const l = listings.find(x => Number(x.id) === Number(log.otaListingId));
-                            if (!l) return null;
-                            const c = OTA_COLORS[l.ota] ?? "#64748B";
-                            return (
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 8, background: c + "18", color: c }}>
-                                {l.ota}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                        <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
-                      </div>
-                      {log.action === "note_added" ? (
-                        <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.4, fontStyle: "italic" }}>"{log.note}"</div>
-                      ) : (
-                        (() => {
-                          type LogWithSub = Log & { subStatusChange?: { old: string; new: string } };
-                          const lx = log as LogWithSub;
-                          const dateMatch = log.note?.match(/^\[Date: (\d{4}-\d{2}-\d{2})\]/);
-                          const noteText  = log.note?.replace(/^\[Date: \d{4}-\d{2}-\d{2}\]\s*/, "") ?? "";
+                      {/* Top row: user + OTA tag + time */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#0F172A" }}>{log.userName || "System"}</span>
+                        {isPropertyView && log.otaListingId && (() => {
+                          const l = listings.find(x => Number(x.id) === Number(log.otaListingId));
+                          if (!l) return null;
+                          const c = OTA_COLORS[l.ota] ?? "#64748B";
                           return (
-                            <>
-                              {/* Status / field change */}
-                              <div style={{ fontSize: 11, color: "#64748B" }}>
-                                <span style={{ fontWeight: 600 }}>
-                                  {log.field === "status" ? "Status" : log.field === "subStatus" ? "Sub-Status" : log.field}
-                                </span>:{" "}
-                                <span style={{ color: "#DC2626" }}>{log.oldValue || "—"}</span>
-                                {" → "}
-                                <span style={{ color: "#059669" }}>{log.newValue || "—"}</span>
-                              </div>
-                              {/* Merged subStatus change (Agoda auto-map) */}
-                              {lx.subStatusChange && (
-                                <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>
-                                  <span style={{ fontWeight: 600 }}>Sub-Status</span>:{" "}
-                                  <span style={{ color: "#DC2626" }}>{lx.subStatusChange.old || "—"}</span>
-                                  {" → "}
-                                  <span style={{ color: "#059669" }}>{lx.subStatusChange.new}</span>
-                                </div>
-                              )}
-                              {/* Action date + note — shown together below the change lines */}
-                              {(dateMatch || noteText) && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                                  {dateMatch && (
-                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
-                                      fontSize: 10, fontWeight: 600, color: "#7C3AED",
-                                      background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 6, padding: "1px 7px" }}>
-                                      📅 {fmtDate(dateMatch[1])}
-                                    </span>
-                                  )}
-                                  {noteText && (
-                                    <span style={{ fontSize: 10, color: "#6366F1", fontStyle: "italic" }}>"{noteText}"</span>
-                                  )}
-                                </div>
-                              )}
-                            </>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 6,
+                              background: c + "12", color: c, border: `1px solid ${c}25` }}>
+                              {l.ota}
+                            </span>
                           );
-                        })()
+                        })()}
+                        <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: "auto" }}>{relativeTime(log.createdAt)}</span>
+                      </div>
+
+                      {/* Body */}
+                      {isNote ? (
+                        <div style={{ fontSize: 11, color: "#374151", lineHeight: 1.55,
+                          background: "#FAFBFF", border: "1px solid #EEF2FF",
+                          borderRadius: 8, padding: "7px 10px" }}>
+                          {log.note}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: "#64748B", lineHeight: 1.5 }}>
+                          <span style={{ fontWeight: 600, color: "#475569" }}>{fieldLabel}</span>
+                          {" changed from "}
+                          <span style={{ fontWeight: 600, color: "#DC2626", background: "#FEF2F2", padding: "0 4px", borderRadius: 4 }}>
+                            {log.oldValue || "—"}
+                          </span>
+                          {" to "}
+                          <span style={{ fontWeight: 600, color: "#059669", background: "#F0FDF4", padding: "0 4px", borderRadius: 4 }}>
+                            {log.newValue || "—"}
+                          </span>
+                          {lx.subStatusChange && (
+                            <div style={{ marginTop: 3 }}>
+                              <span style={{ fontWeight: 600, color: "#475569" }}>Sub-Status</span>
+                              {" changed from "}
+                              <span style={{ fontWeight: 600, color: "#DC2626", background: "#FEF2F2", padding: "0 4px", borderRadius: 4 }}>
+                                {lx.subStatusChange.old || "—"}
+                              </span>
+                              {" to "}
+                              <span style={{ fontWeight: 600, color: "#059669", background: "#F0FDF4", padding: "0 4px", borderRadius: 4 }}>
+                                {lx.subStatusChange.new}
+                              </span>
+                            </div>
+                          )}
+                          {(dateMatch || noteText) && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                              {dateMatch && (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10,
+                                  fontWeight: 600, color: "#7C3AED", background: "#F5F3FF",
+                                  border: "1px solid #DDD6FE", borderRadius: 6, padding: "1px 7px" }}>
+                                  📅 {fmtDate(dateMatch[1])}
+                                </span>
+                              )}
+                              {noteText && (
+                                <span style={{ fontSize: 10, color: "#64748B", fontStyle: "italic" }}>{noteText}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
