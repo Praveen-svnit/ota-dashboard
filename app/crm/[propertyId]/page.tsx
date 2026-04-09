@@ -164,7 +164,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [noteErr,       setNoteErr]       = useState(false);
   const [saving,        setSaving]        = useState(false);
   const [autoSubStatus, setAutoSubStatus] = useState<string | null>(null);
-  const [noteInput,  setNoteInput]  = useState<Record<number, string>>({});
+  const [noteInput,      setNoteInput]      = useState<Record<number, string>>({});
+  const [propNoteInput,  setPropNoteInput]  = useState("");
+  const [propNoteSaving, setPropNoteSaving] = useState(false);
   const [activeOta,   setActiveOta]   = useState<string | null>(null);
   const [addOtaOpen,  setAddOtaOpen]  = useState(false);
   const [addingOta,   setAddingOta]   = useState<string | null>(null);
@@ -380,6 +382,21 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
     setLogs(prev => [{ id: Date.now(), otaListingId: listingId, action: "note_added", field: "note", oldValue: "", newValue: note, note, createdAt: now, userName: sessionName, userRole: "" }, ...prev]);
   }
 
+  async function addPropertyNote() {
+    const note = propNoteInput.trim();
+    if (!note) return;
+    setPropNoteSaving(true);
+    const now = new Date().toISOString();
+    await fetch("/api/crm/update-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ propertyId, field: "note", value: note }),
+    });
+    setPropNoteSaving(false);
+    setPropNoteInput("");
+    setLogs(prev => [{ id: Date.now(), otaListingId: null as unknown as number, action: "note_added", field: "note", oldValue: "", newValue: note, note, createdAt: now, userName: sessionName, userRole: "" }, ...prev]);
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
       height: "100vh", color: "#94A3B8", fontSize: 14 }}>Loading…</div>
@@ -446,6 +463,26 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
           Property
         </button>
 
+        {/* Notes tab */}
+        {(() => {
+          const active = activeOta === "__notes__";
+          const count  = logs.filter(l => l.action === "note_added" && !l.otaListingId).length;
+          return (
+            <button onClick={() => setActiveOta("__notes__")}
+              style={{ display: "flex", alignItems: "center", gap: 5,
+                padding: "10px 16px", background: "none", border: "none",
+                borderBottom: active ? "2px solid #7C3AED" : "2px solid transparent",
+                cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 500,
+                color: active ? "#7C3AED" : "#64748B", whiteSpace: "nowrap" }}>
+              ✎ Notes
+              {count > 0 && (
+                <span style={{ fontSize: 9, fontWeight: 800, background: "#7C3AED", color: "#fff",
+                  borderRadius: 10, padding: "1px 5px", lineHeight: 1.4 }}>{count}</span>
+              )}
+            </button>
+          );
+        })()}
+
         {listings.map((l) => {
           const color = OTA_COLORS[l.ota] ?? "#64748B";
           const active = activeOta === l.ota;
@@ -508,6 +545,70 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
 
           {/* LEFT: main content */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* ── Notes panel ── */}
+          {activeOta === "__notes__" && (() => {
+            const propertyNotes = logs.filter(l => l.action === "note_added" && !l.otaListingId);
+            return (
+              <div style={{ background: "#FFF", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+                <div style={{ padding: "14px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14, color: "#7C3AED" }}>✎</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>Property Notes</span>
+                  <span style={{ fontSize: 10, color: "#94A3B8", marginLeft: 4 }}>{propertyNotes.length} note{propertyNotes.length !== 1 ? "s" : ""}</span>
+                </div>
+
+                {/* Add note input */}
+                <div style={{ padding: "14px 16px", borderBottom: "1px solid #F1F5F9" }}>
+                  <textarea
+                    value={propNoteInput}
+                    onChange={e => setPropNoteInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addPropertyNote(); }}
+                    placeholder="Add a note about this property… (Ctrl+Enter to save)"
+                    rows={3}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 8,
+                      border: "1px solid #E2E8F0", fontSize: 12, resize: "vertical",
+                      outline: "none", fontFamily: "inherit", boxSizing: "border-box",
+                      background: "#F8FAFC", color: "#1E293B" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+                    <button onClick={addPropertyNote} disabled={propNoteSaving || !propNoteInput.trim()}
+                      style={{ padding: "7px 18px", borderRadius: 8, border: "none",
+                        background: "#7C3AED", color: "#FFF", fontSize: 12, fontWeight: 700,
+                        cursor: propNoteInput.trim() ? "pointer" : "default",
+                        opacity: propNoteInput.trim() ? 1 : 0.4 }}>
+                      {propNoteSaving ? "Saving…" : "Add Note"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes list */}
+                <div style={{ maxHeight: 500, overflowY: "auto" }}>
+                  {propertyNotes.length === 0 ? (
+                    <div style={{ padding: "32px 16px", textAlign: "center", color: "#94A3B8", fontSize: 12 }}>
+                      No notes yet. Add the first note above.
+                    </div>
+                  ) : propertyNotes.map((log) => (
+                    <div key={log.id} style={{ padding: "14px 16px", borderBottom: "1px solid #F8FAFC", display: "flex", gap: 10 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+                        background: "#7C3AED18", display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 13, color: "#7C3AED" }}>✎</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#1E293B" }}>{log.userName || "System"}</span>
+                          <span style={{ fontSize: 10, color: "#94A3B8" }}>{relativeTime(log.createdAt)}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#374151", lineHeight: 1.6,
+                          background: "#FAFAFA", borderRadius: 8, padding: "8px 12px",
+                          border: "1px solid #F1F5F9", whiteSpace: "pre-wrap" }}>
+                          {log.note}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Active OTA detail */}
           {activeListing && (() => {
