@@ -21,12 +21,18 @@ export async function GET(req: NextRequest) {
     const sp     = req.nextUrl.searchParams;
     const page   = Math.max(1, parseInt(sp.get("page") ?? "1",  10));
     const size   = Math.min(100, parseInt(sp.get("size") ?? "50", 10));
-    const search   = (sp.get("search")   ?? "").trim();
-    const category = (sp.get("category") ?? "").trim(); // "inProcess" | "tatExhausted" | ""
-    const otaList  = (sp.get("otas") ?? "").split(",").map(s => s.trim()).filter(Boolean);
-    const sssList  = (sp.get("sss")  ?? "").split(",").map(s => s.trim()).filter(Boolean);
-    const fhMonth  = (sp.get("fhMonth") ?? "").trim(); // "Mar 2025" → filter by p.fh_live_date month
-    const offset   = (page - 1) * size;
+    const search     = (sp.get("search")    ?? "").trim();
+    const category   = (sp.get("category")  ?? "").trim(); // "inProcess" | "tatExhausted" | ""
+    const otaList    = (sp.get("otas")  ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    const sssList    = (sp.get("sss")   ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    const fhMonth    = (sp.get("fhMonth") ?? "").trim();
+    const fhStatuses = (sp.get("fhStatus") ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    const statusFilter = (sp.get("status") ?? "").trim();
+    const fhFrom     = (sp.get("fhFrom")  ?? "").trim();
+    const fhTo       = (sp.get("fhTo")    ?? "").trim();
+    const otaFrom    = (sp.get("otaFrom") ?? "").trim();
+    const otaTo      = (sp.get("otaTo")   ?? "").trim();
+    const offset     = (page - 1) * size;
 
     // When fhMonth is set (click-through from Month-wise table) and no explicit category chosen,
     // use the same conditions as overdue-listings API: fh_status=Live + sub_status!='live' (includes exception).
@@ -75,6 +81,19 @@ export async function GET(req: NextRequest) {
         conditions.push(`TO_CHAR(p.fh_live_date::date, 'YYYY-MM') = $${params.length}`);
       }
     }
+    if (fhStatuses.length > 0) {
+      params.push(...fhStatuses);
+      const ph = fhStatuses.map((_, i) => `$${params.length - fhStatuses.length + i + 1}`).join(",");
+      conditions.push(`p.fh_status IN (${ph})`);
+    }
+    if (statusFilter) {
+      params.push(`%${statusFilter}%`);
+      conditions.push(`o.status ILIKE $${params.length}`);
+    }
+    if (fhFrom) { params.push(fhFrom); conditions.push(`p.fh_live_date::date >= $${params.length}::date`); }
+    if (fhTo)   { params.push(fhTo);   conditions.push(`p.fh_live_date::date <= $${params.length}::date`); }
+    if (otaFrom){ params.push(otaFrom); conditions.push(`o.live_date::date >= $${params.length}::date`); }
+    if (otaTo)  { params.push(otaTo);   conditions.push(`o.live_date::date <= $${params.length}::date`); }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 

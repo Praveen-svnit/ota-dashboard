@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { OTA_COLORS, OTAS } from "@/lib/constants";
+import PropertyLeadsquaredView from "@/components/crm/PropertyLeadsquaredView.simple";
 
 // Fallback arrays (used only if config hasn't loaded yet)
 const STATUS_OPTIONS_FALLBACK = [
@@ -56,9 +57,10 @@ const ACTION_COLORS: Record<string, string> = {
   metric_updated: "#059669",
 };
 
-type MetricType = "toggle" | "select" | "text";
+type MetricType = "toggle" | "select" | "text" | "multi-toggle";
 interface DateField { key: string; label: string }
-interface MetricDef { key: string; label: string; type: MetricType; options?: string[]; dates?: DateField[] }
+interface MultiToggleItem { key: string; label: string }
+interface MetricDef { key: string; label: string; type: MetricType; options?: string[]; dates?: DateField[]; items?: MultiToggleItem[] }
 
 const OTA_METRICS: Record<string, MetricDef[]> = {
   "Agoda": [
@@ -69,6 +71,15 @@ const OTA_METRICS: Record<string, MetricDef[]> = {
     { key: "agx", label: "AGX", type: "toggle", dates: [
       { key: "agx_start_date", label: "Start Date" },
       { key: "agx_end_date",   label: "End Date" },
+    ]},
+    { key: "content_boxes", label: "Content Boxes", type: "multi-toggle", items: [
+      { key: "cb_mapping",           label: "Mapping" },
+      { key: "cb_room_plan",         label: "Room Plan" },
+      { key: "cb_rate_plan",         label: "Rate Plan" },
+      { key: "cb_policy",            label: "Policy" },
+      { key: "cb_promotion",         label: "Promotion" },
+      { key: "cb_child_time_policy", label: "Child/Time Policy" },
+      { key: "cb_image",             label: "Image" },
     ]},
   ],
   "GoMMT": [
@@ -645,9 +656,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                       )}
                     </div>
 
-                    {/* FH Live Date */}
+                    {/* OTA Live Date */}
                     <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>FH LIVE DATE</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 6 }}>OTA LIVE DATE</div>
                       <span style={{ fontSize: 12, color: "#475569" }}>{activeListing.liveDate || "—"}</span>
                     </div>
 
@@ -781,8 +792,72 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           letterSpacing: "0.08em", marginBottom: 12 }}>
                           After-Live Metrics
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(95px, 1fr))", gap: 12 }}>
                           {defs.map((def) => {
+                            // Multi-toggle tile (e.g. Content Boxes)
+                            if (def.type === "multi-toggle" && def.items) {
+                              const anyDirty = def.items.some((item) => (metricEdit[item.key] ?? metrics[item.key] ?? "") !== (metrics[item.key] ?? ""));
+                              const allSavedMT = def.items.every((item) => !!metrics[item.key]);
+                              return (
+                                <div key={def.key} style={{
+                                  background: allSavedMT ? `${color}06` : "#F8FAFC",
+                                  borderRadius: 10,
+                                  border: `1px solid ${anyDirty ? color + "50" : color + "20"}`,
+                                  padding: "10px 12px",
+                                  gridColumn: "1 / -1",
+                                }}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: "#475569", marginBottom: 10 }}>
+                                    {def.label}
+                                  </div>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                    {def.items.map((item) => {
+                                      const draft = metricEdit[item.key] ?? metrics[item.key] ?? "";
+                                      const saved = metrics[item.key] ?? "";
+                                      const dirty = draft !== saved;
+                                      return (
+                                        <div key={item.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                          <span style={{ fontSize: 11, color: "#475569", flex: 1 }}>{item.label}</span>
+                                          <div style={{ display: "flex", gap: 3 }}>
+                                            {["Yes", "No"].map((opt) => (
+                                              <button key={opt}
+                                                onClick={() => setMetricEdit((p) => ({ ...p, [item.key]: opt }))}
+                                                style={{
+                                                  padding: "3px 8px", borderRadius: 20,
+                                                  fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                                  border: draft === opt ? "none" : "1px solid #E2E8F0",
+                                                  background: draft === opt
+                                                    ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2")
+                                                    : "#FFF",
+                                                  color: draft === opt
+                                                    ? (opt === "Yes" ? "#059669" : "#DC2626")
+                                                    : "#94A3B8",
+                                                }}>
+                                                {opt}
+                                              </button>
+                                            ))}
+                                            {dirty && (
+                                              <button onClick={async () => {
+                                                setSavingMetric(item.key);
+                                                await saveMetric(item.key, draft, def.key);
+                                                setSavingMetric(null);
+                                              }} disabled={!draft || savingMetric === item.key}
+                                                style={{
+                                                  padding: "3px 8px", borderRadius: 20, border: "none",
+                                                  background: color, color: "#FFF",
+                                                  fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                                }}>
+                                                {savingMetric === item.key ? "…" : "Save"}
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            }
+
                             // Resolve date fields: named ones if defined, else generic {key}_date
                             const dateFields  = def.dates ?? [{ key: def.key + "_date", label: "Date" }];
                             const savedValue  = metrics[def.key] ?? "";

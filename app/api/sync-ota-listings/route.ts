@@ -278,6 +278,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Recalculate TAT for all affected listings
+  try {
+    const tatWhere = propertyId ? `AND ol.property_id = $1` : "";
+    const tatParams = propertyId ? [propertyId] : [];
+    await sql.query(`
+      UPDATE ota_listing ol
+      SET
+        tat = GREATEST(0, CASE
+          WHEN inv.fh_live_date IS NOT NULL AND ol.live_date IS NOT NULL
+            THEN (ol.live_date - inv.fh_live_date)
+          WHEN inv.fh_live_date IS NOT NULL
+            THEN (CURRENT_DATE - inv.fh_live_date)
+          ELSE 0
+        END),
+        tat_error = CASE
+          WHEN inv.fh_live_date IS NOT NULL AND ol.live_date IS NOT NULL
+            AND ol.live_date < inv.fh_live_date THEN 1
+          ELSE 0
+        END
+      FROM inventory inv
+      WHERE ol.property_id = inv.property_id
+      ${tatWhere}
+    `, tatParams);
+  } catch (e) {
+    errors.push(`TAT recalc: ${e}`);
+  }
+
   const total = Object.values(results).reduce((a, b) => a + b, 0);
   const summary = Object.entries(results).map(([k, v]) => `${k}: ${v}`).join(", ");
   const message = `Synced ${total} rows. ${summary}${errors.length ? ` | Errors: ${errors.join("; ")}` : ""}`;

@@ -354,10 +354,29 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [nlCategory,setNlCat]     = useState("");
   const [nlSss,     setNlSss]     = useState<string[]>([]);
   const [nlFhMonth, setNlFhMonth] = useState("");
+  const [nlFhStatus,  setNlFhStatus]  = useState<string[]>([]);
+  const [nlStatus,    setNlStatus]    = useState("");
+  const [nlFhDateFrom,setNlFhDateFrom]= useState("");
+  const [nlFhDateTo,  setNlFhDateTo]  = useState("");
+  const [nlOtaDateFrom,setNlOtaDateFrom]= useState("");
+  const [nlOtaDateTo,  setNlOtaDateTo]  = useState("");
   const [nlSortBy,  setNlSortBy]  = useState<NLSortKey>("tat");
   const [nlSortDir, setNlSortDir] = useState<"asc" | "desc">("desc");
   const [ssActiveGroup, setSsActiveGroup] = useState<string | null>(null);
   const [nlPage,    setNlPage]    = useState(1);
+
+  // Live properties section
+  const [liveData,    setLiveData]    = useState<NLData | null>(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveSearch,  setLiveSearch]  = useState("");
+  const [liveSss,     setLiveSss]     = useState<string[]>([]);
+  const [liveFhStatus,  setLiveFhStatus]  = useState<string[]>([]);
+  const [liveStatus,    setLiveStatus]    = useState("");
+  const [liveFhDateFrom,setLiveFhDateFrom]= useState("");
+  const [liveFhDateTo,  setLiveFhDateTo]  = useState("");
+  const [liveOtaDateFrom,setLiveOtaDateFrom]= useState("");
+  const [liveOtaDateTo,  setLiveOtaDateTo]  = useState("");
+  const [livePage,    setLivePage]    = useState(1);
 
   const nlSortedRows = useMemo(() => {
     if (!nlData?.rows) return [];
@@ -379,18 +398,44 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setNlSortBy(key); setNlSortDir(key === "tat" ? "desc" : "asc");
   }
 
-  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss, fhMonth = nlFhMonth) {
+  function loadNl(page = 1, search = nlSearch, category = nlCategory, sss = nlSss, fhMonth = nlFhMonth,
+    fhStatus = nlFhStatus, status = nlStatus, fhFrom = nlFhDateFrom, fhTo = nlFhDateTo, otaFrom = nlOtaDateFrom, otaTo = nlOtaDateTo) {
     setNlLoading(true);
     const p = new URLSearchParams({ otas: otaName, page: String(page), size: "50" });
-    if (search)     p.set("search", search);
-    if (category)   p.set("category", category);
-    if (sss.length) p.set("sss", sss.join(","));
-    if (fhMonth)    p.set("fhMonth", fhMonth);
+    if (search)        p.set("search", search);
+    if (category)      p.set("category", category);
+    if (sss.length)    p.set("sss", sss.join(","));
+    if (fhMonth)       p.set("fhMonth", fhMonth);
+    if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
+    if (status)        p.set("status", status);
+    if (fhFrom)        p.set("fhFrom", fhFrom);
+    if (fhTo)          p.set("fhTo", fhTo);
+    if (otaFrom)       p.set("otaFrom", otaFrom);
+    if (otaTo)         p.set("otaTo", otaTo);
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
       .then(d => { setNlData(d); setNlPage(page); })
       .catch(() => {})
       .finally(() => setNlLoading(false));
+  }
+
+  function loadLive(page = 1, search = liveSearch, sss = liveSss,
+    fhStatus = liveFhStatus, status = liveStatus, fhFrom = liveFhDateFrom, fhTo = liveFhDateTo, otaFrom = liveOtaDateFrom, otaTo = liveOtaDateTo) {
+    setLiveLoading(true);
+    const p = new URLSearchParams({ otas: otaName, category: "live", page: String(page), size: "50" });
+    if (search)        p.set("search", search);
+    if (sss.length)    p.set("sss", sss.join(","));
+    if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
+    if (status)        p.set("status", status);
+    if (fhFrom)        p.set("fhFrom", fhFrom);
+    if (fhTo)          p.set("fhTo", fhTo);
+    if (otaFrom)       p.set("otaFrom", otaFrom);
+    if (otaTo)         p.set("otaTo", otaTo);
+    fetch(`/api/listing-dashboard/not-live?${p}`)
+      .then(r => r.json())
+      .then(d => { setLiveData(d); setLivePage(page); })
+      .catch(() => {})
+      .finally(() => setLiveLoading(false));
   }
 
   function load() {
@@ -421,12 +466,15 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       })
       .catch(() => {});
     loadNl(1, "", "", []);
+    loadLive(1, "", []);
   }
 
   useEffect(() => {
     setDashData(null); setOvrLive([]); setOvrNotLive([]);
-    setRnsMonthly({}); setRevMonthly({}); setNlData(null);
+    setRnsMonthly({}); setRevMonthly({}); setNlData(null); setLiveData(null);
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
+    setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo("");
+    setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -835,18 +883,45 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               </button>
             ))}
             <div style={{ width: 1, height: 18, background: T.cardBdr }} />
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
-              <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
-                placeholder="Search name / ID…"
-                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 190, color: T.textPri, background: "#FFFFFF" }} />
-            </div>
+            {/* FH Status */}
+            <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={nlFhStatus}
+              onChange={v => { setNlFhStatus(v); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, v, nlStatus, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }} />
+            {/* OTA Status */}
+            <input value={nlStatus} onChange={e => { setNlStatus(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, e.target.value, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }}
+              placeholder="Status…"
+              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${nlStatus ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", width: 100, color: T.textPri, background: nlStatus ? T.orangeL : "#FFFFFF" }} />
             {ssOptions.length > 0 && (
               <CheckboxDropdown label="Sub-Status" options={ssOptions} selected={nlSss}
                 onChange={v => { setNlSss(v); loadNl(1, nlSearch, nlCategory, v); }} />
             )}
-            {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth) && (
-              <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); loadNl(1, "", "", [], ""); }}
+            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
+            {/* FH Date range */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>FH</span>
+              <input type="date" value={nlFhDateFrom} onChange={e => { setNlFhDateFrom(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, e.target.value, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlFhDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+              <span style={{ fontSize: 10, color: T.textMut }}>–</span>
+              <input type="date" value={nlFhDateTo} onChange={e => { setNlFhDateTo(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, e.target.value, nlOtaDateFrom, nlOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlFhDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+            </div>
+            {/* OTA Date range */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>OTA</span>
+              <input type="date" value={nlOtaDateFrom} onChange={e => { setNlOtaDateFrom(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, nlFhDateTo, e.target.value, nlOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlOtaDateFrom ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+              <span style={{ fontSize: 10, color: T.textMut }}>–</span>
+              <input type="date" value={nlOtaDateTo} onChange={e => { setNlOtaDateTo(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, nlStatus, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, e.target.value); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${nlOtaDateTo ? T.orange : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+            </div>
+            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
+              <input value={nlSearch} onChange={e => { setNlSearch(e.target.value); loadNl(1, e.target.value, nlCategory, nlSss); }}
+                placeholder="Search name / ID…"
+                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
+            </div>
+            {(nlSearch || nlCategory || nlSss.length > 0 || nlFhMonth || nlFhStatus.length > 0 || nlStatus || nlFhDateFrom || nlFhDateTo || nlOtaDateFrom || nlOtaDateTo) && (
+              <button onClick={() => { setNlSearch(""); setNlCat(""); setNlSss([]); setNlFhMonth(""); setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo(""); loadNl(1, "", "", [], "", [], "", "", "", "", ""); }}
                 style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
                 Clear
               </button>
@@ -954,6 +1029,122 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               ))}
               <span style={{ padding: "3px 8px", fontSize: 10, color: T.textSec, fontWeight: 600 }}>
                 {nlData.page} / {nlData.pages}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Live Properties Section */}
+      <div style={{ marginTop: 16, background: "linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%)", border: `1px solid ${T.liveL}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 16px 36px rgba(15, 23, 42, 0.07)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${T.liveL}`, background: "linear-gradient(180deg, #F0FDF4 0%, #DCFCE7 40%)", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: "#166534" }}>Live Properties · {otaName}</span>
+            {liveData && <span style={{ fontSize: 10, color: T.live, background: T.liveL, padding: "3px 9px", borderRadius: 999, fontWeight: 700, border: "1px solid #86EFAC" }}>{liveData.total.toLocaleString()} records</span>}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={liveFhStatus}
+              onChange={v => { setLiveFhStatus(v); loadLive(1, liveSearch, liveSss, v, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }} />
+            <input value={liveStatus} onChange={e => { setLiveStatus(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, e.target.value, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
+              placeholder="Status…"
+              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${liveStatus ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", width: 100, color: T.textPri, background: liveStatus ? T.liveL : "#FFF" }} />
+            <CheckboxDropdown label="Sub-Status" options={["Live","Exception"]} selected={liveSss}
+              onChange={v => { setLiveSss(v); loadLive(1, liveSearch, v); }} />
+            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>FH</span>
+              <input type="date" value={liveFhDateFrom} onChange={e => { setLiveFhDateFrom(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, e.target.value, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveFhDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+              <span style={{ fontSize: 10, color: T.textMut }}>–</span>
+              <input type="date" value={liveFhDateTo} onChange={e => { setLiveFhDateTo(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, e.target.value, liveOtaDateFrom, liveOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveFhDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: T.textMut, textTransform: "uppercase" }}>OTA</span>
+              <input type="date" value={liveOtaDateFrom} onChange={e => { setLiveOtaDateFrom(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, e.target.value, liveOtaDateTo); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveOtaDateFrom ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+              <span style={{ fontSize: 10, color: T.textMut }}>–</span>
+              <input type="date" value={liveOtaDateTo} onChange={e => { setLiveOtaDateTo(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, e.target.value); }}
+                style={{ padding: "4px 6px", fontSize: 10, border: `1px solid ${liveOtaDateTo ? T.live : T.cardBdr}`, borderRadius: 6, outline: "none", background: "#FFF" }} />
+            </div>
+            <div style={{ width: 1, height: 18, background: T.cardBdr }} />
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: T.textMut, fontSize: 12, pointerEvents: "none" }}>⌕</span>
+              <input value={liveSearch} onChange={e => { setLiveSearch(e.target.value); loadLive(1, e.target.value, liveSss); }}
+                placeholder="Search name / ID…"
+                style={{ paddingLeft: 22, paddingRight: 10, paddingTop: 7, paddingBottom: 7, fontSize: 11, border: `1px solid ${T.cardBdr}`, borderRadius: 999, outline: "none", width: 160, color: T.textPri, background: "#FFFFFF" }} />
+            </div>
+            {(liveSearch || liveSss.length > 0 || liveFhStatus.length > 0 || liveStatus || liveFhDateFrom || liveFhDateTo || liveOtaDateFrom || liveOtaDateTo) && (
+              <button onClick={() => { setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo(""); loadLive(1, "", [], [], "", "", "", "", ""); }}
+                style={{ padding: "6px 11px", fontSize: 11, background: "#F8FBFD", border: `1px solid ${T.cardBdr}`, borderRadius: 999, cursor: "pointer", color: T.textSec, fontWeight: 700 }}>
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+            <thead>
+              <tr style={{ background: T.liveL }}>
+                {["FH ID","Property Name","City","FH Live","Status","Sub Status","OTA Live","TAT (days)"].map((h, i) => (
+                  <th key={h} style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700, color: "#166534",
+                    textTransform: "uppercase", letterSpacing: "0.08em", textAlign: i <= 1 ? "left" : "center",
+                    borderBottom: `1px solid ${T.liveL}`, borderRight: `1px solid ${T.liveL}`, whiteSpace: "nowrap" }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {liveLoading && <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
+              {!liveLoading && (liveData?.rows ?? []).map((row, i) => {
+                const sc = getSSColor(row.subStatus ?? "");
+                return (
+                  <tr key={`${row.propertyId}-${i}`} style={{ borderBottom: `1px solid ${T.liveL}`, background: i % 2 === 0 ? "#FFFFFF" : "#F0FDF4" }}>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.live, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.status || "—"}</td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, textAlign: "center" }}>
+                      {row.subStatus
+                        ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>{row.subStatus}</span>
+                        : <span style={{ color: T.textMut }}>—</span>}
+                    </td>
+                    <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.liveL}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
+                    <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                      {row.tat > 0 ? <span style={{ fontWeight: 700, color: T.live }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!liveLoading && (liveData?.rows.length ?? 0) === 0 && (
+                <tr><td colSpan={8} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {liveData && liveData.pages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderTop: `1px solid ${T.liveL}`, background: "#F0FDF4" }}>
+            <span style={{ fontSize: 10, color: T.textMut }}>
+              {((liveData.page - 1) * 50 + 1).toLocaleString()}–{Math.min(liveData.page * 50, liveData.total).toLocaleString()} of {liveData.total.toLocaleString()}
+            </span>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {([
+                { label: "«", p: 1,                 dis: liveData.page === 1 },
+                { label: "‹", p: liveData.page - 1, dis: liveData.page === 1 },
+                { label: "›", p: liveData.page + 1, dis: liveData.page === liveData.pages },
+                { label: "»", p: liveData.pages,    dis: liveData.page === liveData.pages },
+              ] as const).map(({ label, p, dis }) => (
+                <button key={label} onClick={() => loadLive(p)} disabled={dis}
+                  style={{ padding: "3px 9px", fontSize: 11, fontWeight: 700,
+                    background: dis ? "#F1F5F9" : T.live, color: dis ? T.textMut : "#FFFFFF",
+                    border: "none", borderRadius: 5, cursor: dis ? "not-allowed" : "pointer" }}>
+                  {label}
+                </button>
+              ))}
+              <span style={{ padding: "3px 8px", fontSize: 10, color: T.textSec, fontWeight: 600 }}>
+                {liveData.page} / {liveData.pages}
               </span>
             </div>
           </div>
