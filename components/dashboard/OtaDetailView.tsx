@@ -55,6 +55,19 @@ function getSSColor(col: string): { text: string; bg: string } {
   return SS_COLOR[col] ?? (col.startsWith("Pending at") ? { text: "#1D4ED8", bg: "#DBEAFE" } : { text: T.textSec, bg: "#F1F5F9" });
 }
 
+// Mirror of server-side normalize() in /api/listing-dashboard/route.ts
+function normalizeSs(s: string | null | undefined): string {
+  if (!s) return "Blank";
+  const t = s.trim().toLowerCase();
+  if (t === "not live" || t === "others - not live") return "Not Live";
+  if (t === "pending at go-mmt")  return "Pending at GoMMT";
+  if (t === "pending at bdc")     return "Pending at Booking.com";
+  if (t === "pending at emt")     return "Pending at EaseMyTrip";
+  if (t === "pending at ota")     return "Pending at OTA";
+  if (t === "#n/a")               return "Blank";
+  return s.trim();
+}
+
 const STATUS_OPTIONS_LC = [
   "New", "Shell Created", "Live", "Not Live", "Ready to Go Live",
   "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
@@ -380,7 +393,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
   const [lcBulkNote,      setLcBulkNote]      = useState("");
   const [lcBulkIds,       setLcBulkIds]       = useState("");
-  const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; sss: string[] } | null>(null);
+  const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -509,8 +522,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     fetch(`/api/crm/properties?${p}`)
       .then(r => r.json())
       .then(d => {
-        // Keep only Not Live cases: exclude rows where sub_status is "Live"
-        const rows = ((d.rows ?? []) as LcRow[]).filter(r => (r.subStatus ?? "").toLowerCase() !== "live");
+        // Normalise sub_status to match dashboard pivot labels, then exclude Live
+        const rows = ((d.rows ?? []) as LcRow[])
+          .map(r => ({ ...r, subStatus: normalizeSs(r.subStatus) }))
+          .filter(r => r.subStatus !== "Live");
         setLcRows(rows);
         setLcLoaded(true);
       })
@@ -852,15 +867,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <div key={t.key}
                           onClick={() => {
                             if (propTab === "listing") {
-                              // Filter listing creation sheet by category
-                              const LC_CAT_SSS: Record<string, string[]> = {
+                              // Filter LC sheet by actual status column values
+                              const LC_CAT_STATUS: Record<string, string[]> = {
+                                live:          ["Live"],
                                 exception:     ["Exception"],
                                 readyToGoLive: ["Ready to Go Live"],
-                                inProcess:     ["OTA Team","Pending at GoMMT","Pending at Booking.com","Pending at EaseMyTrip","Pending at Agoda","Pending at OTA","Supply/Operations","Revenue"],
-                                tatExhausted:  ["Not Live","OTA Team","Pending at GoMMT","Pending at Booking.com","Pending at EaseMyTrip","Pending at Agoda","Pending at OTA"],
+                                inProcess:     ["Listing in Progress","Content in Progress","Shell Created","New","Pending"],
+                                tatExhausted:  ["Not Live","Listing in Progress","Content in Progress","Shell Created","New","Pending","Exception"],
                               };
-                              const sss = LC_CAT_SSS[t.key];
-                              setLcOvvFilter(sss ? { label: t.label, sss } : null);
+                              const vals = LC_CAT_STATUS[t.key];
+                              setLcOvvFilter(vals ? { label: t.label, field: "status", values: vals } : null);
                             } else {
                               if (isLive) {
                                 setPropTab("live");
@@ -912,7 +928,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <span key={ss}
                           onClick={() => {
                             if (propTab === "listing") {
-                              setLcOvvFilter({ label: ss, sss: [ss] });
+                              setLcOvvFilter({ label: ss, field: "subStatus", values: [ss] });
                             } else {
                               if (isLiveSs) {
                                 setPropTab("live");
@@ -1510,8 +1526,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           const lcFiltered = lcRows.filter(r => {
             const s = lcSearch.toLowerCase();
             const matchSearch = !s || r.name?.toLowerCase().includes(s) || r.propertyId?.toLowerCase().includes(s) || r.city?.toLowerCase().includes(s);
-            const matchStatus = lcStatusFilter === "all" || lcVal(r, "subStatus").toLowerCase() === lcStatusFilter.toLowerCase();
-            const matchOvv = !lcOvvFilter || lcOvvFilter.sss.some(ss => ss.toLowerCase() === (r.subStatus ?? "").toLowerCase());
+            // subStatus is already normalised in lcRows; toolbar dropdown filters by it
+            const matchStatus = lcStatusFilter === "all" || (r.subStatus ?? "").toLowerCase() === lcStatusFilter.toLowerCase();
+            const matchOvv = !lcOvvFilter || lcOvvFilter.values.some(v =>
+              lcOvvFilter.field === "status"
+                ? (r.status ?? "").toLowerCase() === v.toLowerCase()
+                : (r.subStatus ?? "").toLowerCase() === v.toLowerCase()
+            );
             return matchSearch && matchStatus && matchOvv;
           });
 
