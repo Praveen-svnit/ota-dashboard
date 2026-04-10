@@ -343,8 +343,8 @@ function InternSheetView() {
           {saving ? "Saving…" : `Save All${dirtyCount > 0 ? ` (${dirtyCount})` : ""}`}
         </button>
 
-        <Link href="/crm" style={{ fontSize: 11, color: "#9CA3AF", textDecoration: "none", padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6 }}>
-          Switch to List View →
+        <Link href="/listings" style={{ fontSize: 11, color: "#9CA3AF", textDecoration: "none", padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6 }}>
+          List View →
         </Link>
       </div>
 
@@ -1029,22 +1029,5 @@ function TlCrmView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CrmPage() {
-  const [role, setRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setRole(d?.user?.role ?? "tl"));
-  }, []);
-
-  if (role === null) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F0F4F8" }}>
-        <span style={{ fontSize: 13, color: "#94A3B8" }}>Loading…</span>
-      </div>
-    );
-  }
-
-  if (role === "intern") return <InternSheetView />;
-  return <TlCrmView />;
+  return <InternSheetView />;
 }
