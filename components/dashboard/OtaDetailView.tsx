@@ -380,6 +380,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
   const [lcBulkNote,      setLcBulkNote]      = useState("");
   const [lcBulkIds,       setLcBulkIds]       = useState("");
+  const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; sss: string[] } | null>(null);
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -561,7 +562,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]);
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -850,7 +851,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       return (
                         <div key={t.key}
                           onClick={() => {
-                            if (propTab !== "listing") {
+                            if (propTab === "listing") {
+                              // Filter listing creation sheet by category
+                              const LC_CAT_SSS: Record<string, string[]> = {
+                                exception:     ["Exception"],
+                                readyToGoLive: ["Ready to Go Live"],
+                                inProcess:     ["OTA Team","Pending at GoMMT","Pending at Booking.com","Pending at EaseMyTrip","Pending at Agoda","Pending at OTA","Supply/Operations","Revenue"],
+                                tatExhausted:  ["Not Live","OTA Team","Pending at GoMMT","Pending at Booking.com","Pending at EaseMyTrip","Pending at Agoda","Pending at OTA"],
+                              };
+                              const sss = LC_CAT_SSS[t.key];
+                              setLcOvvFilter(sss ? { label: t.label, sss } : null);
+                            } else {
                               if (isLive) {
                                 setPropTab("live");
                                 setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
@@ -900,7 +911,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       return (
                         <span key={ss}
                           onClick={() => {
-                            if (propTab !== "listing") {
+                            if (propTab === "listing") {
+                              setLcOvvFilter({ label: ss, sss: [ss] });
+                            } else {
                               if (isLiveSs) {
                                 setPropTab("live");
                                 setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
@@ -1498,7 +1511,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             const s = lcSearch.toLowerCase();
             const matchSearch = !s || r.name?.toLowerCase().includes(s) || r.propertyId?.toLowerCase().includes(s) || r.city?.toLowerCase().includes(s);
             const matchStatus = lcStatusFilter === "all" || lcVal(r, "subStatus").toLowerCase() === lcStatusFilter.toLowerCase();
-            return matchSearch && matchStatus;
+            const matchOvv = !lcOvvFilter || lcOvvFilter.sss.some(ss => ss.toLowerCase() === (r.subStatus ?? "").toLowerCase());
+            return matchSearch && matchStatus && matchOvv;
           });
 
           const lcDirtyCount = Object.keys(lcDirty).length;
@@ -1590,6 +1604,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   <input value={lcSearch} onChange={e => setLcSearch(e.target.value)} placeholder="Search name / city…"
                     style={{ padding: "6px 10px 6px 26px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, outline: "none", background: "#F8FAFC", width: 200 }} />
                 </div>
+                {/* Active overview filter badge */}
+                {lcOvvFilter && (
+                  <div style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:20, background:"#EDE9FE", border:"1px solid #7C3AED40", fontSize:10, fontWeight:700, color:"#6D28D9" }}>
+                    <span>⬡ {lcOvvFilter.label}</span>
+                    <button onClick={() => setLcOvvFilter(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"#7C3AED", fontSize:12, lineHeight:1, padding:0 }}>×</button>
+                  </div>
+                )}
                 {/* Sub-status filter */}
                 <select value={lcStatusFilter} onChange={e => setLcStatusFilter(e.target.value)}
                   style={{ padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, background: lcStatusFilter !== "all" ? "#EDE9FE" : "#F8FAFC", color: lcStatusFilter !== "all" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
