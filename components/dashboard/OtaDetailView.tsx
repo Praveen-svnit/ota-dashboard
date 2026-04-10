@@ -790,25 +790,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6 }}>{grandTot.toLocaleString()} listings</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: liveColorOvv(parseFloat(livePctOvv)).text }}>{livePctOvv}% live</span>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {/* OTA filter */}
-                <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
-                  {(["All OTAs", ...otasSorted]).map(ota => {
-                    const isActive = ovvSelOta === ota;
-                    const c = ota === "All OTAs" ? "#5D87FF" : (OTA_COLORS[ota] ?? "#64748B");
-                    return (
-                      <button key={ota} onClick={() => setOvvSelOta(ota)} style={{
-                        padding: "3px 10px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
-                        border: `1px solid ${isActive ? c : "#E2E8F0"}`,
-                        background: isActive ? c : "#FFFFFF",
-                        color: isActive ? "#FFFFFF" : "#64748B",
-                        transition: "all 0.12s",
-                      }}>{ota}</button>
-                    );
-                  })}
-                </div>
-                <span style={{ fontSize: 13, color: "#94A3B8" }}>{ovvExpanded ? "▾" : "▸"}</span>
-              </div>
+              <span style={{ fontSize: 13, color: "#94A3B8" }}>{ovvExpanded ? "▾" : "▸"}</span>
             </div>
 
             {ovvExpanded && (
