@@ -389,7 +389,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [liveSortDir, setLiveSortDir] = useState<"asc" | "desc">("desc");
   const [livePage,    setLivePage]    = useState(1);
   const [ovvExpanded, setOvvExpanded] = useState(true);
-  const [ovvSelOta,   setOvvSelOta]   = useState<string>(otaName);
   const [ovvTab,      setOvvTab]      = useState<"status" | "substatus">("status");
 
   const nlSortedRows = useMemo(() => {
@@ -515,7 +514,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
-    setOvvSelOta(otaName); setOvvExpanded(true); setOvvTab("status");
+    setOvvExpanded(true); setOvvTab("status");
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -802,8 +801,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           onClick={() => {
                             if (isLive) {
                               setPropTab("live");
-                              setLiveSearch(""); setLiveSss([]);
-                              loadLive(1, "", []);
+                              setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
+                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                              loadLive(1, "", [], [], "", "", "", "", "");
                             } else {
                               setPropTab("notlive");
                               goToCategory(t.key);
@@ -849,8 +849,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           onClick={() => {
                             if (isLiveSs) {
                               setPropTab("live");
-                              setLiveSss([ss]); setLiveSearch("");
-                              loadLive(1, "", [ss]);
+                              setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
+                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                              loadLive(1, "", [ss], [], "", "", "", "", "");
                             } else {
                               setPropTab("notlive");
                               setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
