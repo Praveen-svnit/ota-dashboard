@@ -717,188 +717,117 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
       {/* ── Overview Breakdown ──────────────────────────────────────────── */}
       {dashData && dashData.categories?.length > 0 && (() => {
-        const cats       = dashData.categories;
-        const otasSorted = cats.map(r => r.ota);
-        const catMap     = Object.fromEntries(cats.map(r => [r.ota, r])) as Record<string, CatRow>;
+        const catRow2  = dashData.categories.find(r => r.ota === otaName);
+        if (!catRow2) return null;
 
-        // Filter to selected OTA or all
-        const displayOtas = ovvSelOta === "All OTAs" ? otasSorted : [ovvSelOta];
+        const live2         = catRow2.live ?? 0;
+        const exception2    = catRow2.exception ?? 0;
+        const readyToGoLive2= catRow2.readyToGoLive ?? 0;
+        const inProcess2    = catRow2.inProcess ?? 0;
+        const tatExhausted2 = catRow2.tatExhausted ?? 0;
+        const grandTot2     = live2 + exception2 + readyToGoLive2 + inProcess2 + tatExhausted2;
+        const livePct2      = grandTot2 > 0 ? ((live2 + exception2) / grandTot2 * 100).toFixed(1) : "0.0";
+        const livePctNum    = parseFloat(livePct2);
+        const livePctColor  = livePctNum >= 90 ? "#16A34A" : livePctNum >= 70 ? "#B45309" : livePctNum >= 40 ? "#C2410C" : "#DC2626";
 
-        // Totals for displayed OTAs
-        const totals = displayOtas.reduce((acc, ota) => {
-          const r = catMap[ota];
-          if (!r) return acc;
-          return {
-            live:         acc.live         + r.live,
-            exception:    acc.exception    + r.exception,
-            readyToGoLive:acc.readyToGoLive+ (r.readyToGoLive ?? 0),
-            inProcess:    acc.inProcess    + r.inProcess,
-            tatExhausted: acc.tatExhausted + r.tatExhausted,
-          };
-        }, { live: 0, exception: 0, readyToGoLive: 0, inProcess: 0, tatExhausted: 0 });
-
-        const grandTot = totals.live + totals.exception + totals.readyToGoLive + totals.inProcess + totals.tatExhausted;
-        const livePctOvv = grandTot > 0 ? ((totals.live + totals.exception) / grandTot * 100).toFixed(1) : "0.0";
-
-        // Sub-status counts for selected OTAs
-        const subStatusCounts: Record<string, number> = {};
-        displayOtas.forEach(ota => {
-          Object.entries(dashData.pivot[ota] ?? {}).forEach(([ss, cnt]) => {
-            subStatusCounts[ss] = (subStatusCounts[ss] ?? 0) + cnt;
-          });
-        });
-        const subStatusEntries = Object.entries(subStatusCounts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-
-        const OVV_ROWS = [
-          { key: "live",          label: "Live",                    color: "#166534", bg: "#F2FBF5", accent: "#22C55E"  },
-          { key: "exception",     label: "Exception",               color: "#9A6700", bg: "#FFF8E8", accent: "#EAB308"  },
-          { key: "readyToGoLive", label: "Ready to Go Live",        color: "#0F766E", bg: "#ECFDF5", accent: "#10B981"  },
-          { key: "inProcess",     label: "Listing In Progress",     color: "#155E75", bg: "#F0FBFF", accent: "#06B6D4"  },
-          { key: "tatExhausted",  label: "TAT Exhausted",           color: "#B42318", bg: "#FFF4F2", accent: "#F97066"  },
+        const STATUS_TILES = [
+          { key: "live",           label: "Live",                color: "#166534", dot: "#22C55E", bg: "#DCFCE7", val: live2         },
+          { key: "exception",      label: "Exception",           color: "#9A6700", dot: "#EAB308", bg: "#FEF9C3", val: exception2    },
+          { key: "readyToGoLive",  label: "Ready to Go Live",    color: "#0F766E", dot: "#10B981", bg: "#CCFBF1", val: readyToGoLive2},
+          { key: "inProcess",      label: "Listing In Progress", color: "#155E75", dot: "#06B6D4", bg: "#CFFAFE", val: inProcess2    },
+          { key: "tatExhausted",   label: "TAT Exhausted",       color: "#B42318", dot: "#F97066", bg: "#FFE4E6", val: tatExhausted2 },
         ] as const;
 
-        const liveColorOvv = (pct: number) => {
-          if (pct >= 90) return { text: "#16A34A", bar: "#22C55E" };
-          if (pct >= 70) return { text: "#B45309", bar: "#F59E0B" };
-          if (pct >= 40) return { text: "#C2410C", bar: "#F97316" };
-          return { text: "#DC2626", bar: "#EF4444" };
-        };
-
-        const OTA_LOGO_STYLE_LOCAL: Record<string, { mark: string; bg: string; text: string; ring: string }> = {
-          "GoMMT":         { mark: "go", bg: "#FFE4EC", text: "#B42352", ring: "#F8B4C8" },
-          "Booking.com":   { mark: "B.", bg: "#E6F0FF", text: "#175CD3", ring: "#B2CCFF" },
-          "Agoda":         { mark: "a",  bg: "#F1E8FF", text: "#7A28CB", ring: "#D9B8FF" },
-          "Expedia":       { mark: "e",  bg: "#E8F7FF", text: "#0E7490", ring: "#B9E6F2" },
-          "Cleartrip":     { mark: "ct", bg: "#FFF1E8", text: "#C2410C", ring: "#F7C9B0" },
-          "Yatra":         { mark: "y",  bg: "#FFE7EF", text: "#C11574", ring: "#F8B4D9" },
-          "Ixigo":         { mark: "ix", bg: "#FFF3E8", text: "#D46B08", ring: "#F7D1A6" },
-          "Akbar Travels": { mark: "at", bg: "#E8F7FF", text: "#0369A1", ring: "#BAE6FD" },
-          "EaseMyTrip":    { mark: "em", bg: "#E6FFFB", text: "#0F766E", ring: "#99F6E4" },
-          "Indigo":        { mark: "6E", bg: "#F0EBFF", text: "#6B2FA0", ring: "#D4B8FF" },
-        };
+        const subStatusEntries2 = Object.entries(dashData.pivot[otaName] ?? {})
+          .filter(([, v]) => v > 0)
+          .sort((a, b) => b[1] - a[1]);
 
         return (
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 16, overflow: "hidden", marginBottom: 18, boxShadow: "0 8px 24px rgba(15,23,42,0.10)" }}>
-            {/* Header row */}
-            <div
-              onClick={() => setOvvExpanded(v => !v)}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", background: "rgba(15,118,110,0.06)", borderBottom: ovvExpanded ? "1px solid #D1FAE5" : "none", cursor: "pointer", userSelect: "none" }}
-            >
+          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
+            {/* Collapsible header */}
+            <div onClick={() => setOvvExpanded(v => !v)} style={{
+              height: 4, background: otaColor,
+            }} />
+            <div onClick={() => setOvvExpanded(v => !v)} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 18px", cursor: "pointer", userSelect: "none",
+              borderBottom: ovvExpanded ? "1px solid #F1F5F9" : "none",
+            }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#14B8A6", boxShadow: "0 0 0 4px rgba(16,185,129,0.22)" }} />
-                <span style={{ fontSize: 13, fontWeight: 800, color: "#1E293B", letterSpacing: "-0.01em" }}>Overview · Breakdown</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6 }}>{grandTot.toLocaleString()} listings</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: liveColorOvv(parseFloat(livePctOvv)).text }}>{livePctOvv}% live</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#0F172A" }}>Overview</span>
+                <span style={{ fontSize: 10, color: "#94A3B8" }}>{grandTot2.toLocaleString()} listings</span>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  background: live2 > 0 ? "#DCFCE7" : "#F1F5F9",
+                  color: live2 > 0 ? "#166534" : "#64748B",
+                  padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: live2 > 0 ? "#22C55E" : "#9CA3AF" }} />
+                  {livePct2}% live
+                </span>
               </div>
-              <span style={{ fontSize: 13, color: "#94A3B8" }}>{ovvExpanded ? "▾" : "▸"}</span>
+              <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{ovvExpanded ? "▾" : "▸"}</span>
             </div>
 
             {ovvExpanded && (
-              <div style={{ padding: "14px 16px" }}>
-                {/* Status summary row */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-                  {OVV_ROWS.map(row => {
-                    const val = totals[row.key as keyof typeof totals];
-                    return (
-                      <div key={row.key} style={{ flex: "1 1 90px", background: row.bg, border: `1px solid ${row.accent}30`, borderLeft: `3px solid ${row.accent}`, borderRadius: 7, padding: "7px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, color: row.color, textTransform: "uppercase", letterSpacing: "0.08em" }}>{row.label}</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: row.color }}>{val.toLocaleString()}</span>
+              <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* Status tiles */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Status</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {STATUS_TILES.map(t => (
+                      <div key={t.key} style={{
+                        display: "inline-flex", alignItems: "center", gap: 10,
+                        background: t.bg, padding: "10px 16px", borderRadius: 10,
+                        border: `1px solid ${t.dot}30`, minWidth: 120, flex: "1 1 120px",
+                      }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.dot, flexShrink: 0 }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: t.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t.label}</span>
+                          <span style={{ fontSize: 20, fontWeight: 900, color: t.color, lineHeight: 1.1 }}>{t.val.toLocaleString()}</span>
+                        </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                    {/* Live % tile */}
+                    <div style={{
+                      display: "inline-flex", alignItems: "center", gap: 10,
+                      background: "#F8FAFC", padding: "10px 16px", borderRadius: 10,
+                      border: "1px solid #E2E8F0", minWidth: 100, flex: "1 1 100px",
+                    }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Live %</span>
+                        <span style={{ fontSize: 20, fontWeight: 900, color: livePctColor, lineHeight: 1.1 }}>{livePct2}%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Sub-status breakdown & per-OTA table side by side */}
-                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                  {/* Sub-status list */}
-                  <div style={{ flex: "0 0 220px", minWidth: 180 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Sub-status</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {subStatusEntries.map(([ss, cnt]) => {
+                {/* Sub-status pills */}
+                {subStatusEntries2.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Sub-status</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {subStatusEntries2.map(([ss, cnt]) => {
                         const sc = getSSColor(ss);
                         return (
-                          <div key={ss} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 10px", background: sc.bg, borderRadius: 6, border: `1px solid ${sc.text}18` }}>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: sc.text }}>{ss}</span>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: sc.text }}>{cnt.toLocaleString()}</span>
-                          </div>
+                          <span key={ss} style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            background: sc.bg, color: sc.text,
+                            padding: "5px 12px", borderRadius: 20,
+                            fontSize: 12, fontWeight: 600, lineHeight: 1,
+                            border: `1px solid ${sc.text}20`,
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
+                            {ss}
+                            <span style={{ fontSize: 12, fontWeight: 800, marginLeft: 2 }}>{cnt.toLocaleString()}</span>
+                          </span>
                         );
                       })}
                     </div>
                   </div>
+                )}
 
-                  {/* Per-OTA table */}
-                  <div style={{ flex: "1 1 400px", overflowX: "auto" }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Per OTA</div>
-                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 11 }}>
-                      <thead>
-                        <tr style={{ background: "#F8FAFC" }}>
-                          <th style={{ padding: "7px 12px", textAlign: "left", fontWeight: 700, color: "#1E293B", borderBottom: "1px solid #E2E8F0", whiteSpace: "nowrap", fontSize: 10 }}>OTA</th>
-                          {OVV_ROWS.map(row => (
-                            <th key={row.key} style={{ padding: "7px 10px", textAlign: "center", fontSize: 9, fontWeight: 700, color: row.color, borderBottom: `2px solid ${row.accent}`, background: row.bg + "88", whiteSpace: "nowrap" }}>{row.label}</th>
-                          ))}
-                          <th style={{ padding: "7px 10px", textAlign: "center", fontSize: 9, fontWeight: 700, color: "#64748B", borderBottom: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>Live %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[otaName].map(ota => {
-                          const r = catMap[ota];
-                          if (!r) return null;
-                          const isHighlighted = ota === otaName;
-                          const tot = r.live + r.exception + (r.readyToGoLive ?? 0) + r.inProcess + r.tatExhausted;
-                          const pct = tot > 0 ? ((r.live + r.exception) / tot * 100) : 0;
-                          const { text, bar } = liveColorOvv(pct);
-                          const logo = OTA_LOGO_STYLE_LOCAL[ota] ?? { mark: ota.slice(0, 2), bg: "#F2F4F7", text: "#344054", ring: "#D0D5DD" };
-                          const oc = OTA_COLORS[ota] ?? "#64748B";
-                          return (
-                            <tr key={ota} style={{ background: isHighlighted ? `${oc}10` : "transparent", borderBottom: "1px solid #E2E8F0", borderLeft: isHighlighted ? `3px solid ${oc}` : "3px solid transparent" }}>
-                              <td style={{ padding: "7px 12px", whiteSpace: "nowrap" }}>
-                                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 7px", borderRadius: 999, background: "#FFFFFF", border: `1px solid ${logo.ring}`, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" }}>
-                                  <span style={{ width: 16, height: 16, borderRadius: "50%", background: logo.bg, color: logo.text, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, textTransform: "uppercase", border: `1px solid ${logo.ring}` }}>{logo.mark}</span>
-                                  <span style={{ fontSize: 10, fontWeight: isHighlighted ? 900 : 700, color: oc }}>{ota}</span>
-                                  {isHighlighted && <span style={{ fontSize: 8, color: oc, background: `${oc}18`, padding: "1px 5px", borderRadius: 4, fontWeight: 700 }}>current</span>}
-                                </div>
-                              </td>
-                              {OVV_ROWS.map(row => {
-                                const v = r[row.key as keyof CatRow] as number ?? 0;
-                                return (
-                                  <td key={row.key} style={{ padding: "7px 10px", textAlign: "center" }}>
-                                    {v > 0
-                                      ? <span style={{ fontWeight: 700, color: row.color, background: row.bg, borderRadius: 4, padding: "2px 8px", border: `1px solid ${row.accent}20` }}>{v.toLocaleString()}</span>
-                                      : <span style={{ color: "#D1D5DB" }}>—</span>}
-                                  </td>
-                                );
-                              })}
-                              <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                                  <span style={{ fontWeight: 800, fontSize: 12, color: text }}>{pct.toFixed(1)}%</span>
-                                  <div style={{ width: 40, height: 3, background: "#D8E5F7", borderRadius: 99 }}>
-                                    <div style={{ height: "100%", width: `${pct}%`, background: bar, borderRadius: 99 }} />
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {/* Totals row */}
-                        <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
-                          <td style={{ padding: "7px 12px", fontWeight: 800, fontSize: 10, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Total</td>
-                          {OVV_ROWS.map(row => {
-                            const r2 = catMap[otaName];
-                            const v = r2 ? (r2[row.key as keyof CatRow] as number ?? 0) : 0;
-                            return (
-                              <td key={row.key} style={{ padding: "7px 10px", textAlign: "center" }}>
-                                <span style={{ fontWeight: 800, color: row.color, background: row.bg, borderRadius: 4, padding: "2px 8px" }}>{v.toLocaleString()}</span>
-                              </td>
-                            );
-                          })}
-                          <td style={{ padding: "7px 10px", textAlign: "center" }}>
-                            <span style={{ fontWeight: 800, color: liveColorOvv(parseFloat(livePctOvv)).text }}>{livePctOvv}%</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             )}
           </div>
