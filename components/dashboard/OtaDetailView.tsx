@@ -716,7 +716,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       {error   && <div style={{ padding: "8px 14px", background: T.notLiveL, border: "1px solid #FECACA", borderRadius: 8, fontSize: 11, color: T.notLive, marginBottom: 14 }}>⚠ {error}</div>}
 
       {/* ── Overview Breakdown ──────────────────────────────────────────── */}
-      {dashData && (() => {
+      {dashData && dashData.categories?.length > 0 && (() => {
         const cats       = dashData.categories;
         const otasSorted = cats.map(r => r.ota);
         const catMap     = Object.fromEntries(cats.map(r => [r.ota, r])) as Record<string, CatRow>;
@@ -757,12 +757,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           { key: "tatExhausted",  label: "TAT Exhausted",           color: "#B42318", bg: "#FFF4F2", accent: "#F97066"  },
         ] as const;
 
-        function liveColorOvv(pct: number) {
+        const liveColorOvv = (pct: number) => {
           if (pct >= 90) return { text: "#16A34A", bar: "#22C55E" };
           if (pct >= 70) return { text: "#B45309", bar: "#F59E0B" };
           if (pct >= 40) return { text: "#C2410C", bar: "#F97316" };
           return { text: "#DC2626", bar: "#EF4444" };
-        }
+        };
 
         const OTA_LOGO_STYLE_LOCAL: Record<string, { mark: string; bg: string; text: string; ring: string }> = {
           "GoMMT":         { mark: "go", bg: "#FFE4EC", text: "#B42352", ring: "#F8B4C8" },
