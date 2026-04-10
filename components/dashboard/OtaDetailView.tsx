@@ -55,6 +55,17 @@ function getSSColor(col: string): { text: string; bg: string } {
   return SS_COLOR[col] ?? (col.startsWith("Pending at") ? { text: "#1D4ED8", bg: "#DBEAFE" } : { text: T.textSec, bg: "#F1F5F9" });
 }
 
+const STATUS_OPTIONS_LC = [
+  "New", "Shell Created", "Live", "Not Live", "Ready to Go Live",
+  "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
+];
+
+const SUB_STATUS_OPTIONS_LC = [
+  "Live", "Not Live", "OTA Team", "Pending at GoMMT", "Pending at Booking.com",
+  "Pending at EaseMyTrip", "Pending at OTA", "Supply/Operations", "Revenue",
+  "Exception", "Duplicate - Listing Closed", "Duplicate - Pending Invoice", "Blank",
+];
+
 // Live TAT month table metrics
 const LIVE_TAT_METRICS = [
   { key: "fhTotal",   label: "FH Properties", color: "#FF6B00", bg: "#FFF0E6" },
@@ -84,6 +95,7 @@ interface TatStat  { avgTat: number; d0_7: number; d8_15: number; d16_30: number
 interface DashStats { live: number; soldOut: number; total: number; onboardedThisMonth: number; mtdListings: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: DashStats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; ssStatusPivot: Record<string, Record<string, Record<string, number>>>; }
 interface NLRow    { propertyId: string; name: string; city: string; fhLiveDate: string|null; ota: string; status: string|null; subStatus: string|null; liveDate: string|null; tat: number; tatError?: number; }
+interface LcRow    { otaListingId: number; propertyId: string; name: string; city: string; fhStatus: string; fhLiveDate: string|null; ota: string; otaId: string|null; status: string; subStatus: string; liveDate: string|null; tat: number|null; prePost: string|null; listingLink: string|null; crmNote: string|null; crmUpdatedAt: string|null; assignedName: string|null; }
 type NLSortKey = "status" | "subStatus" | "liveDate" | "tat";
 interface NLData   { rows: NLRow[]; total: number; page: number; pages: number; }
 interface OvrRow   { fhId: string; fhLiveDate: string|null; ota: string; tat: number; }
@@ -349,7 +361,23 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
 
-  const [propTab,   setPropTab]   = useState<"notlive" | "live">("live");
+  const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing">("live");
+
+  // Listing Creation sheet state
+  const [lcRows,       setLcRows]       = useState<LcRow[]>([]);
+  const [lcLoading,    setLcLoading]    = useState(false);
+  const [lcLoaded,     setLcLoaded]     = useState(false);
+  const [lcSearch,     setLcSearch]     = useState("");
+  const [lcStatusFilter, setLcStatusFilter] = useState("all");
+  const [lcDirty,      setLcDirty]      = useState<Record<number, Record<string, string>>>({});
+  const [lcSelected,   setLcSelected]   = useState<Set<number>>(new Set());
+  const [lcEditCell,   setLcEditCell]   = useState<{ id: number; field: string } | null>(null);
+  const [lcSaving,     setLcSaving]     = useState(false);
+  const [lcSaveOk,     setLcSaveOk]     = useState<Set<number>>(new Set());
+  const [lcSaveErr,    setLcSaveErr]    = useState<Set<number>>(new Set());
+  const [lcBulkStatus,    setLcBulkStatus]    = useState("");
+  const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
+  const [lcBulkNote,      setLcBulkNote]      = useState("");
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -471,6 +499,15 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       .finally(() => setNlLoading(false));
   }
 
+  function loadLc() {
+    setLcLoading(true);
+    fetch(`/api/crm/properties?export=1&ota=${encodeURIComponent(otaName)}&fhStatus=Live,SoldOut`)
+      .then(r => r.json())
+      .then(d => { setLcRows((d.rows ?? []) as LcRow[]); setLcLoaded(true); })
+      .catch(() => {})
+      .finally(() => setLcLoading(false));
+  }
+
   function load() {
     setLoading(true); setError(null);
     fetch("/api/listing-dashboard")
@@ -515,6 +552,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all");
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -694,12 +732,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {([
-            { key: "live",    label: "Live",     count: liveData?.total, color: T.live,    bg: T.liveL   },
-            { key: "notlive", label: "Not Live", count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
+            { key: "live",    label: "Live",             count: liveData?.total, color: T.live,    bg: T.liveL   },
+            { key: "notlive", label: "Not Live",         count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
+            { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined, color: "#7C3AED", bg: "#EDE9FE" },
           ] as const).map(tab => {
             const active = propTab === tab.key;
             return (
-              <button key={tab.key} onClick={() => setPropTab(tab.key)}
+              <button key={tab.key} onClick={() => {
+                  setPropTab(tab.key);
+                  if (tab.key === "listing" && !lcLoaded) loadLc();
+                }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
                   borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
                   background: active ? tab.color : "#FFFFFF", color: active ? "#FFFFFF" : T.textSec,
@@ -1392,6 +1434,330 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             )}
           </div>
         )}
+
+        {/* ── Listing Creation Sheet ─────────────────────────────────────────── */}
+        {propTab === "listing" && (() => {
+          // helpers scoped to this section
+          function lcVal(row: LcRow, field: string): string {
+            return lcDirty[row.otaListingId]?.[field] ?? (row as unknown as Record<string, string | null>)[field] ?? "";
+          }
+          function lcIsDirty(id: number, field: string) { return lcDirty[id]?.[field] !== undefined; }
+          function lcSetField(id: number, field: string, value: string) {
+            setLcDirty(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), [field]: value } }));
+          }
+
+          const lcFiltered = lcRows.filter(r => {
+            const s = lcSearch.toLowerCase();
+            const matchSearch = !s || r.name?.toLowerCase().includes(s) || r.propertyId?.toLowerCase().includes(s) || r.city?.toLowerCase().includes(s);
+            const matchStatus = lcStatusFilter === "all" || lcVal(r, "subStatus").toLowerCase() === lcStatusFilter.toLowerCase();
+            return matchSearch && matchStatus;
+          });
+
+          const lcDirtyCount = Object.keys(lcDirty).length;
+          const lcAllSel = lcFiltered.length > 0 && lcFiltered.every(r => lcSelected.has(r.otaListingId));
+          const lcAnySel = lcSelected.size > 0;
+
+          async function lcSaveAll() {
+            if (!lcDirtyCount || lcSaving) return;
+            setLcSaving(true);
+            const tasks: Promise<{ id: number; ok: boolean }>[] = [];
+            for (const [idStr, fields] of Object.entries(lcDirty)) {
+              const id = Number(idStr);
+              const row = lcRows.find(r => r.otaListingId === id);
+              if (!row) continue;
+              for (const [field, value] of Object.entries(fields)) {
+                tasks.push(
+                  fetch("/api/crm/update-status", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ otaListingId: id, propertyId: row.propertyId, field, value }),
+                  }).then(r => ({ id, ok: r.ok })).catch(() => ({ id, ok: false }))
+                );
+              }
+            }
+            const results = await Promise.all(tasks);
+            const okIds = new Set(results.filter(r => r.ok).map(r => r.id));
+            const errIds = new Set(results.filter(r => !r.ok).map(r => r.id));
+            setLcRows(prev => prev.map(r => {
+              if (!okIds.has(r.otaListingId)) return r;
+              const d = lcDirty[r.otaListingId] ?? {};
+              return { ...r,
+                status:      d.status      !== undefined ? d.status      : r.status,
+                subStatus:   d.subStatus   !== undefined ? d.subStatus   : r.subStatus,
+                otaId:       d.otaId       !== undefined ? d.otaId       : r.otaId,
+                liveDate:    d.liveDate    !== undefined ? d.liveDate    : r.liveDate,
+                prePost:     d.prePost     !== undefined ? d.prePost     : r.prePost,
+                listingLink: d.listingLink !== undefined ? d.listingLink : r.listingLink,
+                crmNote:     d.note        !== undefined ? d.note        : r.crmNote,
+                crmUpdatedAt: new Date().toISOString(),
+              };
+            }));
+            setLcDirty(prev => { const n = { ...prev }; for (const id of okIds) delete n[id]; return n; });
+            setLcSaveOk(okIds); setLcSaveErr(errIds); setLcSaving(false);
+            setTimeout(() => { setLcSaveOk(new Set()); setLcSaveErr(new Set()); }, 2500);
+          }
+
+          function lcApplyBulk() {
+            if (!lcAnySel) return;
+            setLcDirty(prev => {
+              const next = { ...prev };
+              for (const id of lcSelected) {
+                next[id] = { ...(next[id] ?? {}) };
+                if (lcBulkStatus)    next[id].status    = lcBulkStatus;
+                if (lcBulkSubStatus) next[id].subStatus = lcBulkSubStatus;
+                if (lcBulkNote)      next[id].note      = lcBulkNote;
+              }
+              return next;
+            });
+            setLcBulkStatus(""); setLcBulkSubStatus(""); setLcBulkNote(""); setLcSelected(new Set());
+          }
+
+          const COLS = "28px 28px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 160px 180px 90px 36px";
+
+          const cellSt = (id: number, field: string): React.CSSProperties => ({
+            padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
+            background: lcIsDirty(id, field) ? "#FEF9C3" : "transparent",
+          });
+
+          const allSubStatuses = [...new Set(lcRows.map(r => r.subStatus).filter(Boolean))].sort();
+
+          return (
+            <div style={{ background: "#FAFAFA" }}>
+
+              {/* Sheet toolbar */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderBottom: "1px solid #E2E8F0", flexWrap: "wrap" }}>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 11, pointerEvents: "none" }}>⌕</span>
+                  <input value={lcSearch} onChange={e => setLcSearch(e.target.value)} placeholder="Search…"
+                    style={{ padding: "5px 8px 5px 22px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none", background: "#F8FAFC", width: 200 }} />
+                </div>
+                <select value={lcStatusFilter} onChange={e => setLcStatusFilter(e.target.value)}
+                  style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, background: lcStatusFilter !== "all" ? "#EDE9FE" : "#F8FAFC", color: lcStatusFilter !== "all" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
+                  <option value="all">All Sub-statuses</option>
+                  {allSubStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button onClick={loadLc} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻ Refresh</button>
+                <div style={{ flex: 1 }} />
+                {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
+                <button onClick={lcSaveAll} disabled={lcDirtyCount === 0 || lcSaving}
+                  style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: lcDirtyCount > 0 ? "#7C3AED" : "#E2E8F0", color: lcDirtyCount > 0 ? "#fff" : "#9CA3AF", fontSize: 11, fontWeight: 700, cursor: lcDirtyCount > 0 ? "pointer" : "not-allowed", opacity: lcSaving ? 0.7 : 1 }}>
+                  {lcSaving ? "Saving…" : `Save All${lcDirtyCount > 0 ? ` (${lcDirtyCount})` : ""}`}
+                </button>
+              </div>
+
+              {/* Bulk bar */}
+              {lcAnySel && (
+                <div style={{ background: "#1E1B4B", padding: "7px 12px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#C7D2FE" }}>Bulk: {lcSelected.size} row{lcSelected.size > 1 ? "s" : ""}</span>
+                  <div style={{ width: 1, height: 14, background: "#4338CA" }} />
+                  <select value={lcBulkStatus} onChange={e => setLcBulkStatus(e.target.value)}
+                    style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkStatus ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
+                    <option value="">Set Status…</option>
+                    {STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <select value={lcBulkSubStatus} onChange={e => setLcBulkSubStatus(e.target.value)}
+                    style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkSubStatus ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
+                    <option value="">Set Sub-status…</option>
+                    {SUB_STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input value={lcBulkNote} onChange={e => setLcBulkNote(e.target.value)} placeholder="Add note…"
+                    style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: "#fff", fontSize: 11, outline: "none", width: 180 }} />
+                  <button onClick={lcApplyBulk} disabled={!lcBulkStatus && !lcBulkSubStatus && !lcBulkNote}
+                    style={{ padding: "5px 14px", borderRadius: 5, border: "none", background: "#6366F1", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: (!lcBulkStatus && !lcBulkSubStatus && !lcBulkNote) ? 0.5 : 1 }}>Apply →</button>
+                  <button onClick={() => setLcSelected(new Set())}
+                    style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "transparent", color: "#818CF8", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                </div>
+              )}
+
+              {/* Sheet grid */}
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ minWidth: 1300 }}>
+                  {/* Header row */}
+                  <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
+                    <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <input type="checkbox" checked={lcAllSel} onChange={() => {
+                        if (lcAllSel) setLcSelected(prev => { const n = new Set(prev); lcFiltered.forEach(r => n.delete(r.otaListingId)); return n; });
+                        else setLcSelected(prev => { const n = new Set(prev); lcFiltered.forEach(r => n.add(r.otaListingId)); return n; });
+                      }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
+                    </div>
+                    <div style={{ padding: "7px 4px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", display: "flex", alignItems: "center" }}>#</div>
+                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Pre/Post","Listing Link","Note",""].map(h => (
+                      <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
+                    ))}
+                  </div>
+
+                  {/* Loading */}
+                  {lcLoading && <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>Loading…</div>}
+
+                  {/* Data rows */}
+                  {!lcLoading && lcFiltered.map((row, i) => {
+                    const isSel   = lcSelected.has(row.otaListingId);
+                    const anyDirty = !!(lcDirty[row.otaListingId] && Object.keys(lcDirty[row.otaListingId]).length);
+                    const isSaveOk  = lcSaveOk.has(row.otaListingId);
+                    const isSaveErr = lcSaveErr.has(row.otaListingId);
+                    const rowBg = isSaveOk ? "#F0FDF4" : isSaveErr ? "#FEF2F2" : isSel ? "#EDE9FE" : anyDirty ? "#FEFCE8" : i % 2 === 0 ? "#fff" : "#FAFAFA";
+
+                    const statusVal    = lcVal(row, "status");
+                    const subStatusVal = lcVal(row, "subStatus");
+                    const otaIdVal     = lcVal(row, "otaId");
+                    const liveDateVal  = lcVal(row, "liveDate") || "";
+                    const prePostVal   = lcVal(row, "prePost");
+                    const linkVal      = lcVal(row, "listingLink");
+                    const noteVal      = lcDirty[row.otaListingId]?.note ?? row.crmNote ?? "";
+
+                    const sc = SS_COLOR[statusVal] ?? SS_COLOR[statusVal?.toLowerCase()] ?? { bg: "#F1F5F9", text: "#64748B" };
+
+                    return (
+                      <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F1F5F9", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
+                        {/* Checkbox */}
+                        <div style={{ padding: "5px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <input type="checkbox" checked={isSel} onChange={() => setLcSelected(prev => { const n = new Set(prev); n.has(row.otaListingId) ? n.delete(row.otaListingId) : n.add(row.otaListingId); return n; })}
+                            style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
+                        </div>
+                        {/* # */}
+                        <div style={{ padding: "5px 4px", fontSize: 10, color: "#CBD5E1", textAlign: "right" }}>{i + 1}</div>
+                        {/* Property */}
+                        <div style={{ ...cellSt(row.otaListingId, "_"), background: "transparent", borderLeft: "1px solid #E8EDF2", padding: "5px 6px", minWidth: 0 }}>
+                          <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            title={row.name}>{row.name || "—"}</a>
+                          <div style={{ fontSize: 9, color: "#94A3B8" }}>{row.propertyId}</div>
+                        </div>
+                        {/* City */}
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.city || "—"}</div>
+                        {/* FH Status */}
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2" }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 8, background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9", color: row.fhStatus === "Live" ? "#15803D" : "#64748B" }}>{row.fhStatus || "—"}</span>
+                        </div>
+                        {/* FH Date */}
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 10, color: "#64748B" }}>{fmtDate(row.fhLiveDate)}</div>
+                        {/* OTA ID — editable */}
+                        <div style={cellSt(row.otaListingId, "otaId")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "otaId" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "otaId" ? (
+                            <input autoFocus value={otaIdVal} onChange={e => lcSetField(row.otaListingId, "otaId", e.target.value)}
+                              onBlur={() => setLcEditCell(null)} onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setLcEditCell(null); }}
+                              style={{ width: "100%", padding: "2px 5px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 11, color: otaIdVal ? "#374151" : "#CBD5E1", fontWeight: otaIdVal ? 600 : 400 }}>{otaIdVal || "Add ID…"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>✎</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Status — editable */}
+                        <div style={cellSt(row.otaListingId, "status")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "status" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "status" ? (
+                            <select autoFocus value={statusVal} onChange={e => { lcSetField(row.otaListingId, "status", e.target.value); setLcEditCell(null); }} onBlur={() => setLcEditCell(null)}
+                              style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
+                              {STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: "#374151" }}>{statusVal || "—"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Sub-status — editable */}
+                        <div style={cellSt(row.otaListingId, "subStatus")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "subStatus" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "subStatus" ? (
+                            <select autoFocus value={subStatusVal} onChange={e => { lcSetField(row.otaListingId, "subStatus", e.target.value); setLcEditCell(null); }} onBlur={() => setLcEditCell(null)}
+                              style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
+                              {SUB_STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: sc.text ?? "#374151", background: (sc as { bg?: string }).bg, padding: "1px 7px", borderRadius: 10 }}>{subStatusVal || "—"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* OTA Live Date — editable */}
+                        <div style={cellSt(row.otaListingId, "liveDate")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "liveDate" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "liveDate" ? (
+                            <input autoFocus type="date" value={liveDateVal} onChange={e => lcSetField(row.otaListingId, "liveDate", e.target.value)}
+                              onBlur={() => setLcEditCell(null)}
+                              style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 10, color: liveDateVal ? "#374151" : "#CBD5E1" }}>{liveDateVal ? fmtDate(liveDateVal) : "Set date…"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>✎</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* TAT */}
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", textAlign: "center" }}>
+                          {row.tat != null && row.tat > 0
+                            ? <span style={{ fontSize: 11, fontWeight: 700, color: row.tat <= 7 ? "#16A34A" : row.tat <= 15 ? "#B45309" : row.tat <= 30 ? "#C2410C" : "#DC2626" }}>{row.tat}d</span>
+                            : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
+                        </div>
+                        {/* Pre/Post — editable */}
+                        <div style={cellSt(row.otaListingId, "prePost")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "prePost" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "prePost" ? (
+                            <select autoFocus value={prePostVal} onChange={e => { lcSetField(row.otaListingId, "prePost", e.target.value); setLcEditCell(null); }} onBlur={() => setLcEditCell(null)}
+                              style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
+                              <option value="">—</option>
+                              <option value="Preset">Preset</option>
+                              <option value="Postset">Postset</option>
+                            </select>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: prePostVal ? "#374151" : "#CBD5E1" }}>{prePostVal || "—"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Listing Link — editable */}
+                        <div style={cellSt(row.otaListingId, "listingLink")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "listingLink" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "listingLink" ? (
+                            <input autoFocus value={linkVal} onChange={e => lcSetField(row.otaListingId, "listingLink", e.target.value)}
+                              onBlur={() => setLcEditCell(null)} onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setLcEditCell(null); }}
+                              style={{ width: "100%", padding: "2px 5px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              {linkVal
+                                ? <a href={linkVal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#3B82F6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }} onClick={e => e.stopPropagation()}>{linkVal}</a>
+                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>Add link…</span>}
+                              <span style={{ fontSize: 9, color: "#CBD5E1", flexShrink: 0 }}>✎</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Note — editable */}
+                        <div style={cellSt(row.otaListingId, "note")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "note" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "note" ? (
+                            <input autoFocus value={noteVal} onChange={e => lcSetField(row.otaListingId, "note", e.target.value)}
+                              onBlur={() => setLcEditCell(null)} onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setLcEditCell(null); }}
+                              style={{ width: "100%", padding: "2px 5px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              <span style={{ fontSize: 10, color: noteVal ? "#374151" : "#CBD5E1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{noteVal || "Add note…"}</span>
+                              <span style={{ fontSize: 9, color: "#CBD5E1", flexShrink: 0 }}>✎</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Open / save feedback */}
+                        <div style={{ padding: "5px 4px", borderLeft: "1px solid #E8EDF2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
+                            : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
+                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" title="Open detail" style={{ fontSize: 11, color: "#CBD5E1", textDecoration: "none" }}>↗</a>}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {!lcLoading && lcFiltered.length === 0 && (
+                    <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>No rows found</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Row count footer */}
+              <div style={{ padding: "6px 12px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", fontSize: 10, color: "#94A3B8" }}>
+                {lcFiltered.length.toLocaleString()} rows{lcFiltered.length !== lcRows.length ? ` (of ${lcRows.length})` : ""}
+                {lcSaveErr.size > 0 && <span style={{ color: "#DC2626", fontWeight: 700, marginLeft: 12 }}>{lcSaveErr.size} rows failed to save</span>}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

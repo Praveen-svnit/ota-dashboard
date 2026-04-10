@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     SELECT
       inv.property_id, inv.property_name, inv.city, inv.fh_status, inv.fh_live_date,
       ol.id AS ota_listing_id, ol.ota, ol.ota_id, ol.status, ol.sub_status, ol.live_date,
-      ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
+      ol.tat, ol.tat_error, ol.pre_post, ol.listing_link, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
     WHERE 1=1
@@ -127,9 +127,13 @@ export async function GET(req: Request) {
         c.fh_status                                            AS "fhStatus",
         c.fh_live_date                                         AS "fhLiveDate",
         c.ota,
+        c.ota_id                                               AS "otaId",
         COALESCE(NULLIF(TRIM(c.status),     ''), 'New')        AS status,
         COALESCE(NULLIF(TRIM(c.sub_status), ''), 'New')        AS "subStatus",
         c.live_date                                            AS "liveDate",
+        c.tat,
+        c.pre_post                                             AS "prePost",
+        c.listing_link                                         AS "listingLink",
         c.assigned_to                                          AS "assignedTo",
         c.crm_note                                             AS "crmNote",
         c.crm_updated_at                                       AS "crmUpdatedAt",
