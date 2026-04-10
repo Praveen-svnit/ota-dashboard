@@ -378,6 +378,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkStatus,    setLcBulkStatus]    = useState("");
   const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
   const [lcBulkNote,      setLcBulkNote]      = useState("");
+  const [lcBulkIds,       setLcBulkIds]       = useState("");
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -1199,11 +1200,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       )}
 
       {/* Properties Card */}
-      <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 16px rgba(15,23,42,0.06)" }}>
+      <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(15,23,42,0.08)" }}>
 
         {/* Filter bar — Not Live */}
         {propTab === "notlive" && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg,#FFF9F5 0%,#FFF4EE 100%)", flexWrap: "wrap", gap: 8 }}>
             {([
               { val: "",             label: "All" },
               { val: "inProcess",    label: "In Process" },
@@ -1256,7 +1257,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
         {/* Filter bar — Live */}
         {propTab === "live" && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: T.headerBg, gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg,#F0FDF4 0%,#E8F9EE 100%)", gap: 8 }}>
             <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={liveFhStatus}
               onChange={v => { setLiveFhStatus(v); loadLive(1, liveSearch, liveSss, v, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }} />
             <input value={liveStatus} onChange={e => { setLiveStatus(e.target.value); loadLive(1, liveSearch, liveSss, liveFhStatus, e.target.value, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
@@ -1297,26 +1298,28 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
               <thead>
-                <tr style={{ background: T.headerBg }}>
+                <tr style={{ background: "linear-gradient(180deg,#F8FAFC 0%,#F1F5F9 100%)" }}>
                   {[
                     { label: "FH ID" }, { label: "Property Name" }, { label: "City" }, { label: "FH Live" },
                     { label: "Status", key: "status" as NLSortKey }, { label: "Sub Status", key: "subStatus" as NLSortKey },
                     { label: "OTA Live", key: "liveDate" as NLSortKey }, { label: "TAT", key: "tat" as NLSortKey },
-                    { label: "Open" },
+                    { label: "" },
                   ].map((h, i) => {
                     const sortable = !!h.key;
+                    const active = sortable && nlSortBy === h.key;
                     return (
                       <th key={h.label} onClick={sortable ? () => nlToggleSort(h.key!) : undefined}
-                        style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
-                          color: sortable && nlSortBy === h.key ? T.orange : T.textMut,
-                          textTransform: "uppercase", letterSpacing: "0.08em",
+                        style={{ padding: "9px 14px", fontSize: 9, fontWeight: 800,
+                          color: active ? T.notLive : "#64748B",
+                          textTransform: "uppercase", letterSpacing: "0.09em",
                           textAlign: i <= 1 ? "left" : "center",
-                          borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
-                          whiteSpace: "nowrap", background: T.headerBg,
-                          cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
+                          borderBottom: `2px solid ${active ? T.notLive+"44" : T.cardBdr}`,
+                          whiteSpace: "nowrap", background: "transparent",
+                          cursor: sortable ? "pointer" : "default", userSelect: "none",
+                          transition: "color 0.12s" }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                           {h.label}
-                          {sortable && <span style={{ fontSize: 9 }}>{nlSortBy === h.key ? (nlSortDir === "asc" ? "↑" : "↓") : "↕"}</span>}
+                          {sortable && <span style={{ fontSize: 8, opacity: active ? 1 : 0.4 }}>{active ? (nlSortDir === "asc" ? "▲" : "▼") : "⇅"}</span>}
                         </span>
                       </th>
                     );
@@ -1324,31 +1327,47 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 </tr>
               </thead>
               <tbody>
-                {nlLoading && <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
+                {nlLoading && <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}><span style={{ display:"inline-block",animation:"spin 1s linear infinite",marginRight:6 }}>⟳</span>Loading…</td></tr>}
                 {!nlLoading && nlSortedRows.map((row, i) => {
                   const sc = getSSColor(row.subStatus ?? "");
                   const isTatError = (row.tatError ?? 0) > 0;
+                  const tatColor = isTatError ? T.notLive : row.tat > 365 ? "#7F1D1D" : row.tat > 90 ? T.notLive : row.tat > 30 ? "#C2410C" : row.tat > 15 ? "#B45309" : "#64748B";
                   return (
-                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.orange, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.status || "—"}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                        {row.subStatus ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: sc.bg, color: sc.text }}>{row.subStatus}</span> : <span style={{ color: T.textMut }}>—</span>}
+                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid #F1F5F9`, background: i % 2 === 0 ? "#FFFFFF" : "#FAFBFC" }}>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9` }}>
+                        <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:6, background:"#FFF4EC", color:T.orange, fontSize:10, fontWeight:800, fontFamily:"monospace", letterSpacing:"0.02em" }}>{row.propertyId}</span>
                       </td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                        {row.tat > 0 ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
+                        <span style={{ color: T.textPri, fontSize: 12, fontWeight: 600 }}>{row.name}</span>
                       </td>
-                      <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                        <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, textAlign: "center" }}>
+                        <span style={{ color: "#64748B", fontSize: 11, background:"#F8FAFC", padding:"1px 8px", borderRadius:4 }}>{row.city || "—"}</span>
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, color: "#94A3B8", fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, textAlign: "center" }}>
+                        {row.status ? <span style={{ fontSize:10, fontWeight:600, color:"#475569", background:"#F1F5F9", padding:"2px 8px", borderRadius:20 }}>{row.status}</span> : <span style={{ color:"#CBD5E1" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, textAlign: "center" }}>
+                        {row.subStatus
+                          ? <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 10px", borderRadius:20, fontSize:10, fontWeight:700, background:sc.bg, color:sc.text, border:`1px solid ${sc.text}20` }}>
+                              <span style={{ width:5,height:5,borderRadius:"50%",background:sc.text,flexShrink:0 }} />
+                              {row.subStatus}
+                            </span>
+                          : <span style={{ color:"#CBD5E1" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, color: "#64748B", fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #F1F5F9`, textAlign: "center" }}>
+                        {row.tat > 0
+                          ? <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontWeight:700, fontSize:10, color:tatColor, background:tatColor+"18", border:`1px solid ${tatColor}30` }}>{row.tat}d</span>
+                          : <span style={{ color:"#CBD5E1" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "8px 14px", textAlign: "center" }}>
+                        <a href={`/crm/${row.propertyId}`} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 12px", fontSize:10, fontWeight:700, background:"linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color:"#fff", borderRadius:20, textDecoration:"none", boxShadow:"0 2px 6px #5D87FF30" }}>CRM ↗</a>
                       </td>
                     </tr>
                   );
                 })}
-                {!nlLoading && (nlData?.rows.length === 0) && <tr><td colSpan={9} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No records match</td></tr>}
+                {!nlLoading && (nlData?.rows.length === 0) && <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No records match</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1373,25 +1392,26 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
                 <thead>
-                  <tr style={{ background: T.headerBg }}>
+                  <tr style={{ background: "linear-gradient(180deg,#F0FDF4 0%,#DCFCE7 100%)" }}>
                     {[
                       { label: "FH ID" }, { label: "Property Name" }, { label: "City" }, { label: "FH Live" },
                       { label: "OTA Live", key: "liveDate" as NLSortKey }, { label: "TAT (days)", key: "tat" as NLSortKey },
-                      { label: "Open" },
+                      { label: "" },
                     ].map((h, i) => {
                       const sortable = !!h.key;
+                      const active = sortable && liveSortBy === h.key;
                       return (
                         <th key={h.label} onClick={sortable ? () => liveToggleSort(h.key!) : undefined}
-                          style={{ padding: "7px 12px", fontSize: 9, fontWeight: 700,
-                            color: sortable && liveSortBy === h.key ? T.live : T.textMut,
-                            textTransform: "uppercase", letterSpacing: "0.08em",
+                          style={{ padding: "9px 14px", fontSize: 9, fontWeight: 800,
+                            color: active ? T.live : "#059669",
+                            textTransform: "uppercase", letterSpacing: "0.09em",
                             textAlign: i <= 1 ? "left" : "center",
-                            borderBottom: `1px solid ${T.cardBdr}`, borderRight: `1px solid ${T.cardBdr}`,
-                            whiteSpace: "nowrap", background: T.headerBg,
+                            borderBottom: `2px solid ${active ? T.live+"55" : "#86EFAC44"}`,
+                            whiteSpace: "nowrap", background: "transparent",
                             cursor: sortable ? "pointer" : "default", userSelect: "none" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             {h.label}
-                            {sortable && <span style={{ fontSize: 9 }}>{liveSortBy === h.key ? (liveSortDir === "asc" ? "↑" : "↓") : "↕"}</span>}
+                            {sortable && <span style={{ fontSize: 8, opacity: active ? 1 : 0.4 }}>{active ? (liveSortDir === "asc" ? "▲" : "▼") : "⇅"}</span>}
                           </span>
                         </th>
                       );
@@ -1399,23 +1419,39 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {liveLoading && <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>Loading…</td></tr>}
-                  {!liveLoading && liveSortedRows.map((row, i) => (
-                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid ${T.cardBdr}`, background: i % 2 === 0 ? "#FFFFFF" : T.headerBg }}>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.live, fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>{row.propertyId}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textPri, fontSize: 11, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 11, textAlign: "center" }}>{row.city || "—"}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, color: T.textSec, fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.liveDate)}</td>
-                      <td style={{ padding: "6px 12px", borderRight: `1px solid ${T.cardBdr}`, textAlign: "center" }}>
-                        {row.tat > 0 ? <span style={{ fontWeight: 700, color: row.tat <= 7 ? T.live : row.tat <= 15 ? "#B45309" : row.tat <= 30 ? "#C2410C" : T.notLive }}>{row.tat}d</span> : <span style={{ color: T.textMut }}>—</span>}
+                  {liveLoading && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}><span style={{ display:"inline-block",animation:"spin 1s linear infinite",marginRight:6 }}>⟳</span>Loading…</td></tr>}
+                  {!liveLoading && liveSortedRows.map((row, i) => {
+                    const tatColor = row.tat <= 7 ? T.live : row.tat <= 15 ? "#059669" : row.tat <= 30 ? "#B45309" : row.tat <= 60 ? "#C2410C" : T.notLive;
+                    return (
+                    <tr key={`${row.propertyId}-${i}`} className="nl-row" style={{ borderBottom: `1px solid #F0FDF4`, background: i % 2 === 0 ? "#FFFFFF" : "#F7FEF9" }}>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC` }}>
+                        <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:6, background:"#DCFCE7", color:"#15803D", fontSize:10, fontWeight:800, fontFamily:"monospace" }}>{row.propertyId}</span>
                       </td>
-                      <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                        <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#16A34A18", color: "#16A34A", border: "1px solid #16A34A40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC`, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>
+                        <span style={{ color: T.textPri, fontSize: 12, fontWeight: 600 }}>{row.name}</span>
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC`, textAlign: "center" }}>
+                        <span style={{ color: "#64748B", fontSize: 11, background:"#F0FDF4", padding:"1px 8px", borderRadius:4 }}>{row.city || "—"}</span>
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC`, color: "#94A3B8", fontSize: 10, textAlign: "center", fontFamily: "monospace" }}>{fmtDate(row.fhLiveDate)}</td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC`, textAlign: "center" }}>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:10, fontWeight:700, color:"#15803D", background:"#DCFCE7", padding:"2px 10px", borderRadius:20 }}>
+                          <span style={{ width:5,height:5,borderRadius:"50%",background:"#22C55E",flexShrink:0 }} />
+                          {fmtDate(row.liveDate)}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 14px", borderRight: `1px solid #E8F5EC`, textAlign: "center" }}>
+                        {row.tat > 0
+                          ? <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontWeight:700, fontSize:10, color:tatColor, background:tatColor+"18", border:`1px solid ${tatColor}30` }}>{row.tat}d</span>
+                          : <span style={{ color:"#CBD5E1" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "8px 14px", textAlign: "center" }}>
+                        <a href={`/crm/${row.propertyId}`} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 12px", fontSize:10, fontWeight:700, background:"linear-gradient(135deg,#22C55E 0%,#16A34A 100%)", color:"#fff", borderRadius:20, textDecoration:"none", boxShadow:"0 2px 6px #16A34A30" }}>CRM ↗</a>
                       </td>
                     </tr>
-                  ))}
-                  {!liveLoading && (liveData?.rows.length === 0) && <tr><td colSpan={7} style={{ textAlign: "center", padding: 30, color: T.textMut, fontSize: 11 }}>No live properties found</td></tr>}
+                    );
+                  })}
+                  {!liveLoading && (liveData?.rows.length === 0) && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No live properties found</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1511,6 +1547,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkStatus(""); setLcBulkSubStatus(""); setLcBulkNote(""); setLcSelected(new Set());
           }
 
+          function lcSelectByFhIds() {
+            const ids = lcBulkIds.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+            if (!ids.length) return;
+            const matched = new Set<number>();
+            for (const row of lcFiltered) {
+              if (ids.includes(row.propertyId.toUpperCase())) matched.add(row.otaListingId);
+            }
+            setLcSelected(prev => { const n = new Set(prev); matched.forEach(id => n.add(id)); return n; });
+            setLcBulkIds("");
+          }
+
           const COLS = "28px 28px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 160px 180px 90px 36px";
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
@@ -1524,22 +1571,39 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             <div style={{ background: "#FAFAFA" }}>
 
               {/* Sheet toolbar */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderBottom: "1px solid #E2E8F0", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#fff", borderBottom: "1px solid #E2E8F0", flexWrap: "wrap" }}>
+                {/* Search */}
                 <div style={{ position: "relative" }}>
-                  <span style={{ position: "absolute", left: 7, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 11, pointerEvents: "none" }}>⌕</span>
-                  <input value={lcSearch} onChange={e => setLcSearch(e.target.value)} placeholder="Search…"
-                    style={{ padding: "5px 8px 5px 22px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, outline: "none", background: "#F8FAFC", width: 200 }} />
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF", fontSize: 12, pointerEvents: "none" }}>⌕</span>
+                  <input value={lcSearch} onChange={e => setLcSearch(e.target.value)} placeholder="Search name / city…"
+                    style={{ padding: "6px 10px 6px 26px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, outline: "none", background: "#F8FAFC", width: 200 }} />
                 </div>
+                {/* Sub-status filter */}
                 <select value={lcStatusFilter} onChange={e => setLcStatusFilter(e.target.value)}
-                  style={{ padding: "5px 8px", border: "1px solid #E2E8F0", borderRadius: 6, fontSize: 11, background: lcStatusFilter !== "all" ? "#EDE9FE" : "#F8FAFC", color: lcStatusFilter !== "all" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
+                  style={{ padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, background: lcStatusFilter !== "all" ? "#EDE9FE" : "#F8FAFC", color: lcStatusFilter !== "all" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
                   <option value="all">All Sub-statuses</option>
                   {allSubStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <button onClick={loadLc} style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻ Refresh</button>
+                {/* FH ID bulk select */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#F0F4FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "3px 4px 3px 10px" }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "#6366F1", whiteSpace: "nowrap" }}>FH IDs</span>
+                  <input
+                    value={lcBulkIds}
+                    onChange={e => setLcBulkIds(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") lcSelectByFhIds(); }}
+                    placeholder="FH001, FH002…"
+                    style={{ padding: "4px 8px", border: "none", borderRadius: 6, fontSize: 11, outline: "none", background: "transparent", width: 160, color: "#374151" }}
+                  />
+                  <button onClick={lcSelectByFhIds} disabled={!lcBulkIds.trim()}
+                    style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: lcBulkIds.trim() ? "#6366F1" : "#C7D2FE", color: "#fff", fontSize: 10, fontWeight: 700, cursor: lcBulkIds.trim() ? "pointer" : "not-allowed" }}>
+                    Select
+                  </button>
+                </div>
+                <button onClick={loadLc} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻</button>
                 <div style={{ flex: 1 }} />
                 {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
                 <button onClick={lcSaveAll} disabled={lcDirtyCount === 0 || lcSaving}
-                  style={{ padding: "6px 16px", borderRadius: 7, border: "none", background: lcDirtyCount > 0 ? "#7C3AED" : "#E2E8F0", color: lcDirtyCount > 0 ? "#fff" : "#9CA3AF", fontSize: 11, fontWeight: 700, cursor: lcDirtyCount > 0 ? "pointer" : "not-allowed", opacity: lcSaving ? 0.7 : 1 }}>
+                  style={{ padding: "7px 18px", borderRadius: 8, border: "none", background: lcDirtyCount > 0 ? "linear-gradient(135deg,#8B5CF6,#7C3AED)" : "#E2E8F0", color: lcDirtyCount > 0 ? "#fff" : "#9CA3AF", fontSize: 11, fontWeight: 700, cursor: lcDirtyCount > 0 ? "pointer" : "not-allowed", opacity: lcSaving ? 0.7 : 1, boxShadow: lcDirtyCount > 0 ? "0 2px 8px #7C3AED40" : "none" }}>
                   {lcSaving ? "Saving…" : `Save All${lcDirtyCount > 0 ? ` (${lcDirtyCount})` : ""}`}
                 </button>
               </div>
