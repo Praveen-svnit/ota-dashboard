@@ -840,7 +840,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {otasSorted.map(ota => {
+                        {[otaName].map(ota => {
                           const r = catMap[ota];
                           if (!r) return null;
                           const isHighlighted = ota === otaName;
@@ -883,7 +883,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
                           <td style={{ padding: "7px 12px", fontWeight: 800, fontSize: 10, color: "#0F172A", textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Total</td>
                           {OVV_ROWS.map(row => {
-                            const v = cats.reduce((s, r2) => s + (r2[row.key as keyof CatRow] as number ?? 0), 0);
+                            const r2 = catMap[otaName];
+                            const v = r2 ? (r2[row.key as keyof CatRow] as number ?? 0) : 0;
                             return (
                               <td key={row.key} style={{ padding: "7px 10px", textAlign: "center" }}>
                                 <span style={{ fontWeight: 800, color: row.color, background: row.bg, borderRadius: 4, padding: "2px 8px" }}>{v.toLocaleString()}</span>
