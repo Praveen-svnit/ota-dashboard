@@ -5,6 +5,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import GlobalDashboardTaskShell from "@/components/tasks/GlobalDashboardTaskShell";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const { lastRefreshed } = useDashboard();
@@ -14,7 +15,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F2F6FA" }}>
-      <Sidebar lastRefreshed={lastRefreshed} />
+      <Suspense fallback={<div style={{ width: 216, minWidth: 216, background: "#fff", borderRight: "1px solid #E8ECF0" }} />}>
+        <Sidebar lastRefreshed={lastRefreshed} />
+      </Suspense>
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
         <GlobalDashboardTaskShell />
         {children}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import OtaDetailView from "@/components/dashboard/OtaDetailView";
 import GmbTab from "@/components/dashboard/GmbTab";
@@ -107,7 +107,7 @@ const LT_OTAS = [
 ];
 const LT_UNSIGNED = new Set(["Ixigo", "Akbar Travels"]);
 
-export default function ListingDashboardPage() {
+function ListingDashboardInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedOta = searchParams.get("ota") ?? "Overview";
@@ -1052,6 +1052,14 @@ export default function ListingDashboardPage() {
         <OtaDetailView otaName={selectedOta} />
       )}
     </div>
+  );
+}
+
+export default function ListingDashboardPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#94A3B8" }}>Loading…</div>}>
+      <ListingDashboardInner />
+    </Suspense>
   );
 }
 
