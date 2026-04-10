@@ -389,7 +389,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [liveSortDir, setLiveSortDir] = useState<"asc" | "desc">("desc");
   const [livePage,    setLivePage]    = useState(1);
   const [ovvExpanded, setOvvExpanded] = useState(true);
-  const [ovvSelOta,   setOvvSelOta]   = useState<string>("All OTAs");
+  const [ovvSelOta,   setOvvSelOta]   = useState<string>(otaName);
 
   const nlSortedRows = useMemo(() => {
     if (!nlData?.rows) return [];
@@ -514,7 +514,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
-    setOvvSelOta("All OTAs"); setOvvExpanded(true);
+    setOvvSelOta(otaName); setOvvExpanded(true);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
