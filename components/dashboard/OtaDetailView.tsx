@@ -369,7 +369,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcLoaded,     setLcLoaded]     = useState(false);
   const [lcSearch,     setLcSearch]     = useState("");
   const [lcStatusFilter, setLcStatusFilter] = useState("all");
-  const [lcFhStatus,   setLcFhStatus]   = useState<string[]>([]);
+  const [lcFhStatus,   setLcFhStatus]   = useState<string[]>(["Live","SoldOut"]);
   const [lcDirty,      setLcDirty]      = useState<Record<number, Record<string, string>>>({});
   const [lcSelected,   setLcSelected]   = useState<Set<number>>(new Set());
   const [lcEditCell,   setLcEditCell]   = useState<{ id: number; field: string } | null>(null);
@@ -503,11 +503,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
   function loadLc(fhStatus = lcFhStatus) {
     setLcLoading(true);
-    const p = new URLSearchParams({ export: "1", ota: otaName, subStatus: "Not Live" });
+    const p = new URLSearchParams({ export: "1", ota: otaName });
     if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
     fetch(`/api/crm/properties?${p}`)
       .then(r => r.json())
-      .then(d => { setLcRows((d.rows ?? []) as LcRow[]); setLcLoaded(true); })
+      .then(d => {
+        // Keep only Not Live cases: exclude rows where sub_status is "Live"
+        const rows = ((d.rows ?? []) as LcRow[]).filter(r => (r.subStatus ?? "").toLowerCase() !== "live");
+        setLcRows(rows);
+        setLcLoaded(true);
+      })
       .catch(() => {})
       .finally(() => setLcLoading(false));
   }
@@ -556,7 +561,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus([]);
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -845,14 +850,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       return (
                         <div key={t.key}
                           onClick={() => {
-                            if (isLive) {
-                              setPropTab("live");
-                              setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
-                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                              loadLive(1, "", [], [], "", "", "", "", "");
-                            } else {
-                              setPropTab("notlive");
-                              goToCategory(t.key);
+                            if (propTab !== "listing") {
+                              if (isLive) {
+                                setPropTab("live");
+                                setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
+                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                                loadLive(1, "", [], [], "", "", "", "", "");
+                              } else {
+                                setPropTab("notlive");
+                                goToCategory(t.key);
+                              }
                             }
                             setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
                           }}
@@ -893,15 +900,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       return (
                         <span key={ss}
                           onClick={() => {
-                            if (isLiveSs) {
-                              setPropTab("live");
-                              setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
-                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                              loadLive(1, "", [ss], [], "", "", "", "", "");
-                            } else {
-                              setPropTab("notlive");
-                              setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
-                              loadNl(1, "", "", [ss], "");
+                            if (propTab !== "listing") {
+                              if (isLiveSs) {
+                                setPropTab("live");
+                                setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
+                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                                loadLive(1, "", [ss], [], "", "", "", "", "");
+                              } else {
+                                setPropTab("notlive");
+                                setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
+                                loadNl(1, "", "", [ss], "");
+                              }
                             }
                             setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
                           }}
@@ -1587,25 +1596,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   <option value="all">All Sub-statuses</option>
                   {allSubStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                {/* FH Status filter (re-fetches) */}
-                {(["Live","SoldOut","Churned"] as const).map(fs => {
-                  const active = lcFhStatus.includes(fs);
-                  const colors: Record<string, { bg: string; text: string; activeBg: string }> = {
-                    Live:     { bg:"#F0FDF4", text:"#16A34A", activeBg:"#DCFCE7" },
-                    SoldOut:  { bg:"#FFF7ED", text:"#C2410C", activeBg:"#FFEDD5" },
-                    Churned:  { bg:"#F8FAFC", text:"#64748B", activeBg:"#E2E8F0" },
-                  };
-                  const c = colors[fs];
-                  return (
-                    <button key={fs} onClick={() => {
-                      const next = active ? lcFhStatus.filter(s => s !== fs) : [...lcFhStatus, fs];
-                      setLcFhStatus(next);
-                      loadLc(next);
-                    }} style={{ padding: "5px 11px", borderRadius: 20, border: `1px solid ${active ? c.text+"55" : "#E2E8F0"}`, background: active ? c.activeBg : c.bg, color: active ? c.text : "#94A3B8", fontSize: 10, fontWeight: active ? 700 : 500, cursor: "pointer", transition: "all 0.12s" }}>
-                      {fs}
-                    </button>
-                  );
-                })}
+                {/* FH Status filter */}
+                <CheckboxDropdown
+                  label="FH Status"
+                  options={["Live","SoldOut","Churned"]}
+                  selected={lcFhStatus}
+                  onChange={next => { setLcFhStatus(next); loadLc(next); }}
+                />
                 {/* FH ID bulk select */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#F0F4FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "3px 4px 3px 10px" }}>
                   <span style={{ fontSize: 9, fontWeight: 700, color: "#6366F1", whiteSpace: "nowrap" }}>FH IDs</span>
