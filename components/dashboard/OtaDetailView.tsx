@@ -369,6 +369,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcLoaded,     setLcLoaded]     = useState(false);
   const [lcSearch,     setLcSearch]     = useState("");
   const [lcStatusFilter, setLcStatusFilter] = useState("all");
+  const [lcFhStatus,   setLcFhStatus]   = useState<string[]>([]);
   const [lcDirty,      setLcDirty]      = useState<Record<number, Record<string, string>>>({});
   const [lcSelected,   setLcSelected]   = useState<Set<number>>(new Set());
   const [lcEditCell,   setLcEditCell]   = useState<{ id: number; field: string } | null>(null);
@@ -500,9 +501,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       .finally(() => setNlLoading(false));
   }
 
-  function loadLc() {
+  function loadLc(fhStatus = lcFhStatus) {
     setLcLoading(true);
-    fetch(`/api/crm/properties?export=1&ota=${encodeURIComponent(otaName)}&fhStatus=Live,SoldOut`)
+    const p = new URLSearchParams({ export: "1", ota: otaName, subStatus: "Not Live" });
+    if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
+    fetch(`/api/crm/properties?${p}`)
       .then(r => r.json())
       .then(d => { setLcRows((d.rows ?? []) as LcRow[]); setLcLoaded(true); })
       .catch(() => {})
@@ -553,7 +556,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all");
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus([]);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1584,6 +1587,25 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   <option value="all">All Sub-statuses</option>
                   {allSubStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+                {/* FH Status filter (re-fetches) */}
+                {(["Live","SoldOut","Churned"] as const).map(fs => {
+                  const active = lcFhStatus.includes(fs);
+                  const colors: Record<string, { bg: string; text: string; activeBg: string }> = {
+                    Live:     { bg:"#F0FDF4", text:"#16A34A", activeBg:"#DCFCE7" },
+                    SoldOut:  { bg:"#FFF7ED", text:"#C2410C", activeBg:"#FFEDD5" },
+                    Churned:  { bg:"#F8FAFC", text:"#64748B", activeBg:"#E2E8F0" },
+                  };
+                  const c = colors[fs];
+                  return (
+                    <button key={fs} onClick={() => {
+                      const next = active ? lcFhStatus.filter(s => s !== fs) : [...lcFhStatus, fs];
+                      setLcFhStatus(next);
+                      loadLc(next);
+                    }} style={{ padding: "5px 11px", borderRadius: 20, border: `1px solid ${active ? c.text+"55" : "#E2E8F0"}`, background: active ? c.activeBg : c.bg, color: active ? c.text : "#94A3B8", fontSize: 10, fontWeight: active ? 700 : 500, cursor: "pointer", transition: "all 0.12s" }}>
+                      {fs}
+                    </button>
+                  );
+                })}
                 {/* FH ID bulk select */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#F0F4FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "3px 4px 3px 10px" }}>
                   <span style={{ fontSize: 9, fontWeight: 700, color: "#6366F1", whiteSpace: "nowrap" }}>FH IDs</span>
@@ -1599,7 +1621,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     Select
                   </button>
                 </div>
-                <button onClick={loadLc} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻</button>
+                <button onClick={() => loadLc()} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻</button>
                 <div style={{ flex: 1 }} />
                 {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
                 <button onClick={lcSaveAll} disabled={lcDirtyCount === 0 || lcSaving}
