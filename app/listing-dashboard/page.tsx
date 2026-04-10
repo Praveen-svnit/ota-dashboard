@@ -209,13 +209,13 @@ function ListingDashboardInner() {
         .srow:hover > td { background: #F3F8FD !important; }
       `}</style>
 
-      {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, padding: "14px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
-        <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
-        <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>
-          {selectedOta === "Overview" ? "Listing Dashboard" : selectedOta}
+      {/* ── Header — shown only on Overview ── */}
+      {selectedOta === "Overview" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, padding: "14px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
+          <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
+          <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
         </div>
-      </div>
+      )}
 
       {selectedOta === "GMB" ? (
         <GmbTab />
