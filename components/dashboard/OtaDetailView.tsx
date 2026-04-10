@@ -390,6 +390,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [livePage,    setLivePage]    = useState(1);
   const [ovvExpanded, setOvvExpanded] = useState(true);
   const [ovvSelOta,   setOvvSelOta]   = useState<string>(otaName);
+  const [ovvTab,      setOvvTab]      = useState<"status" | "substatus">("status");
 
   const nlSortedRows = useMemo(() => {
     if (!nlData?.rows) return [];
@@ -514,7 +515,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
-    setOvvSelOta(otaName); setOvvExpanded(true);
+    setOvvSelOta(otaName); setOvvExpanded(true); setOvvTab("status");
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -770,26 +771,60 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             </div>
 
             {ovvExpanded && (
-              <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ padding: "0 18px 16px 18px" }}>
+
+                {/* Tab strip */}
+                <div style={{ display: "flex", gap: 2, background: "#F1F5F9", borderRadius: 8, padding: 3, marginBottom: 14, width: "fit-content" }}>
+                  {(["status", "substatus"] as const).map(tab => {
+                    const active = ovvTab === tab;
+                    return (
+                      <button key={tab} onClick={() => setOvvTab(tab)} style={{
+                        padding: "5px 16px", fontSize: 11, fontWeight: 700, borderRadius: 6,
+                        border: "none", cursor: "pointer", fontFamily: "inherit",
+                        background: active ? "#FFFFFF" : "transparent",
+                        color: active ? "#0F172A" : "#94A3B8",
+                        boxShadow: active ? "0 1px 3px rgba(15,23,42,0.10)" : "none",
+                        transition: "all 0.12s",
+                      }}>
+                        {tab === "status" ? "Status" : "Sub-status"}
+                      </button>
+                    );
+                  })}
+                </div>
 
                 {/* Status tiles */}
-                <div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Status</div>
+                {ovvTab === "status" && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {STATUS_TILES.map(t => (
-                      <div key={t.key} style={{
-                        display: "inline-flex", alignItems: "center", gap: 10,
-                        background: t.bg, padding: "10px 16px", borderRadius: 10,
-                        border: `1px solid ${t.dot}30`, minWidth: 120, flex: "1 1 120px",
-                      }}>
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.dot, flexShrink: 0 }} />
-                        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: t.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t.label}</span>
-                          <span style={{ fontSize: 20, fontWeight: 900, color: t.color, lineHeight: 1.1 }}>{t.val.toLocaleString()}</span>
+                    {STATUS_TILES.map(t => {
+                      const isLive = t.key === "live";
+                      return (
+                        <div key={t.key}
+                          onClick={() => {
+                            if (isLive) {
+                              setPropTab("live");
+                              setLiveSearch(""); setLiveSss([]);
+                              loadLive(1, "", []);
+                            } else {
+                              setPropTab("notlive");
+                              goToCategory(t.key);
+                            }
+                            setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                          }}
+                          className="kpi-tile"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 10,
+                            background: t.bg, padding: "10px 16px", borderRadius: 10,
+                            border: `1px solid ${t.dot}30`, minWidth: 120, flex: "1 1 120px",
+                            cursor: "pointer",
+                          }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.dot, flexShrink: 0 }} />
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: t.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t.label}</span>
+                            <span style={{ fontSize: 20, fontWeight: 900, color: t.color, lineHeight: 1.1 }}>{t.val.toLocaleString()}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    {/* Live % tile */}
+                      );
+                    })}
                     <div style={{
                       display: "inline-flex", alignItems: "center", gap: 10,
                       background: "#F8FAFC", padding: "10px 16px", borderRadius: 10,
@@ -801,30 +836,42 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Sub-status pills */}
-                {subStatusEntries2.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Sub-status</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {subStatusEntries2.map(([ss, cnt]) => {
-                        const sc = getSSColor(ss);
-                        return (
-                          <span key={ss} style={{
+                {ovvTab === "substatus" && subStatusEntries2.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {subStatusEntries2.map(([ss, cnt]) => {
+                      const sc = getSSColor(ss);
+                      const isLiveSs = ss.toLowerCase() === "live";
+                      return (
+                        <span key={ss}
+                          onClick={() => {
+                            if (isLiveSs) {
+                              setPropTab("live");
+                              setLiveSss([ss]); setLiveSearch("");
+                              loadLive(1, "", [ss]);
+                            } else {
+                              setPropTab("notlive");
+                              setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
+                              loadNl(1, "", "", [ss], "");
+                            }
+                            setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                          }}
+                          className="kpi-tile"
+                          style={{
                             display: "inline-flex", alignItems: "center", gap: 6,
                             background: sc.bg, color: sc.text,
                             padding: "5px 12px", borderRadius: 20,
                             fontSize: 12, fontWeight: 600, lineHeight: 1,
-                            border: `1px solid ${sc.text}20`,
+                            border: `1px solid ${sc.text}20`, cursor: "pointer",
                           }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
-                            {ss}
-                            <span style={{ fontSize: 12, fontWeight: 800, marginLeft: 2 }}>{cnt.toLocaleString()}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
+                          {ss}
+                          <span style={{ fontSize: 12, fontWeight: 800, marginLeft: 2 }}>{cnt.toLocaleString()}</span>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
 
