@@ -939,6 +939,37 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             })}
           </div>
 
+          {/* Sub-status KPI tiles */}
+          {(() => {
+            const entries = Object.entries(dashData.pivot[otaName] ?? {})
+              .filter(([, v]) => v > 0)
+              .sort((a, b) => b[1] - a[1]);
+            if (!entries.length) return null;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Sub-status Breakdown</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {entries.map(([ss, cnt]) => {
+                    const sc = getSSColor(ss);
+                    const isActive = nlSss.includes(ss);
+                    return (
+                      <div key={ss} className="kpi-tile"
+                        onClick={() => {
+                          const next = isActive ? nlSss.filter(s => s !== ss) : [...nlSss, ss];
+                          setNlSss(next);
+                          loadNl(1, nlSearch, nlCategory, next, nlFhMonth);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: isActive ? sc.bg : "#FFFFFF", border: `1px solid ${isActive ? sc.text : T.cardBdr}`, boxShadow: isActive ? `0 0 0 2px ${sc.text}22` : "0 1px 3px rgba(0,0,0,0.04)" }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: sc.text, textTransform: "capitalize" }}>{ss}</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: sc.text, background: sc.bg, padding: "1px 8px", borderRadius: 5, border: `1px solid ${sc.text}20` }}>{cnt.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Status × Sub-status */}
           {(() => {
             const xPivot = dashData.ssStatusPivot[otaName] ?? {};
@@ -1125,6 +1156,37 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               </div>
             ))}
           </div>
+
+          {/* Sub-status KPI tiles (live tab) */}
+          {(() => {
+            const entries = Object.entries(dashData.pivot[otaName] ?? {})
+              .filter(([, v]) => v > 0)
+              .sort((a, b) => b[1] - a[1]);
+            if (!entries.length) return null;
+            return (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Sub-status Breakdown</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {entries.map(([ss, cnt]) => {
+                    const sc = getSSColor(ss);
+                    const isActive = liveSss.includes(ss);
+                    return (
+                      <div key={ss} className="kpi-tile"
+                        onClick={() => {
+                          const next = isActive ? liveSss.filter(s => s !== ss) : [...liveSss, ss];
+                          setLiveSss(next);
+                          loadLive(1, liveSearch, next, liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo);
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: isActive ? sc.bg : "#FFFFFF", border: `1px solid ${isActive ? sc.text : T.cardBdr}`, boxShadow: isActive ? `0 0 0 2px ${sc.text}22` : "0 1px 3px rgba(0,0,0,0.04)" }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: sc.text, textTransform: "capitalize" }}>{ss}</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: sc.text, background: sc.bg, padding: "1px 8px", borderRadius: 5, border: `1px solid ${sc.text}20` }}>{cnt.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Month-wise table */}
           {mergedMonthData.length > 0 && (
