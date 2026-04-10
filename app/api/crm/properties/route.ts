@@ -109,7 +109,7 @@ export async function GET(req: Request) {
   const innerCte = `
     SELECT
       inv.property_id, inv.property_name, inv.city, inv.fh_status, inv.fh_live_date,
-      ol.ota, ol.ota_id, ol.status, ol.sub_status, ol.live_date,
+      ol.id AS ota_listing_id, ol.ota, ol.ota_id, ol.status, ol.sub_status, ol.live_date,
       ol.tat, ol.tat_error, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
@@ -120,7 +120,8 @@ export async function GET(req: Request) {
     // Export: flat rows (one per property×OTA)
     const rowsQuery = `
       SELECT
-        c.property_id                                          AS id,
+        c.ota_listing_id                                       AS "otaListingId",
+        c.property_id                                          AS "propertyId",
         c.property_name                                        AS name,
         c.city,
         c.fh_status                                            AS "fhStatus",
@@ -131,11 +132,8 @@ export async function GET(req: Request) {
         c.live_date                                            AS "liveDate",
         c.assigned_to                                          AS "assignedTo",
         c.crm_note                                             AS "crmNote",
-        u.name                                                 AS "assignedName",
-        (SELECT MIN(t.due_date) FROM tasks t
-         WHERE t.property_id = c.property_id
-           AND t.status = 'open'
-           AND t.due_date IS NOT NULL)                         AS "taskDueDate"
+        c.crm_updated_at                                       AS "crmUpdatedAt",
+        u.name                                                 AS "assignedName"
       FROM (${innerCte}) c
       LEFT JOIN users u ON u.id = c.assigned_to
       ${where}
