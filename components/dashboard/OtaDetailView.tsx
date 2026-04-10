@@ -859,34 +859,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 </div>
 
                 {/* Status tiles */}
-                {ovvTab === "status" && (
+                {ovvTab === "status" && propTab !== "listing" && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {STATUS_TILES.map(t => {
                       const isLive = t.key === "live";
                       return (
                         <div key={t.key}
                           onClick={() => {
-                            if (propTab === "listing") {
-                              // Filter LC sheet by actual status column values
-                              const LC_CAT_STATUS: Record<string, string[]> = {
-                                live:          ["Live"],
-                                exception:     ["Exception"],
-                                readyToGoLive: ["Ready to Go Live"],
-                                inProcess:     ["Listing in Progress","Content in Progress","Shell Created","New","Pending"],
-                                tatExhausted:  ["Not Live","Listing in Progress","Content in Progress","Shell Created","New","Pending","Exception"],
-                              };
-                              const vals = LC_CAT_STATUS[t.key];
-                              setLcOvvFilter(vals ? { label: t.label, field: "status", values: vals } : null);
+                            if (isLive) {
+                              setPropTab("live");
+                              setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
+                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                              loadLive(1, "", [], [], "", "", "", "", "");
                             } else {
-                              if (isLive) {
-                                setPropTab("live");
-                                setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
-                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                                loadLive(1, "", [], [], "", "", "", "", "");
-                              } else {
-                                setPropTab("notlive");
-                                goToCategory(t.key);
-                              }
+                              setPropTab("notlive");
+                              goToCategory(t.key);
                             }
                             setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
                           }}
@@ -915,6 +902,63 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <span style={{ fontSize: 20, fontWeight: 900, color: livePctColor, lineHeight: 1.1 }}>{livePct2}%</span>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Listing Creation — dynamic status tiles from actual data */}
+                {ovvTab === "status" && propTab === "listing" && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {!lcLoaded
+                      ? <span style={{ fontSize: 11, color: "#94A3B8" }}>Load Listing Creation tab to see status breakdown</span>
+                      : (() => {
+                          const statusCounts: Record<string, number> = {};
+                          for (const r of lcRows) {
+                            const st = r.status?.trim() || "Blank";
+                            if (st.toLowerCase() === "live") continue;
+                            statusCounts[st] = (statusCounts[st] ?? 0) + 1;
+                          }
+                          const entries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
+                          const STATUS_COLORS_LC: Record<string, { color: string; dot: string; bg: string }> = {
+                            "New":                  { color: "#0F172A", dot: "#64748B", bg: "#F1F5F9" },
+                            "Shell Created":        { color: "#1D4ED8", dot: "#3B82F6", bg: "#DBEAFE" },
+                            "Not Live":             { color: "#DC2626", dot: "#F87171", bg: "#FEE2E2" },
+                            "Ready to Go Live":     { color: "#0F766E", dot: "#14B8A6", bg: "#CCFBF1" },
+                            "Content in Progress":  { color: "#6D28D9", dot: "#A78BFA", bg: "#EDE9FE" },
+                            "Listing in Progress":  { color: "#155E75", dot: "#06B6D4", bg: "#CFFAFE" },
+                            "Pending":              { color: "#B45309", dot: "#F59E0B", bg: "#FEF3C7" },
+                            "Soldout":              { color: "#B45309", dot: "#F97316", bg: "#FFEDD5" },
+                            "Closed":               { color: "#475569", dot: "#94A3B8", bg: "#F1F5F9" },
+                            "Blank":                { color: "#94A3B8", dot: "#CBD5E1", bg: "#F8FAFC" },
+                          };
+                          const activeFilter = lcOvvFilter?.field === "status" ? lcOvvFilter.values[0] : null;
+                          return entries.map(([st, cnt]) => {
+                            const c = STATUS_COLORS_LC[st] ?? { color: "#475569", dot: "#94A3B8", bg: "#F1F5F9" };
+                            const isActive = activeFilter === st;
+                            return (
+                              <div key={st}
+                                onClick={() => {
+                                  setLcOvvFilter(isActive ? null : { label: st, field: "status", values: [st] });
+                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                                }}
+                                className="kpi-tile"
+                                style={{
+                                  display: "inline-flex", alignItems: "center", gap: 10,
+                                  background: isActive ? c.dot : c.bg,
+                                  padding: "10px 16px", borderRadius: 10,
+                                  border: `1px solid ${c.dot}${isActive ? "ff" : "40"}`,
+                                  minWidth: 110, flex: "0 1 auto", cursor: "pointer",
+                                  boxShadow: isActive ? `0 4px 12px ${c.dot}40` : "none",
+                                }}>
+                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? "#fff" : c.dot, flexShrink: 0 }} />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: isActive ? "#fff" : c.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{st}</span>
+                                  <span style={{ fontSize: 20, fontWeight: 900, color: isActive ? "#fff" : c.color, lineHeight: 1.1 }}>{cnt}</span>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()
+                    }
                   </div>
                 )}
 
@@ -1605,7 +1649,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = "28px 28px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 160px 180px 90px 36px";
+          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 160px 180px 90px 36px";
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1704,7 +1748,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         else setLcSelected(prev => { const n = new Set(prev); lcFiltered.forEach(r => n.add(r.otaListingId)); return n; });
                       }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                     </div>
-                    <div style={{ padding: "7px 4px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", display: "flex", alignItems: "center" }}>#</div>
+                    <div style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, display: "flex", alignItems: "center", borderLeft: "1px solid #E2E8F0" }}>FH ID</div>
                     {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Pre/Post","Listing Link","Note",""].map(h => (
                       <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
                     ))}
@@ -1738,14 +1782,15 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           <input type="checkbox" checked={isSel} onChange={() => setLcSelected(prev => { const n = new Set(prev); n.has(row.otaListingId) ? n.delete(row.otaListingId) : n.add(row.otaListingId); return n; })}
                             style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                         </div>
-                        {/* # */}
-                        <div style={{ padding: "5px 4px", fontSize: 10, color: "#CBD5E1", textAlign: "right" }}>{i + 1}</div>
+                        {/* FH ID */}
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", display: "flex", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", background: "#EDE9FE", padding: "2px 7px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>{row.propertyId}</span>
+                        </div>
                         {/* Property */}
                         <div style={{ ...cellSt(row.otaListingId, "_"), background: "transparent", borderLeft: "1px solid #E8EDF2", padding: "5px 6px", minWidth: 0 }}>
-                          <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
+                          <a href={`/crm/${row.propertyId}`}
                             style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             title={row.name}>{row.name || "—"}</a>
-                          <div style={{ fontSize: 9, color: "#94A3B8" }}>{row.propertyId}</div>
                         </div>
                         {/* City */}
                         <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.city || "—"}</div>
