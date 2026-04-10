@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
 interface SessionUser { id: string; username: string; name: string; role: string; ota: string | null; }
@@ -12,8 +12,18 @@ interface SidebarProps {
 
 
 export default function Sidebar({ lastRefreshed }: SidebarProps) {
-  const pathname  = usePathname();
-  const router    = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+
+  const OTA_LIST = ["GoMMT","Booking.com","Agoda","Expedia","Cleartrip","Yatra","Ixigo","Akbar Travels","EaseMyTrip","Indigo","GMB"];
+  const OTA_ICONS: Record<string, string> = {
+    "GoMMT": "🟥", "Booking.com": "🟦", "Agoda": "🟣", "Expedia": "🔵",
+    "Cleartrip": "🟠", "Yatra": "🔴", "Ixigo": "🟧", "Akbar Travels": "🔷",
+    "EaseMyTrip": "🩵", "Indigo": "🟪", "GMB": "🟢",
+  };
+  const isListingDash = pathname === "/listing-dashboard";
+  const activeOta = isListingDash ? (searchParams.get("ota") ?? "Overview") : null;
   const [collapsed,  setCollapsed]  = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
@@ -112,7 +122,50 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* CRM */}
         <SectionHeader label="CRM" />
-        <NavLink icon="🏠" label="Listing Dashboard"    href="/listing-dashboard" />
+
+        {/* Listing Dashboard — with OTA sub-links */}
+        <Link href="/listing-dashboard"
+          title={collapsed ? "Listing Dashboard" : undefined}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: collapsed ? "9px 0" : "8px 10px",
+            borderRadius: 7, marginBottom: 1,
+            background: isListingDash && activeOta === "Overview" ? "#5D87FF" : isListingDash ? "#EEF2FF" : "transparent",
+            color: isListingDash && activeOta === "Overview" ? "#FFFFFF" : isListingDash ? "#4F46E5" : "#64748B",
+            textDecoration: "none", fontSize: 12,
+            fontWeight: isListingDash ? 600 : 400,
+            justifyContent: collapsed ? "center" : "flex-start",
+            transition: "background 0.12s, color 0.12s",
+          }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>🏠</span>
+          {!collapsed && <span style={{ whiteSpace: "nowrap", flex: 1 }}>Listing Dashboard</span>}
+        </Link>
+
+        {/* OTA sub-links — shown when not collapsed */}
+        {!collapsed && (
+          <div style={{ marginBottom: 2 }}>
+            {OTA_LIST.map(ota => {
+              const isActive = isListingDash && activeOta === ota;
+              return (
+                <Link key={ota} href={`/listing-dashboard?ota=${encodeURIComponent(ota)}`}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 7,
+                    padding: "5px 10px 5px 26px",
+                    borderRadius: 6, marginBottom: 1,
+                    background: isActive ? "#5D87FF" : "transparent",
+                    color: isActive ? "#FFFFFF" : "#94A3B8",
+                    textDecoration: "none", fontSize: 11,
+                    fontWeight: isActive ? 700 : 400,
+                    transition: "background 0.12s, color 0.12s",
+                  }}>
+                  <span style={{ fontSize: 10, flexShrink: 0 }}>{OTA_ICONS[ota] ?? "◆"}</span>
+                  <span style={{ whiteSpace: "nowrap" }}>{ota}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
         <NavLink icon="🏢" label="Property CRM"   href="/crm" />
         <NavLink icon="📋" label="Property Status" href="/listings" />
         <NavLink icon="✅" label="Tasks"          href="/tasks" />

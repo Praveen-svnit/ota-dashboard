@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import OtaDetailView from "@/components/dashboard/OtaDetailView";
 import GmbTab from "@/components/dashboard/GmbTab";
 
@@ -109,7 +109,8 @@ const LT_UNSIGNED = new Set(["Ixigo", "Akbar Travels"]);
 
 export default function ListingDashboardPage() {
   const router = useRouter();
-  const [selectedOta, setSelectedOta] = useState<string>("Overview");
+  const searchParams = useSearchParams();
+  const selectedOta = searchParams.get("ota") ?? "Overview";
   const [data, setData]               = useState<DashData | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -209,35 +210,10 @@ export default function ListingDashboardPage() {
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 14, padding: "16px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
-          </div>
-        </div>
-        {/* OTA tab strip */}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-          {["Overview", ...OTA_LIST_ORDER].map(name => {
-            const active = selectedOta === name;
-            const color  = OTA_COLORS[name] ?? T.orange;
-            return (
-              <button
-                key={name}
-                onClick={() => setSelectedOta(name)}
-                style={{
-                  padding: "5px 13px", fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${active ? color : T.cardBdr}`,
-                  borderRadius: 999, cursor: "pointer", fontFamily: "inherit",
-                  background: active ? color : "#FFFFFF",
-                  color:      active ? "#FFFFFF" : "#64748B",
-                  transition: "all 0.13s ease",
-                }}
-              >
-                {name}
-              </button>
-            );
-          })}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, padding: "14px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
+        <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
+        <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>
+          {selectedOta === "Overview" ? "Listing Dashboard" : selectedOta}
         </div>
       </div>
 
