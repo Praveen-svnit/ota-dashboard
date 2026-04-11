@@ -102,5 +102,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ propert
     [propertyId, ota]
   ) as { id: number }[];
 
+  if (!rows[0]) {
+    return Response.json({ error: "Failed to create listing" }, { status: 500 });
+  }
   return Response.json({ listing: rows[0] });
 }
