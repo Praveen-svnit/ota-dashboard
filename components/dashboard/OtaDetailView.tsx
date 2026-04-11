@@ -389,6 +389,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcSaving,     setLcSaving]     = useState(false);
   const [lcSaveOk,     setLcSaveOk]     = useState<Set<number>>(new Set());
   const [lcSaveErr,    setLcSaveErr]    = useState<Set<number>>(new Set());
+  const [lcBulkField,     setLcBulkField]     = useState("");
+  const [lcBulkValue,     setLcBulkValue]     = useState("");
   const [lcBulkStatus,    setLcBulkStatus]    = useState("");
   const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
   const [lcBulkNote,      setLcBulkNote]      = useState("");
@@ -962,14 +964,14 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   </div>
                 )}
 
-                {/* Sub-status pills */}
+                {/* Sub-status tiles */}
                 {ovvTab === "substatus" && subStatusEntries2.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {subStatusEntries2.map(([ss, cnt]) => {
                       const sc = getSSColor(ss);
                       const isLiveSs = ss.toLowerCase() === "live";
                       return (
-                        <span key={ss}
+                        <div key={ss}
                           onClick={() => {
                             if (propTab === "listing") {
                               setLcOvvFilter({ label: ss, field: "subStatus", values: [ss] });
@@ -989,16 +991,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           }}
                           className="kpi-tile"
                           style={{
-                            display: "inline-flex", alignItems: "center", gap: 6,
-                            background: sc.bg, color: sc.text,
-                            padding: "5px 12px", borderRadius: 20,
-                            fontSize: 12, fontWeight: 600, lineHeight: 1,
-                            border: `1px solid ${sc.text}20`, cursor: "pointer",
+                            display: "inline-flex", alignItems: "center", gap: 10,
+                            background: sc.bg, padding: "10px 16px", borderRadius: 10,
+                            border: `1px solid ${sc.text}30`, minWidth: 110, flex: "0 1 auto",
+                            cursor: "pointer",
                           }}>
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
-                          {ss}
-                          <span style={{ fontSize: 12, fontWeight: 800, marginLeft: 2 }}>{cnt.toLocaleString()}</span>
-                        </span>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: sc.text, textTransform: "uppercase", letterSpacing: "0.06em" }}>{ss}</span>
+                            <span style={{ fontSize: 20, fontWeight: 900, color: sc.text, lineHeight: 1.1 }}>{cnt.toLocaleString()}</span>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1624,18 +1627,15 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           }
 
           function lcApplyBulk() {
-            if (!lcAnySel) return;
+            if (!lcAnySel || !lcBulkField || !lcBulkValue) return;
             setLcDirty(prev => {
               const next = { ...prev };
               for (const id of lcSelected) {
-                next[id] = { ...(next[id] ?? {}) };
-                if (lcBulkStatus)    next[id].status    = lcBulkStatus;
-                if (lcBulkSubStatus) next[id].subStatus = lcBulkSubStatus;
-                if (lcBulkNote)      next[id].note      = lcBulkNote;
+                next[id] = { ...(next[id] ?? {}), [lcBulkField]: lcBulkValue };
               }
               return next;
             });
-            setLcBulkStatus(""); setLcBulkSubStatus(""); setLcBulkNote(""); setLcSelected(new Set());
+            setLcBulkField(""); setLcBulkValue(""); setLcSelected(new Set());
           }
 
           function lcSelectByFhIds() {
@@ -1707,6 +1707,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 <button onClick={() => loadLc()} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻</button>
                 <div style={{ flex: 1 }} />
                 {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
+                {lcDirtyCount > 0 && (
+                  <button onClick={() => setLcDirty({})} disabled={lcSaving}
+                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#DC2626" }}>
+                    Clear
+                  </button>
+                )}
                 <button onClick={lcSaveAll} disabled={lcDirtyCount === 0 || lcSaving}
                   style={{ padding: "7px 18px", borderRadius: 8, border: "none", background: lcDirtyCount > 0 ? "linear-gradient(135deg,#8B5CF6,#7C3AED)" : "#E2E8F0", color: lcDirtyCount > 0 ? "#fff" : "#9CA3AF", fontSize: 11, fontWeight: 700, cursor: lcDirtyCount > 0 ? "pointer" : "not-allowed", opacity: lcSaving ? 0.7 : 1, boxShadow: lcDirtyCount > 0 ? "0 2px 8px #7C3AED40" : "none" }}>
                   {lcSaving ? "Saving…" : `Save All${lcDirtyCount > 0 ? ` (${lcDirtyCount})` : ""}`}
@@ -1714,28 +1720,49 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               </div>
 
               {/* Bulk bar */}
-              {lcAnySel && (
-                <div style={{ background: "#1E1B4B", padding: "7px 12px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#C7D2FE" }}>Bulk: {lcSelected.size} row{lcSelected.size > 1 ? "s" : ""}</span>
-                  <div style={{ width: 1, height: 14, background: "#4338CA" }} />
-                  <select value={lcBulkStatus} onChange={e => setLcBulkStatus(e.target.value)}
-                    style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkStatus ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
-                    <option value="">Set Status…</option>
-                    {STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <select value={lcBulkSubStatus} onChange={e => setLcBulkSubStatus(e.target.value)}
-                    style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkSubStatus ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
-                    <option value="">Set Sub-status…</option>
-                    {SUB_STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <input value={lcBulkNote} onChange={e => setLcBulkNote(e.target.value)} placeholder="Add note…"
-                    style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: "#fff", fontSize: 11, outline: "none", width: 180 }} />
-                  <button onClick={lcApplyBulk} disabled={!lcBulkStatus && !lcBulkSubStatus && !lcBulkNote}
-                    style={{ padding: "5px 14px", borderRadius: 5, border: "none", background: "#6366F1", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: (!lcBulkStatus && !lcBulkSubStatus && !lcBulkNote) ? 0.5 : 1 }}>Apply →</button>
-                  <button onClick={() => setLcSelected(new Set())}
-                    style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "transparent", color: "#818CF8", fontSize: 11, cursor: "pointer" }}>Cancel</button>
-                </div>
-              )}
+              {lcAnySel && (() => {
+                const BULK_FIELDS = [
+                  { key: "status",      label: "Status",       type: "select", options: STATUS_OPTIONS_LC },
+                  { key: "subStatus",   label: "Sub-status",   type: "select", options: SUB_STATUS_OPTIONS_LC },
+                  { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
+                  { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
+                  { key: "liveDate",    label: "OTA Live Date",type: "date",   options: [] },
+                  { key: "listingLink", label: "Listing Link", type: "text",   options: [] },
+                  { key: "note",        label: "Note",         type: "text",   options: [] },
+                ];
+                const fieldDef = BULK_FIELDS.find(f => f.key === lcBulkField);
+                const canApply = !!lcBulkField && !!lcBulkValue;
+                return (
+                  <div style={{ background: "#1E1B4B", padding: "7px 12px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#C7D2FE" }}>Bulk: {lcSelected.size} row{lcSelected.size > 1 ? "s" : ""}</span>
+                    <div style={{ width: 1, height: 14, background: "#4338CA" }} />
+                    <select value={lcBulkField} onChange={e => { setLcBulkField(e.target.value); setLcBulkValue(""); }}
+                      style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkField ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
+                      <option value="">Select field…</option>
+                      {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                    </select>
+                    {fieldDef && fieldDef.type === "select" && (
+                      <select value={lcBulkValue} onChange={e => setLcBulkValue(e.target.value)}
+                        style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkValue ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
+                        <option value="">Set value…</option>
+                        {fieldDef.options.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                    {fieldDef && fieldDef.type === "date" && (
+                      <input type="date" value={lcBulkValue} onChange={e => setLcBulkValue(e.target.value)}
+                        style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: "#fff", fontSize: 11, outline: "none" }} />
+                    )}
+                    {fieldDef && fieldDef.type === "text" && (
+                      <input value={lcBulkValue} onChange={e => setLcBulkValue(e.target.value)} placeholder={`Set ${fieldDef.label}…`}
+                        style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: "#fff", fontSize: 11, outline: "none", width: 200 }} />
+                    )}
+                    <button onClick={lcApplyBulk} disabled={!canApply}
+                      style={{ padding: "5px 14px", borderRadius: 5, border: "none", background: "#6366F1", color: "#fff", fontSize: 11, fontWeight: 700, cursor: canApply ? "pointer" : "not-allowed", opacity: canApply ? 1 : 0.5 }}>Apply →</button>
+                    <button onClick={() => setLcSelected(new Set())}
+                      style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "transparent", color: "#818CF8", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                );
+              })()}
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
@@ -1784,19 +1811,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         </div>
                         {/* FH ID */}
                         <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", display: "flex", alignItems: "center" }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", background: "#EDE9FE", padding: "2px 7px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>{row.propertyId}</span>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#F97316", background: "#FFF4EC", padding: "2px 7px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>{row.propertyId}</span>
                         </div>
                         {/* Property */}
                         <div style={{ ...cellSt(row.otaListingId, "_"), background: "transparent", borderLeft: "1px solid #E8EDF2", padding: "5px 6px", minWidth: 0 }}>
                           <a href={`/crm/${row.propertyId}`}
-                            style={{ fontSize: 11, fontWeight: 700, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            style={{ fontSize: 11, fontWeight: 600, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             title={row.name}>{row.name || "—"}</a>
                         </div>
                         {/* City */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 11, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.city || "—"}</div>
+                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 11, color: "#64748B", background: "#F8FAFC", padding: "1px 7px", borderRadius: 4 }}>{row.city || "—"}</span>
+                        </div>
                         {/* FH Status */}
                         <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2" }}>
-                          <span style={{ fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 8, background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9", color: row.fhStatus === "Live" ? "#15803D" : "#64748B" }}>{row.fhStatus || "—"}</span>
+                          <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10, background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9", color: row.fhStatus === "Live" ? "#15803D" : "#64748B" }}>{row.fhStatus || "—"}</span>
                         </div>
                         {/* FH Date */}
                         <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 10, color: "#64748B" }}>{fmtDate(row.fhLiveDate)}</div>
@@ -1822,7 +1851,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              <span style={{ fontSize: 11, fontWeight: 600, color: "#374151" }}>{statusVal || "—"}</span>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal || "—"}</span>
                               <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
                             </div>
                           )}
@@ -1836,7 +1865,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              <span style={{ fontSize: 10, fontWeight: 600, color: sc.text ?? "#374151", background: (sc as { bg?: string }).bg, padding: "1px 7px", borderRadius: 10 }}>{subStatusVal || "—"}</span>
+                              {subStatusVal
+                                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: (sc as { bg?: string }).bg, color: sc.text, border: `1px solid ${sc.text}20` }}>
+                                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
+                                    {subStatusVal}
+                                  </span>
+                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
                               <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
                             </div>
                           )}
@@ -1857,8 +1891,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         {/* TAT */}
                         <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", textAlign: "center" }}>
                           {row.tat != null && row.tat > 0
-                            ? <span style={{ fontSize: 11, fontWeight: 700, color: row.tat <= 7 ? "#16A34A" : row.tat <= 15 ? "#B45309" : row.tat <= 30 ? "#C2410C" : "#DC2626" }}>{row.tat}d</span>
-                            : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
+                            ? (() => {
+                                const t = row.tat;
+                                const tatColor = t > 365 ? "#7F1D1D" : t > 90 ? "#DC2626" : t > 30 ? "#C2410C" : t > 15 ? "#B45309" : "#64748B";
+                                return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontWeight: 700, fontSize: 10, color: tatColor, background: tatColor + "18", border: `1px solid ${tatColor}30` }}>{t}d</span>;
+                              })()
+                            : <span style={{ color: "#CBD5E1" }}>—</span>}
                         </div>
                         {/* Pre/Post — editable */}
                         <div style={cellSt(row.otaListingId, "prePost")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "prePost" })}>
