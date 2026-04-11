@@ -152,10 +152,12 @@ export async function initPostgresSchema() {
       crm_updated_at  TIMESTAMPTZ,
       pre_post        TEXT,
       listing_link    TEXT,
+      batch_number    TEXT,
       synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (property_id, ota)
     )
   `;
+  await sql`ALTER TABLE ota_listing ADD COLUMN IF NOT EXISTS batch_number TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ota_listing_ota        ON ota_listing(ota)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ota_listing_sub_status ON ota_listing(sub_status)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ota_listing_prop       ON ota_listing(property_id)`;

@@ -108,7 +108,7 @@ interface Listing {
   id: number; ota: string; status: string; subStatus: string;
   liveDate: string; tat: number; tatError: number; otaId: string;
   assignedTo: string; crmNote: string; crmUpdatedAt: string; assignedName: string;
-  prePost: string; listingLink: string;
+  prePost: string; listingLink: string; batchNumber: string;
 }
 interface Log {
   id: number; otaListingId: number; action: string; field: string;
@@ -631,34 +631,72 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                               {activeListing.status || "—"}
                             </span>
 
-                            {/* Sub-status tag — neutral, read-only */}
-                            {activeListing.subStatus && (
-                              <span style={{
-                                display: "inline-flex", alignItems: "center",
-                                background: "#F1F5F9", color: "#475569",
-                                padding: "5px 12px", borderRadius: 20,
-                                fontSize: 12, fontWeight: 600, lineHeight: 1,
-                                border: "1px solid #E2E8F0",
-                              }}>
-                                {activeListing.subStatus}
-                              </span>
+                            {/* Sub-status tag — editable */}
+                            {isEditing("subStatus") ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 380 }}>
+                                <select value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #CBD5E160", fontSize: 13, fontWeight: 600, background: "#FFF" }}>
+                                  {getSubStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                                <input value={editNote} onChange={(e) => { setEditNote(e.target.value); setNoteErr(false); }}
+                                  placeholder="Reason for change (required)…"
+                                  style={{ padding: "7px 10px", borderRadius: 8, fontSize: 12,
+                                    border: `1px solid ${noteErr ? "#FCA5A5" : "#E2E8F0"}`,
+                                    outline: "none", background: noteErr ? "#FEF2F2" : "#F8FAFC" }} />
+                                {noteErr && <span style={{ fontSize: 10, color: "#DC2626" }}>Note is required before saving</span>}
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button onClick={() => saveField(activeListing.id, "subStatus", editValue)} disabled={saving}
+                                    style={{ padding: "7px 16px", borderRadius: 8, border: "none",
+                                      background: "#475569", color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                    {saving ? "Saving…" : "Save"}
+                                  </button>
+                                  <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); }}
+                                    style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0",
+                                      background: "#FFF", fontSize: 12, cursor: "pointer", color: "#64748B" }}>
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                <span style={{
+                                  display: "inline-flex", alignItems: "center",
+                                  background: "#F1F5F9", color: "#475569",
+                                  padding: "5px 12px", borderRadius: 20,
+                                  fontSize: 12, fontWeight: 600, lineHeight: 1,
+                                  border: "1px solid #E2E8F0",
+                                }}>
+                                  {activeListing.subStatus || "—"}
+                                </span>
+                                <button onClick={() => {
+                                  setEditing({ id: activeListing.id, field: "subStatus" });
+                                  setEditValue(activeListing.subStatus ?? "");
+                                  setEditNote(""); setNoteErr(false);
+                                }}
+                                  style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none",
+                                    cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+                                  onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
+                                  onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
+                              </div>
                             )}
 
-                            {/* Edit status button */}
-                            <button onClick={() => {
-                              setEditing({ id: activeListing.id, field: "status" });
-                              setEditValue(activeListing.status);
-                              setEditNote(""); setNoteErr(false);
-                              setAutoSubStatus(activeListing.ota === "Agoda"
-                                ? getAgodaSubStatus(activeListing.status, activeListing.prePost) : null);
-                            }}
-                              style={{ fontSize: 11, color: "#94A3B8", background: "none", border: "none",
-                                cursor: "pointer", padding: "3px 8px", borderRadius: 6,
-                                transition: "background 0.15s" }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "#F1F5F9")}
-                              onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                              ✎ Edit
-                            </button>
+                            {/* Edit status button (only visible when not editing subStatus) */}
+                            {!isEditing("subStatus") && (
+                              <button onClick={() => {
+                                setEditing({ id: activeListing.id, field: "status" });
+                                setEditValue(activeListing.status);
+                                setEditNote(""); setNoteErr(false);
+                                setAutoSubStatus(activeListing.ota === "Agoda"
+                                  ? getAgodaSubStatus(activeListing.status, activeListing.prePost) : null);
+                              }}
+                                style={{ fontSize: 11, color: "#94A3B8", background: "none", border: "none",
+                                  cursor: "pointer", padding: "3px 8px", borderRadius: 6,
+                                  transition: "background 0.15s" }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "#F1F5F9")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                                ✎ Edit Status
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -891,66 +929,142 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
               )}
             </div>
 
-            {/* OTA Details card (OTA ID + Live Date) */}
+            {/* OTA Details card */}
             {activeListing && (() => {
               const color = OTA_COLORS[activeListing.ota] ?? "#64748B";
-              const isEditingOtaId = editing?.id === activeListing.id && editing.field === "otaId";
-              const isEditingLink  = editing?.id === activeListing.id && editing.field === "listingLink";
+              const isEditingNote = editing?.id === activeListing.id && editing.field === "note";
+
+              // helper: small inline editable field (text/url)
+              const listingId = activeListing.id;
+              function InlineField({ label, fieldKey, value, mono, isUrl }: {
+                label: string; fieldKey: string; value: string | null; mono?: boolean; isUrl?: boolean;
+              }) {
+                const isEditingThis = editing?.id === listingId && editing.field === fieldKey;
+                const fieldMap: Record<string, string> = { otaId: "otaId", listingLink: "listingLink", batchNumber: "batchNumber" };
+                const apiField = fieldMap[fieldKey] ?? fieldKey;
+                return (
+                  <div style={{ borderBottom: "1px solid #F8FAFC", paddingBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingThis ? 6 : 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span>
+                      {!isEditingThis && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: 160 }}>
+                          {isUrl && value
+                            ? <a href={value} target="_blank" rel="noreferrer" title={value}
+                                style={{ fontSize: 11, color: "#2563EB", textDecoration: "none",
+                                  maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                  padding: "2px 8px", background: "#EFF6FF", borderRadius: 5, border: "1px solid #BFDBFE", display: "inline-block" }}>
+                                ↗ {(() => { try { return new URL(value).hostname; } catch { return "Open"; } })()}
+                              </a>
+                            : <span style={{ fontSize: 11, color: value ? "#1E293B" : "#CBD5E1", fontFamily: mono ? "monospace" : "inherit",
+                                maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {value || "—"}
+                              </span>}
+                          <button onClick={() => { setEditing({ id: listingId, field: fieldKey }); setEditValue(value ?? ""); }}
+                            style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4, flexShrink: 0 }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
+                            onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditingThis && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                          placeholder={isUrl ? "https://…" : `Enter ${label}…`}
+                          style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
+                            border: "1px solid #CBD5E1", outline: "none", fontFamily: mono ? "monospace" : "inherit" }} />
+                        <div style={{ display: "flex", gap: 5 }}>
+                          <button onClick={async () => {
+                            setSaving(true);
+                            await fetch("/api/crm/update-status", { method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ otaListingId: listingId, propertyId, field: apiField, value: editValue, note: `${label} updated` }) });
+                            setSaving(false); setEditing(null);
+                            setListings(prev => prev.map(l => l.id === listingId ? { ...l, [fieldKey]: editValue } : l));
+                          }} disabled={saving}
+                            style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
+                              background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            {saving ? "…" : "Save"}
+                          </button>
+                          <button onClick={() => setEditing(null)}
+                            style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
+                              background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-                  <div style={{ padding: "10px 16px", borderBottom: "1px solid #F1F5F9" }}>
+                  <div style={{ padding: "10px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#0F172A" }}>OTA Details</span>
+                    <span style={{ fontSize: 10, color: color, fontWeight: 600 }}>{activeListing.ota}</span>
                   </div>
                   <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+
                     {/* OTA Live Date */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F8FAFC", paddingBottom: 8 }}>
                       <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA Live Date</span>
-                      <span style={{ fontSize: 11, color: "#1E293B", fontWeight: 500 }}>{fmtDate(activeListing.liveDate)}</span>
+                      <span style={{ fontSize: 11, color: "#1E293B", fontWeight: 500 }}>{fmtDate(activeListing.liveDate) || "—"}</span>
                     </div>
-                    {/* TAT */}
+
+                    {/* TAT = today − FH Live Date */}
                     {(() => {
-                      const tat = Number(activeListing.tat);
-                      const tatErr = Number(activeListing.tatError);
+                      const fhLive = property.fhLiveDate ? new Date(property.fhLiveDate) : null;
+                      const tat = fhLive && !isNaN(fhLive.getTime())
+                        ? Math.floor((Date.now() - fhLive.getTime()) / 86400000)
+                        : null;
                       return (
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #F8FAFC", paddingBottom: 8 }}>
                           <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>TAT</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: tatErr ? "#DC2626" : (tat > 0 ? "#059669" : "#94A3B8") }}>
-                            {tat > 0 ? `${tat}d` : "—"}
-                            {tatErr > 0 && <span style={{ fontSize: 9, color: "#DC2626", marginLeft: 4 }}>overdue</span>}
+                          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: tat === null ? "#94A3B8" : tat > 90 ? "#DC2626" : tat > 30 ? "#D97706" : "#059669" }}>
+                              {tat !== null ? `${tat}d` : "—"}
+                            </span>
+                            {tat !== null && (
+                              <span style={{ fontSize: 9, color: "#94A3B8" }}>since FH live</span>
+                            )}
                           </span>
                         </div>
                       );
                     })()}
-                    {/* Listing Link editable */}
+
+                    {/* Batch Number */}
+                    <InlineField label="Batch No." fieldKey="batchNumber" value={activeListing.batchNumber ?? null} />
+
+                    {/* OTA ID */}
+                    <InlineField label="OTA ID" fieldKey="otaId" value={activeListing.otaId ?? null} mono />
+
+                    {/* Listing Link */}
+                    <InlineField label="Listing Link" fieldKey="listingLink" value={activeListing.listingLink ?? null} isUrl />
+
+                    {/* CRM Note (OTA-level) */}
                     <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingLink ? 6 : 0 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Listing Link</span>
-                        {!isEditingLink && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            {activeListing.listingLink
-                              ? <a href={activeListing.listingLink} target="_blank" rel="noreferrer"
-                                  style={{ fontSize: 11, color: "#2563EB", textDecoration: "none", padding: "2px 8px", background: "#EFF6FF", borderRadius: 5, border: "1px solid #BFDBFE" }}>Open ↗</a>
-                              : <span style={{ fontSize: 11, color: "#CBD5E1" }}>—</span>}
-                            <button onClick={() => { setEditing({ id: activeListing.id, field: "listingLink" }); setEditValue(activeListing.listingLink ?? ""); }}
-                              style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
-                              onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
-                              onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
-                          </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA Note</span>
+                        {!isEditingNote && (
+                          <button onClick={() => { setEditing({ id: listingId, field: "note" }); setEditValue(activeListing.crmNote ?? ""); }}
+                            style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
+                            onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎ Edit</button>
                         )}
                       </div>
-                      {isEditingLink && (
+                      {isEditingNote ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            placeholder="https://…"
-                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12, border: "1px solid #CBD5E1", outline: "none" }} />
+                          <textarea value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="Add OTA-specific note…"
+                            rows={3}
+                            style={{ padding: "7px 10px", borderRadius: 7, fontSize: 12, border: "1px solid #CBD5E1",
+                              outline: "none", resize: "none", fontFamily: "inherit", lineHeight: 1.5 }} />
                           <div style={{ display: "flex", gap: 5 }}>
                             <button onClick={async () => {
                               setSaving(true);
                               await fetch("/api/crm/update-status", { method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "listingLink", value: editValue, note: "Listing link updated" }) });
+                                body: JSON.stringify({ otaListingId: listingId, propertyId, field: "note", value: editValue }) });
                               setSaving(false); setEditing(null);
-                              setListings(prev => prev.map(l => l.id === activeListing.id ? { ...l, listingLink: editValue } : l));
+                              setListings(prev => prev.map(l => l.id === listingId ? { ...l, crmNote: editValue } : l));
                             }} disabled={saving}
                               style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
                                 background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -961,50 +1075,17 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                                 background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                    {/* OTA ID editable */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isEditingOtaId ? 6 : 0 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>OTA ID</span>
-                        {!isEditingOtaId && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: "#1E293B", fontFamily: "monospace", fontWeight: 500 }}>
-                              {activeListing.otaId || <span style={{ color: "#CBD5E1" }}>—</span>}
-                            </span>
-                            <button onClick={() => { setEditing({ id: activeListing.id, field: "otaId" }); setEditValue(activeListing.otaId ?? ""); }}
-                              style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
-                              onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
-                              onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
-                          </div>
-                        )}
-                      </div>
-                      {isEditingOtaId && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            placeholder="Enter OTA ID…"
-                            style={{ padding: "6px 10px", borderRadius: 7, fontSize: 12,
-                              border: "1px solid #CBD5E1", outline: "none", fontFamily: "monospace" }} />
-                          <div style={{ display: "flex", gap: 5 }}>
-                            <button onClick={async () => {
-                              setSaving(true);
-                              await fetch("/api/crm/update-status", { method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ otaListingId: activeListing.id, propertyId, field: "otaId", value: editValue, note: "OTA ID updated" }) });
-                              setSaving(false); setEditing(null);
-                              setListings(prev => prev.map(l => l.id === activeListing.id ? { ...l, otaId: editValue } : l));
-                            }} disabled={saving}
-                              style={{ flex: 1, padding: "5px 10px", borderRadius: 7, border: "none",
-                                background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                              {saving ? "…" : "Save"}
-                            </button>
-                            <button onClick={() => setEditing(null)}
-                              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #E2E8F0",
-                                background: "#FFF", fontSize: 11, cursor: "pointer", color: "#64748B" }}>✕</button>
-                          </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: activeListing.crmNote ? "#374151" : "#CBD5E1",
+                          background: activeListing.crmNote ? "#F8FAFC" : "transparent",
+                          borderRadius: 7, padding: activeListing.crmNote ? "7px 10px" : 0,
+                          border: activeListing.crmNote ? "1px solid #F1F5F9" : "none",
+                          lineHeight: 1.6, whiteSpace: "pre-wrap", minHeight: activeListing.crmNote ? "auto" : undefined }}>
+                          {activeListing.crmNote || "No note added"}
                         </div>
                       )}
                     </div>
+
                   </div>
                 </div>
               );

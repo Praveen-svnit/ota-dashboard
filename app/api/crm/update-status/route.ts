@@ -2,14 +2,15 @@ import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 const FIELD_TO_COL: Record<string, string> = {
-  status:      "status",
-  subStatus:   "sub_status",
-  note:        "crm_note",
-  assignedTo:  "assigned_to",
-  liveDate:    "live_date",
-  otaId:       "ota_id",
-  prePost:     "pre_post",
-  listingLink: "listing_link",
+  status:       "status",
+  subStatus:    "sub_status",
+  note:         "crm_note",
+  assignedTo:   "assigned_to",
+  liveDate:     "live_date",
+  otaId:        "ota_id",
+  prePost:      "pre_post",
+  listingLink:  "listing_link",
+  batchNumber:  "batch_number",
 };
 
 export async function POST(req: Request) {
@@ -31,12 +32,12 @@ export async function POST(req: Request) {
 
   // Fetch all relevant columns so we can extract oldValue in JS
   const listingRows = await sql`
-    SELECT crm_note, status, sub_status, assigned_to, live_date, ota_id, pre_post, listing_link, ota
+    SELECT crm_note, status, sub_status, assigned_to, live_date, ota_id, pre_post, listing_link, batch_number, ota
     FROM ota_listing
     WHERE id = ${otaListingId} AND property_id = ${propertyId}
   ` as Array<{
     crm_note: string; status: string; sub_status: string; assigned_to: string;
-    live_date: string; ota_id: string; pre_post: string; listing_link: string; ota: string;
+    live_date: string; ota_id: string; pre_post: string; listing_link: string; batch_number: string; ota: string;
   }>;
 
   const listing = listingRows[0];
@@ -44,14 +45,15 @@ export async function POST(req: Request) {
 
   // Map field name to the postgres column value for oldValue extraction
   const colToValue: Record<string, string> = {
-    status:      listing.status,
-    sub_status:  listing.sub_status,
-    crm_note:    listing.crm_note,
-    assigned_to: listing.assigned_to,
-    live_date:   listing.live_date,
-    ota_id:      listing.ota_id,
-    pre_post:    listing.pre_post,
+    status:       listing.status,
+    sub_status:   listing.sub_status,
+    crm_note:     listing.crm_note,
+    assigned_to:  listing.assigned_to,
+    live_date:    listing.live_date,
+    ota_id:       listing.ota_id,
+    pre_post:     listing.pre_post,
     listing_link: listing.listing_link,
+    batch_number: listing.batch_number,
   };
   const col = FIELD_TO_COL[field];
   const oldValue = colToValue[col] ?? null;
@@ -78,6 +80,8 @@ export async function POST(req: Request) {
     await sql`UPDATE ota_listing SET pre_post = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   } else if (field === "listingLink") {
     await sql`UPDATE ota_listing SET listing_link = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
+  } else if (field === "batchNumber") {
+    await sql`UPDATE ota_listing SET batch_number = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   }
 
   // Write log

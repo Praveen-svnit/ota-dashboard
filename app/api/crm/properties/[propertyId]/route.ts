@@ -41,6 +41,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ propert
         ol.crm_updated_at  AS "crmUpdatedAt",
         ol.pre_post        AS "prePost",
         ol.listing_link    AS "listingLink",
+        ol.batch_number    AS "batchNumber",
         u.name             AS "assignedName"
       FROM ota_listing ol
       LEFT JOIN users u ON u.id = ol.assigned_to
@@ -95,7 +96,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ propert
             ol.ota_id AS "otaId", ol.assigned_to AS "assignedTo",
             ol.crm_note AS "crmNote", ol.crm_updated_at AS "crmUpdatedAt",
             ol.pre_post AS "prePost", ol.listing_link AS "listingLink",
-            u.name AS "assignedName"
+            ol.batch_number AS "batchNumber", u.name AS "assignedName"
      FROM ota_listing ol
      LEFT JOIN users u ON u.id = ol.assigned_to
      WHERE ol.property_id = $1 AND ol.ota = $2`,
