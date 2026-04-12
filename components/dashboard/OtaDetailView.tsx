@@ -108,7 +108,7 @@ interface TatStat  { avgTat: number; d0_7: number; d8_15: number; d16_30: number
 interface DashStats { live: number; soldOut: number; total: number; onboardedThisMonth: number; mtdListings: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: DashStats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; ssStatusPivot: Record<string, Record<string, Record<string, number>>>; }
 interface NLRow    { propertyId: string; name: string; city: string; fhLiveDate: string|null; ota: string; status: string|null; subStatus: string|null; liveDate: string|null; tat: number; tatError?: number; }
-interface LcRow    { otaListingId: number; propertyId: string; name: string; city: string; fhStatus: string; fhLiveDate: string|null; ota: string; otaId: string|null; status: string; subStatus: string; liveDate: string|null; tat: number|null; prePost: string|null; listingLink: string|null; crmNote: string|null; crmUpdatedAt: string|null; assignedName: string|null; }
+interface LcRow    { otaListingId: number; propertyId: string; name: string; city: string; fhStatus: string; fhLiveDate: string|null; ota: string; otaId: string|null; status: string; subStatus: string; liveDate: string|null; tat: number|null; prePost: string|null; listingLink: string|null; batchNumber: string|null; crmNote: string|null; crmUpdatedAt: string|null; assignedName: string|null; }
 type NLSortKey = "status" | "subStatus" | "liveDate" | "tat";
 interface NLData   { rows: NLRow[]; total: number; page: number; pages: number; }
 interface OvrRow   { fhId: string; fhLiveDate: string|null; ota: string; tat: number; }
@@ -1615,9 +1615,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 subStatus:   d.subStatus   !== undefined ? d.subStatus   : r.subStatus,
                 otaId:       d.otaId       !== undefined ? d.otaId       : r.otaId,
                 liveDate:    d.liveDate    !== undefined ? d.liveDate    : r.liveDate,
-                prePost:     d.prePost     !== undefined ? d.prePost     : r.prePost,
-                listingLink: d.listingLink !== undefined ? d.listingLink : r.listingLink,
-                crmNote:     d.note        !== undefined ? d.note        : r.crmNote,
+                prePost:      d.prePost      !== undefined ? d.prePost      : r.prePost,
+                listingLink:  d.listingLink  !== undefined ? d.listingLink  : r.listingLink,
+                batchNumber:  d.batchNumber  !== undefined ? d.batchNumber  : r.batchNumber,
+                crmNote:      d.note         !== undefined ? d.note         : r.crmNote,
                 crmUpdatedAt: new Date().toISOString(),
               };
             }));
@@ -1649,7 +1650,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 160px 180px 90px 36px";
+          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 90px 160px 180px 90px 36px";
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1726,6 +1727,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   { key: "subStatus",   label: "Sub-status",   type: "select", options: SUB_STATUS_OPTIONS_LC },
                   { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
                   { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
+                  { key: "batchNumber", label: "Batch",        type: "text",   options: [] },
                   { key: "liveDate",    label: "OTA Live Date",type: "date",   options: [] },
                   { key: "listingLink", label: "Listing Link", type: "text",   options: [] },
                   { key: "note",        label: "Note",         type: "text",   options: [] },
@@ -1776,7 +1778,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                     </div>
                     <div style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, display: "flex", alignItems: "center", borderLeft: "1px solid #E2E8F0" }}>FH ID</div>
-                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Pre/Post","Listing Link","Note",""].map(h => (
+                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",""].map(h => (
                       <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
                     ))}
                   </div>
@@ -1786,11 +1788,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
                   {/* Data rows */}
                   {!lcLoading && lcFiltered.map((row, i) => {
-                    const isSel   = lcSelected.has(row.otaListingId);
+                    const isSel    = lcSelected.has(row.otaListingId);
                     const anyDirty = !!(lcDirty[row.otaListingId] && Object.keys(lcDirty[row.otaListingId]).length);
                     const isSaveOk  = lcSaveOk.has(row.otaListingId);
                     const isSaveErr = lcSaveErr.has(row.otaListingId);
-                    const rowBg = isSaveOk ? "#F0FDF4" : isSaveErr ? "#FEF2F2" : isSel ? "#EDE9FE" : anyDirty ? "#FEFCE8" : i % 2 === 0 ? "#fff" : "#FAFAFA";
+                    const rowBg = isSaveOk ? "#F0FDF4" : isSaveErr ? "#FEF2F2" : isSel ? "#EDE9FE" : anyDirty ? "#FEFCE8" : i % 2 === 0 ? "#FFFFFF" : "#FAFBFC";
 
                     const statusVal    = lcVal(row, "status");
                     const subStatusVal = lcVal(row, "subStatus");
@@ -1798,37 +1800,38 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     const liveDateVal  = lcVal(row, "liveDate") || "";
                     const prePostVal   = lcVal(row, "prePost");
                     const linkVal      = lcVal(row, "listingLink");
+                    const batchVal     = lcVal(row, "batchNumber");
                     const noteVal      = lcDirty[row.otaListingId]?.note ?? row.crmNote ?? "";
 
-                    const sc = SS_COLOR[statusVal] ?? SS_COLOR[statusVal?.toLowerCase()] ?? { bg: "#F1F5F9", text: "#64748B" };
+                    const sc = getSSColor(subStatusVal);
 
                     return (
-                      <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F1F5F9", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
+                      <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F0F4F8", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
                         {/* Checkbox */}
-                        <div style={{ padding: "5px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ padding: "8px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <input type="checkbox" checked={isSel} onChange={() => setLcSelected(prev => { const n = new Set(prev); n.has(row.otaListingId) ? n.delete(row.otaListingId) : n.add(row.otaListingId); return n; })}
                             style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                         </div>
                         {/* FH ID */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", display: "flex", alignItems: "center" }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: "#F97316", background: "#FFF4EC", padding: "2px 7px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>{row.propertyId}</span>
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#F97316", background: "#FFF4EC", padding: "2px 8px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>{row.propertyId}</span>
                         </div>
                         {/* Property */}
-                        <div style={{ ...cellSt(row.otaListingId, "_"), background: "transparent", borderLeft: "1px solid #E8EDF2", padding: "5px 6px", minWidth: 0 }}>
+                        <div style={{ borderLeft: "1px solid #F0F4F8", padding: "8px 10px", minWidth: 0 }}>
                           <a href={`/crm/${row.propertyId}`}
-                            style={{ fontSize: 11, fontWeight: 600, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            style={{ fontSize: 12, fontWeight: 600, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             title={row.name}>{row.name || "—"}</a>
                         </div>
                         {/* City */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          <span style={{ fontSize: 11, color: "#64748B", background: "#F8FAFC", padding: "1px 7px", borderRadius: 4 }}>{row.city || "—"}</span>
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
+                          <span style={{ fontSize: 11, color: "#64748B", background: "#F8FAFC", padding: "1px 8px", borderRadius: 4 }}>{row.city || "—"}</span>
                         </div>
                         {/* FH Status */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2" }}>
-                          <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10, background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9", color: row.fhStatus === "Live" ? "#15803D" : "#64748B" }}>{row.fhStatus || "—"}</span>
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", textAlign: "center" }}>
+                          <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: row.fhStatus === "Live" ? "#DCFCE7" : "#F1F5F9", color: row.fhStatus === "Live" ? "#15803D" : "#64748B" }}>{row.fhStatus || "—"}</span>
                         </div>
                         {/* FH Date */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", fontSize: 10, color: "#64748B" }}>{fmtDate(row.fhLiveDate)}</div>
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", fontSize: 10, color: "#94A3B8", fontFamily: "monospace", textAlign: "center" }}>{fmtDate(row.fhLiveDate)}</div>
                         {/* OTA ID — editable */}
                         <div style={cellSt(row.otaListingId, "otaId")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "otaId" })}>
                           {lcEditCell?.id === row.otaListingId && lcEditCell.field === "otaId" ? (
@@ -1851,7 +1854,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal || "—"}</span>
+                              {statusVal
+                                ? <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal}</span>
+                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
                               <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
                             </div>
                           )}
@@ -1866,7 +1871,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                               {subStatusVal
-                                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: (sc as { bg?: string }).bg, color: sc.text, border: `1px solid ${sc.text}20` }}>
+                                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>
                                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
                                     {subStatusVal}
                                   </span>
@@ -1883,13 +1888,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                               style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              <span style={{ fontSize: 10, color: liveDateVal ? "#374151" : "#CBD5E1" }}>{liveDateVal ? fmtDate(liveDateVal) : "Set date…"}</span>
+                              <span style={{ fontSize: 10, color: liveDateVal ? "#64748B" : "#CBD5E1", fontFamily: "monospace" }}>{liveDateVal ? fmtDate(liveDateVal) : "Set date…"}</span>
                               <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>✎</span>
                             </div>
                           )}
                         </div>
                         {/* TAT */}
-                        <div style={{ padding: "5px 6px", borderLeft: "1px solid #E8EDF2", textAlign: "center" }}>
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", textAlign: "center" }}>
                           {row.tat != null && row.tat > 0
                             ? (() => {
                                 const t = row.tat;
@@ -1897,6 +1902,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 return <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, fontWeight: 700, fontSize: 10, color: tatColor, background: tatColor + "18", border: `1px solid ${tatColor}30` }}>{t}d</span>;
                               })()
                             : <span style={{ color: "#CBD5E1" }}>—</span>}
+                        </div>
+                        {/* Batch — editable */}
+                        <div style={cellSt(row.otaListingId, "batchNumber")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "batchNumber" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "batchNumber" ? (
+                            <input autoFocus value={batchVal} onChange={e => lcSetField(row.otaListingId, "batchNumber", e.target.value)}
+                              onBlur={() => setLcEditCell(null)} onKeyDown={e => { if (e.key === "Enter" || e.key === "Escape") setLcEditCell(null); }}
+                              style={{ width: "100%", padding: "2px 5px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                              {batchVal
+                                ? <span style={{ fontSize: 10, fontWeight: 700, color: "#6D28D9", background: "#EDE9FE", padding: "2px 7px", borderRadius: 10 }}>{batchVal}</span>
+                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
+                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>✎</span>
+                            </div>
+                          )}
                         </div>
                         {/* Pre/Post — editable */}
                         <div style={cellSt(row.otaListingId, "prePost")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "prePost" })}>
@@ -1942,11 +1962,14 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Open / save feedback */}
-                        <div style={{ padding: "5px 4px", borderLeft: "1px solid #E8EDF2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {/* CRM / save feedback */}
+                        <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
                             : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
-                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" title="Open detail" style={{ fontSize: 11, color: "#CBD5E1", textDecoration: "none" }}>↗</a>}
+                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color: "#fff", borderRadius: 20, textDecoration: "none", boxShadow: "0 2px 6px #5D87FF30", whiteSpace: "nowrap" }}>
+                                CRM ↗
+                              </a>}
                         </div>
                       </div>
                     );

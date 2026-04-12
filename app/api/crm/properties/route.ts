@@ -110,7 +110,8 @@ export async function GET(req: Request) {
     SELECT
       inv.property_id, inv.property_name, inv.city, inv.fh_status, inv.fh_live_date,
       ol.id AS ota_listing_id, ol.ota, ol.ota_id, ol.status, ol.sub_status, ol.live_date,
-      ol.tat, ol.tat_error, ol.pre_post, ol.listing_link, ol.assigned_to, ol.crm_note, ol.crm_updated_at
+      COALESCE(NULLIF(ol.tat, 0), CASE WHEN inv.fh_live_date IS NOT NULL THEN CURRENT_DATE - inv.fh_live_date::date ELSE NULL END) AS tat,
+      ol.tat_error, ol.pre_post, ol.listing_link, ol.batch_number, ol.assigned_to, ol.crm_note, ol.crm_updated_at
     FROM inventory inv
     JOIN ota_listing ol ON ol.property_id = inv.property_id
     WHERE 1=1
@@ -134,6 +135,7 @@ export async function GET(req: Request) {
         c.tat,
         c.pre_post                                             AS "prePost",
         c.listing_link                                         AS "listingLink",
+        c.batch_number                                         AS "batchNumber",
         c.assigned_to                                          AS "assignedTo",
         c.crm_note                                             AS "crmNote",
         c.crm_updated_at                                       AS "crmUpdatedAt",
