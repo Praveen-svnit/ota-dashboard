@@ -579,7 +579,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null);
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null);
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1590,8 +1590,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           async function lcSaveAll() {
             if (!lcDirtyCount || lcSaving) return;
             setLcSaving(true);
+            const dirtySnapshot = { ...lcDirty };
             const tasks: Promise<{ id: number; ok: boolean }>[] = [];
-            for (const [idStr, fields] of Object.entries(lcDirty)) {
+            for (const [idStr, fields] of Object.entries(dirtySnapshot)) {
               const id = Number(idStr);
               const row = lcRows.find(r => r.otaListingId === id);
               if (!row) continue;
@@ -1609,7 +1610,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             const errIds = new Set(results.filter(r => !r.ok).map(r => r.id));
             setLcRows(prev => prev.map(r => {
               if (!okIds.has(r.otaListingId)) return r;
-              const d = lcDirty[r.otaListingId] ?? {};
+              const d = dirtySnapshot[r.otaListingId] ?? {};
               return { ...r,
                 status:      d.status      !== undefined ? d.status      : r.status,
                 subStatus:   d.subStatus   !== undefined ? d.subStatus   : r.subStatus,
@@ -1623,6 +1624,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               };
             }));
             setLcDirty(prev => { const n = { ...prev }; for (const id of okIds) delete n[id]; return n; });
+            setLcEditCell(null);
             setLcSaveOk(okIds); setLcSaveErr(errIds); setLcSaving(false);
             setTimeout(() => { setLcSaveOk(new Set()); setLcSaveErr(new Set()); }, 2500);
           }
@@ -1636,7 +1638,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               }
               return next;
             });
-            setLcBulkField(""); setLcBulkValue(""); setLcSelected(new Set());
+            setLcBulkField(""); setLcBulkValue(""); setLcSelected(new Set()); setLcEditCell(null);
           }
 
           function lcSelectByFhIds() {
@@ -1709,7 +1711,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 <div style={{ flex: 1 }} />
                 {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
                 {lcDirtyCount > 0 && (
-                  <button onClick={() => setLcDirty({})} disabled={lcSaving}
+                  <button onClick={() => { if (window.confirm(`Discard ${lcDirtyCount} unsaved change${lcDirtyCount > 1 ? "s" : ""}?`)) { setLcDirty({}); setLcEditCell(null); } }} disabled={lcSaving}
                     style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#DC2626" }}>
                     Clear
                   </button>
