@@ -1652,7 +1652,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 100px 130px 160px 100px 80px 90px 160px 180px 90px 36px";
+          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px minmax(130px,1fr) minmax(150px,1fr) 44px";
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
