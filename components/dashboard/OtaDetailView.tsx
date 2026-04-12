@@ -1652,7 +1652,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px minmax(130px,1fr) minmax(150px,1fr) 44px";
+          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px 44px";
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1770,7 +1770,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 1300 }}>
+                <div style={{ minWidth: 1650 }}>
                   {/* Header row */}
                   <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
                     <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
