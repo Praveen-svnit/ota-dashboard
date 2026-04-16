@@ -1330,7 +1330,13 @@ function NotLiveList({ data, otas, columns, loading, search, selOtas, selSss, ca
                       ? <span style={{ fontWeight: 700, color: isTatError ? T.notLive : row.tat > 365 ? "#C2410C" : row.tat > 90 ? "#B45309" : T.textSec }}>{row.tat}d</span>
                       : <span style={{ color: T.textMut }}>—</span>}
                   </td>
-                  <td style={{ ...NL_TD }} />
+                  <td style={{ ...NL_TD, textAlign: "center" }}>
+                    <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer" style={{
+                      display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700,
+                      background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40",
+                      borderRadius: 6, textDecoration: "none", whiteSpace: "nowrap",
+                    }}>Open ↗</a>
+                  </td>
                 </tr>
               );
             })}
