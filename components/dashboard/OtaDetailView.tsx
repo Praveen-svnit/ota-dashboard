@@ -397,6 +397,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkIds,       setLcBulkIds]       = useState("");
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
   const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});  // propertyId+cbKey → saving
+  const [cbError,         setCbError]         = useState<Record<string, boolean>>({});  // propertyId+cbKey → save failed
+  const [lcCbBulkState,   setLcCbBulkState]   = useState<"idle"|"saving"|"ok"|"err">("idle");
   const [lcCbFilterKey,   setLcCbFilterKey]   = useState("");   // which CB item to filter by
   const [lcCbFilterVal,   setLcCbFilterVal]   = useState("");   // "Yes" | "No" | ""
 
@@ -582,7 +584,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null);
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal("");
     load();
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1585,8 +1587,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 ? (r.status ?? "").toLowerCase() === v.toLowerCase()
                 : (r.subStatus ?? "").toLowerCase() === v.toLowerCase()
             );
-            const matchCb = !lcCbFilterKey || !lcCbFilterVal
-              || ((r.metrics ?? {})[lcCbFilterKey] || "No") === lcCbFilterVal;
+            const matchCb = !lcCbFilterKey || !lcCbFilterVal || (() => {
+              const raw = (r.metrics ?? {})[lcCbFilterKey] ?? "";
+              if (lcCbFilterVal === "Not Set") return !raw;
+              return (raw || "No") === lcCbFilterVal;
+            })();
             return matchSearch && matchStatus && matchOvv && matchCb;
           });
 
@@ -1640,15 +1645,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             if (!lcAnySel || !lcBulkField || !lcBulkValue) return;
             // CB field — save directly to ota_metrics for each selected row
             if (lcBulkField.startsWith("cb_")) {
-              const selectedRows = lcFiltered.filter(r => lcSelected.has(r.otaListingId));
-              await Promise.all(selectedRows.map(r =>
+              const selectedRows = lcRows.filter(r => lcSelected.has(r.otaListingId));
+              setLcCbBulkState("saving");
+              const results = await Promise.all(selectedRows.map(r =>
                 fetch("/api/crm/metrics", {
                   method: "POST", headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ propertyId: r.propertyId, ota: "Agoda", metricKey: lcBulkField, metricValue: lcBulkValue }),
-                })
+                }).then(res => res.ok).catch(() => false)
               ));
+              const anyFailed = results.some(ok => !ok);
+              setLcCbBulkState(anyFailed ? "err" : "ok");
+              setTimeout(() => setLcCbBulkState("idle"), 3000);
+              // Only update rows where save succeeded
+              const savedIds = new Set(selectedRows.filter((_, i) => results[i]).map(r => r.otaListingId));
               setLcRows(prev => prev.map(r =>
-                lcSelected.has(r.otaListingId)
+                savedIds.has(r.otaListingId)
                   ? { ...r, metrics: { ...(r.metrics ?? {}), [lcBulkField]: lcBulkValue } }
                   : r
               ));
@@ -1694,16 +1705,24 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           const allSubStatuses = [...new Set(lcRows.map(r => r.subStatus).filter(Boolean))].sort();
 
           const saveCbField = async (propertyId: string, cbKey: string, value: string) => {
-            setCbSaving(p => ({ ...p, [propertyId + cbKey]: true }));
-            await fetch("/api/crm/metrics", {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
-            });
-            setLcRows(prev => prev.map(r => r.propertyId === propertyId
-              ? { ...r, metrics: { ...(r.metrics ?? {}), [cbKey]: value } }
-              : r
-            ));
-            setCbSaving(p => ({ ...p, [propertyId + cbKey]: false }));
+            const k = propertyId + cbKey;
+            setCbSaving(p => ({ ...p, [k]: true }));
+            setCbError(p => ({ ...p, [k]: false }));
+            try {
+              const res = await fetch("/api/crm/metrics", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
+              });
+              if (!res.ok) throw new Error("save failed");
+              setLcRows(prev => prev.map(r => r.propertyId === propertyId
+                ? { ...r, metrics: { ...(r.metrics ?? {}), [cbKey]: value } }
+                : r
+              ));
+            } catch {
+              setCbError(p => ({ ...p, [k]: true }));
+              setTimeout(() => setCbError(p => ({ ...p, [k]: false })), 3000);
+            }
+            setCbSaving(p => ({ ...p, [k]: false }));
           };
 
           return (
@@ -1746,6 +1765,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       <option value="">Content Boxes ▾</option>
                       {CB_ITEMS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
+                    {lcCbFilterKey && !lcCbFilterVal && (
+                      <span style={{ fontSize: 10, color: "#94A3B8", fontStyle: "italic" }}>pick Yes or No →</span>
+                    )}
                     {lcCbFilterKey && (
                       <select value={lcCbFilterVal} onChange={e => setLcCbFilterVal(e.target.value)}
                         style={{ padding: "5px 8px", border: `1px solid ${lcCbFilterVal ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 8, fontSize: 11, fontWeight: lcCbFilterVal ? 700 : 400,
@@ -1755,6 +1777,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <option value="">Yes / No ▾</option>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
+                        <option value="Not Set">Not Set</option>
                       </select>
                     )}
                     {(lcCbFilterKey || lcCbFilterVal) && (
@@ -1832,8 +1855,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       <input value={lcBulkValue} onChange={e => setLcBulkValue(e.target.value)} placeholder={`Set ${fieldDef.label}…`}
                         style={{ padding: "4px 10px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: "#fff", fontSize: 11, outline: "none", width: 200 }} />
                     )}
-                    <button onClick={lcApplyBulk} disabled={!canApply}
-                      style={{ padding: "5px 14px", borderRadius: 5, border: "none", background: "#6366F1", color: "#fff", fontSize: 11, fontWeight: 700, cursor: canApply ? "pointer" : "not-allowed", opacity: canApply ? 1 : 0.5 }}>Apply →</button>
+                    <button onClick={lcApplyBulk} disabled={!canApply || lcCbBulkState === "saving"}
+                      style={{ padding: "5px 14px", borderRadius: 5, border: "none", background: "#6366F1", color: "#fff", fontSize: 11, fontWeight: 700, cursor: canApply ? "pointer" : "not-allowed", opacity: canApply && lcCbBulkState !== "saving" ? 1 : 0.5 }}>
+                      {lcCbBulkState === "saving" ? "Saving…" : "Apply →"}
+                    </button>
+                    {lcCbBulkState === "ok"  && <span style={{ fontSize: 11, color: "#6EE7B7", fontWeight: 700 }}>✓ Saved</span>}
+                    {lcCbBulkState === "err" && <span style={{ fontSize: 11, color: "#FCA5A5", fontWeight: 700 }}>✗ Some saves failed</span>}
                     <button onClick={() => setLcSelected(new Set())}
                       style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "transparent", color: "#818CF8", fontSize: 11, cursor: "pointer" }}>Cancel</button>
                   </div>
@@ -2036,19 +2063,22 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         </div>
                         {/* Content Boxes — 7 individual columns, Agoda only */}
                         {otaName === "Agoda" && CB_ITEMS.map(item => {
+                          const k = row.propertyId + item.key;
                           const current = (row.metrics ?? {})[item.key] || "No";
-                          const isSavingThis = !!cbSaving[row.propertyId + item.key];
+                          const isSavingThis = !!cbSaving[k];
+                          const isErrThis    = !!cbError[k];
                           return (
                             <div key={item.key} style={{ borderLeft: "1px solid #F0F4F8", padding: "4px 5px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                               <select
                                 value={current}
                                 disabled={isSavingThis}
                                 onChange={e => saveCbField(row.propertyId, item.key, e.target.value)}
-                                style={{ width: "100%", padding: "2px 3px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", outline: "none",
-                                  border: `1px solid ${current === "Yes" ? "#6EE7B7" : "#FCA5A5"}`,
-                                  background: current === "Yes" ? "#D1FAE5" : "#FEE2E2",
-                                  color: current === "Yes" ? "#059669" : "#DC2626",
-                                  opacity: isSavingThis ? 0.6 : 1 }}>
+                                title={isErrThis ? "Save failed — try again" : undefined}
+                                style={{ width: "100%", padding: "2px 3px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: isSavingThis ? "wait" : "pointer", outline: "none",
+                                  border: `1px solid ${isErrThis ? "#F87171" : current === "Yes" ? "#6EE7B7" : "#FCA5A5"}`,
+                                  background: isErrThis ? "#FEF2F2" : current === "Yes" ? "#D1FAE5" : "#FEE2E2",
+                                  color: isErrThis ? "#DC2626" : current === "Yes" ? "#059669" : "#DC2626",
+                                  opacity: isSavingThis ? 0.5 : 1 }}>
                                 <option value="Yes">Yes</option>
                                 <option value="No">No</option>
                               </select>
