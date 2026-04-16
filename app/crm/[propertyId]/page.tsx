@@ -1100,50 +1100,47 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>After-Live Metrics</span>
                     <span style={{ fontSize: 10, color: "#94A3B8" }}>{activeListing.ota}</span>
-                    {Object.keys(metricEdit).length > 0 && (() => {
-                      const allDefs = defs;
-                      async function saveAll() {
-                        setSavingMetric("__all__");
-                        for (const def of allDefs) {
-                          if (def.type === "multi-toggle" && def.items) {
-                            for (const item of def.items) {
-                              const draft = metricEdit[item.key];
-                              if (draft !== undefined && draft !== (metrics[item.key] ?? "")) {
-                                await saveMetric(item.key, draft, def.key);
+                    {Object.keys(metricEdit).length > 0 && (
+                      <button
+                        onClick={async () => {
+                          setSavingMetric("__all__");
+                          for (const def of defs) {
+                            if (def.type === "multi-toggle" && def.items) {
+                              for (const item of def.items) {
+                                const draft = metricEdit[item.key];
+                                if (draft !== undefined && draft !== (metrics[item.key] ?? "")) {
+                                  await saveMetric(item.key, draft, def.key);
+                                }
                               }
-                            }
-                          } else {
-                            const dateFields = def.dates ?? [];
-                            const draftValue = metricEdit[def.key];
-                            if (draftValue !== undefined && draftValue !== (metrics[def.key] ?? "")) {
-                              await Promise.all(dateFields.map((df) => {
-                                const dv = metricEdit[df.key];
-                                if (dv !== undefined) return saveMetric(df.key, dv, def.key);
-                                return Promise.resolve();
-                              }));
-                              await saveMetric(def.key, draftValue, def.key);
                             } else {
-                              for (const df of dateFields) {
-                                const dv = metricEdit[df.key];
-                                if (dv !== undefined && dv !== (metrics[df.key] ?? "")) {
-                                  await saveMetric(df.key, dv, def.key);
+                              const dateFields = def.dates ?? [];
+                              const draftValue = metricEdit[def.key];
+                              if (draftValue !== undefined && draftValue !== (metrics[def.key] ?? "")) {
+                                await Promise.all(dateFields.map((df) => {
+                                  const dv = metricEdit[df.key];
+                                  return dv !== undefined ? saveMetric(df.key, dv, def.key) : Promise.resolve();
+                                }));
+                                await saveMetric(def.key, draftValue, def.key);
+                              } else {
+                                for (const df of dateFields) {
+                                  const dv = metricEdit[df.key];
+                                  if (dv !== undefined && dv !== (metrics[df.key] ?? "")) {
+                                    await saveMetric(df.key, dv, def.key);
+                                  }
                                 }
                               }
                             }
                           }
-                        }
-                        setSavingMetric(null);
-                        setMetricEdit({});
-                        fetch(`/api/crm/properties/${propertyId}`)
-                          .then((r) => r.json()).then((d) => setLogs(d.logs ?? []));
-                      }
-                      return (
-                        <button onClick={saveAll} disabled={savingMetric === "__all__"}
-                          style={{ marginLeft: "auto", padding: "5px 14px", borderRadius: 7, border: "none", background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: savingMetric === "__all__" ? 0.7 : 1 }}>
-                          {savingMetric === "__all__" ? "Saving…" : "Save All Changes"}
-                        </button>
-                      );
-                    })()}
+                          setSavingMetric(null);
+                          setMetricEdit({});
+                          fetch(`/api/crm/properties/${propertyId}`)
+                            .then((r) => r.json()).then((d) => setLogs(d.logs ?? []));
+                        }}
+                        disabled={savingMetric === "__all__"}
+                        style={{ marginLeft: "auto", padding: "5px 14px", borderRadius: 7, border: "none", background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: savingMetric === "__all__" ? 0.7 : 1 }}>
+                        {savingMetric === "__all__" ? "Saving…" : "Save All Changes"}
+                      </button>
+                    )}
                   </div>
                   <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
                     {defs.map((def) => {

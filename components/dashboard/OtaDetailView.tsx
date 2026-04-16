@@ -1673,6 +1673,19 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
           const allSubStatuses = [...new Set(lcRows.map(r => r.subStatus).filter(Boolean))].sort();
 
+          const saveCbField = async (propertyId: string, cbKey: string, value: string) => {
+            setCbSaving(p => ({ ...p, [propertyId + cbKey]: true }));
+            await fetch("/api/crm/metrics", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
+            });
+            setLcRows(prev => prev.map(r => r.propertyId === propertyId
+              ? { ...r, metrics: { ...(r.metrics ?? {}), [cbKey]: value } }
+              : r
+            ));
+            setCbSaving(p => ({ ...p, [propertyId + cbKey]: false }));
+          };
+
           return (
             <div style={{ background: "#FAFAFA" }}>
 
@@ -1818,19 +1831,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     const noteVal      = lcDirty[row.otaListingId]?.note ?? row.crmNote ?? "";
 
                     const sc = getSSColor(subStatusVal);
-
-                    async function saveCbField(propertyId: string, cbKey: string, value: string) {
-                      setCbSaving(p => ({ ...p, [propertyId + cbKey]: true }));
-                      await fetch("/api/crm/metrics", {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
-                      });
-                      setLcRows(prev => prev.map(r => r.propertyId === propertyId
-                        ? { ...r, metrics: { ...(r.metrics ?? {}), [cbKey]: value } }
-                        : r
-                      ));
-                      setCbSaving(p => ({ ...p, [propertyId + cbKey]: false }));
-                    }
 
                     return (
                       <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F0F4F8", alignItems: "stretch", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
