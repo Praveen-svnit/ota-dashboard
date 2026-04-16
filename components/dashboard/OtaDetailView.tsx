@@ -1989,7 +1989,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         </div>
                         {/* Content Boxes — 7 individual columns, Agoda only */}
                         {otaName === "Agoda" && CB_ITEMS.map(item => {
-                          const current = (row.metrics ?? {})[item.key] ?? "";
+                          const current = (row.metrics ?? {})[item.key] || "No";
                           const isSavingThis = !!cbSaving[row.propertyId + item.key];
                           return (
                             <div key={item.key} style={{ borderLeft: "1px solid #F0F4F8", padding: "4px 5px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1998,11 +1998,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 disabled={isSavingThis}
                                 onChange={e => saveCbField(row.propertyId, item.key, e.target.value)}
                                 style={{ width: "100%", padding: "2px 3px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", outline: "none",
-                                  border: `1px solid ${current === "Yes" ? "#6EE7B7" : current === "No" ? "#FCA5A5" : "#E2E8F0"}`,
-                                  background: current === "Yes" ? "#D1FAE5" : current === "No" ? "#FEE2E2" : "#F8FAFC",
-                                  color: current === "Yes" ? "#059669" : current === "No" ? "#DC2626" : "#94A3B8",
+                                  border: `1px solid ${current === "Yes" ? "#6EE7B7" : "#FCA5A5"}`,
+                                  background: current === "Yes" ? "#D1FAE5" : "#FEE2E2",
+                                  color: current === "Yes" ? "#059669" : "#DC2626",
                                   opacity: isSavingThis ? 0.6 : 1 }}>
-                                <option value="">—</option>
                                 <option value="Yes">Yes</option>
                                 <option value="No">No</option>
                               </select>
