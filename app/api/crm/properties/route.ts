@@ -45,12 +45,12 @@ export async function GET(req: Request) {
 
   // ── Role-based access control ──────────────────────────────
   if (session.role === "intern") {
+    // If the intern is assigned to a specific OTA, restrict to that OTA.
+    // Otherwise, no RBAC restriction — the user-driven otaFilter param
+    // already scopes the data (listing creation always passes ?ota=X).
     if (session.ota) {
       params.push(session.ota);
       conditions.push(`c.ota = $${p()}`);
-    } else {
-      params.push(session.id);
-      conditions.push(`c.assigned_to = $${p()}`);
     }
   } else if (session.role === "tl") {
     const internRows = await sql`
