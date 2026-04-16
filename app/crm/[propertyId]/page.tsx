@@ -160,7 +160,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [logs,     setLogs]     = useState<Log[]>([]);
 
   const [loading,  setLoading]  = useState(true);
-  const [otaConfigs, setOtaConfigs] = useState<Record<string, { subStatuses: string[]; statusMap: Record<string, string[]> }>>({});
+  const [otaConfigs, setOtaConfigs] = useState<Record<string, { subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }>>({});
 
   // Metrics
   const [metrics,    setMetrics]    = useState<Record<string, string>>({});
@@ -211,10 +211,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       .then((r) => r.json()).then((d) => setTaskUsers(d.users ?? []));
     fetch("/api/admin/status-config")
       .then((r) => r.json())
-      .then((d: { configs?: { ota: string; subStatuses: string[]; statusMap: Record<string, string[]> }[] }) => {
+      .then((d: { configs?: { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }[] }) => {
         if (!d.configs) return;
-        const map: Record<string, { subStatuses: string[]; statusMap: Record<string, string[]> }> = {};
-        for (const c of d.configs) map[c.ota] = { subStatuses: c.subStatuses, statusMap: c.statusMap };
+        const map: Record<string, { subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }> = {};
+        for (const c of d.configs) map[c.ota] = { subStatuses: c.subStatuses, statusMap: c.statusMap, subStatusMap: c.subStatusMap ?? {} };
         setOtaConfigs(map);
       })
       .catch(() => {/* non-admin users may get 403 — silently ignore */});
@@ -340,19 +340,19 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       userRole: "",
     };
 
-    // For Agoda status changes: also save the auto-mapped subStatus, merged into same log display
-    if (field === "status" && autoSubStatus) {
+    // When sub-status is saved: auto-derive and save the parent status from config
+    const ota = listings.find(l => l.id === listingId)?.ota ?? "";
+    const autoStatus = field === "subStatus"
+      ? (otaConfigs[ota]?.subStatusMap?.[value] ?? null)
+      : null;
+
+    if (field === "subStatus" && autoStatus) {
       await fetch("/api/crm/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otaListingId: listingId, propertyId, field: "subStatus", value: autoSubStatus, note: `Auto-mapped from status: ${value}` }),
+        body: JSON.stringify({ otaListingId: listingId, propertyId, field: "status", value: autoStatus, note: `Auto-derived from sub-status: ${value}` }),
       });
-      // Add subStatus change to same log entry
-      (newLog as Log & { subStatusChange?: { old: string; new: string } }).subStatusChange = {
-        old: oldListing?.subStatus ?? "",
-        new: autoSubStatus,
-      };
-      setListings(prev => prev.map(l => l.id === listingId ? { ...l, status: value, subStatus: autoSubStatus, crmUpdatedAt: now } : l));
+      setListings(prev => prev.map(l => l.id === listingId ? { ...l, subStatus: value, status: autoStatus, crmUpdatedAt: now } : l));
     } else {
       setListings(prev => prev.map(l => l.id === listingId
         ? { ...l, [field]: value, crmUpdatedAt: now } : l));
@@ -576,51 +576,11 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           </span>
                         </div>
 
-                        {/* Status display / edit */}
-                        {isEditing("status") ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 380 }}>
-                            <select value={editValue} onChange={(e) => {
-                              setEditValue(e.target.value);
-                              if (activeListing.ota === "Agoda") setAutoSubStatus(getAgodaSubStatus(e.target.value, activeListing.prePost));
-                            }}
-                              style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${color}60`, fontSize: 13, fontWeight: 600, background: "#FFF" }}>
-                              {getStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                            {activeListing.ota === "Agoda" && autoSubStatus && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 6,
-                                background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 7, padding: "5px 10px" }}>
-                                <span style={{ fontSize: 10, color: "#16A34A", fontWeight: 600 }}>SubStatus →</span>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: "#059669" }}>{autoSubStatus}</span>
-                              </div>
-                            )}
-                            <input value={editNote} onChange={(e) => { setEditNote(e.target.value); setNoteErr(false); }}
-                              placeholder="Reason for change (required)…"
-                              style={{ padding: "7px 10px", borderRadius: 8, fontSize: 12,
-                                border: `1px solid ${noteErr ? "#FCA5A5" : "#E2E8F0"}`,
-                                outline: "none", background: noteErr ? "#FEF2F2" : "#F8FAFC" }} />
-                            {noteErr && <span style={{ fontSize: 10, color: "#DC2626" }}>Note is required before saving</span>}
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <label style={{ fontSize: 10, fontWeight: 600, color: "#94A3B8", whiteSpace: "nowrap" }}>Action Date</label>
-                              <input type="date" value={actionDate} onChange={(e) => setActionDate(e.target.value)}
-                                style={{ flex: 1, padding: "6px 8px", borderRadius: 8, fontSize: 12,
-                                  border: "1px solid #E2E8F0", outline: "none", background: "#F8FAFC" }} />
-                            </div>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={() => saveField(activeListing.id, "status", editValue)} disabled={saving}
-                                style={{ padding: "7px 16px", borderRadius: 8, border: "none",
-                                  background: color, color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                                {saving ? "Saving…" : "Save"}
-                              </button>
-                              <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); setActionDate(""); setAutoSubStatus(null); }}
-                                style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0",
-                                  background: "#FFF", fontSize: 12, cursor: "pointer", color: "#64748B" }}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
+                        {/* Status — read-only, auto-derived from sub-status config */}
+                        {(() => {
+                          return (
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            {/* Status badge — colored, editable */}
+                            {/* Status badge — read-only */}
                             <span style={{
                               display: "inline-flex", alignItems: "center", gap: 5,
                               background: sc.bg, color: sc.color,
@@ -680,25 +640,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                               </div>
                             )}
 
-                            {/* Edit status button (only visible when not editing subStatus) */}
-                            {!isEditing("subStatus") && (
-                              <button onClick={() => {
-                                setEditing({ id: activeListing.id, field: "status" });
-                                setEditValue(activeListing.status);
-                                setEditNote(""); setNoteErr(false);
-                                setAutoSubStatus(activeListing.ota === "Agoda"
-                                  ? getAgodaSubStatus(activeListing.status, activeListing.prePost) : null);
-                              }}
-                                style={{ fontSize: 11, color: "#94A3B8", background: "none", border: "none",
-                                  cursor: "pointer", padding: "3px 8px", borderRadius: 6,
-                                  transition: "background 0.15s" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "#F1F5F9")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                                ✎ Edit Status
-                              </button>
-                            )}
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
 
                     </div>

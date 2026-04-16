@@ -6,7 +6,8 @@ import { OTAS } from "@/lib/constants";
 export type OtaStatusConfig = {
   ota: string;
   subStatuses: string[];
-  statusMap: Record<string, string[]>;  // { [subStatus]: string[] }  derived from master
+  statusMap: Record<string, string[]>;    // { [subStatus]: string[] }  derived from master
+  subStatusMap: Record<string, string>;   // { [subStatus]: parentStatus }  stored per-OTA
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
@@ -105,11 +106,11 @@ export async function GET() {
   const hasMaster = Object.keys(masterMap).length > 0;
 
   const rows = await sql.query(
-    `SELECT ota, statuses, sub_statuses AS "statusMap",
+    `SELECT ota, statuses, sub_statuses AS "subStatusMapRaw",
             updated_at AS "updatedAt", updated_by AS "updatedBy"
      FROM ota_status_config`,
     []
-  ) as { ota: string; statuses: string[]; statusMap: unknown; updatedAt: string; updatedBy: string }[];
+  ) as { ota: string; statuses: string[]; subStatusMapRaw: unknown; updatedAt: string; updatedBy: string }[];
 
   const dbMap: Record<string, typeof rows[0]> = {};
   for (const r of rows) dbMap[r.ota] = r;
@@ -117,8 +118,18 @@ export async function GET() {
   const configs: OtaStatusConfig[] = OTAS.map(ota => {
     const row = dbMap[ota];
     if (row) {
-      const enabledSubStatuses: string[] = Array.isArray(row.statuses) ? row.statuses : [];
-      // Derive statusMap from master if available; fall back to stored map
+      // subStatusMap: { [subStatus]: parentStatus } — stored in sub_statuses column
+      const subStatusMap: Record<string, string> =
+        (row.subStatusMapRaw && typeof row.subStatusMapRaw === "object" && !Array.isArray(row.subStatusMapRaw))
+          ? row.subStatusMapRaw as Record<string, string>
+          : {};
+
+      // enabledSubStatuses = keys of subStatusMap (if populated) OR legacy statuses array
+      const enabledSubStatuses: string[] = Object.keys(subStatusMap).length > 0
+        ? Object.keys(subStatusMap)
+        : (Array.isArray(row.statuses) ? row.statuses : []);
+
+      // Derive statusMap from master if available; fall back to empty
       let statusMap: Record<string, string[]>;
       if (hasMaster) {
         statusMap = {};
@@ -126,15 +137,20 @@ export async function GET() {
           if (masterMap[ss]) statusMap[ss] = masterMap[ss];
         }
       } else {
-        statusMap = (row.statusMap && typeof row.statusMap === "object" && !Array.isArray(row.statusMap))
-          ? row.statusMap as Record<string, string[]>
-          : {};
+        statusMap = {};
       }
-      return { ota, subStatuses: enabledSubStatuses, statusMap, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
+      return { ota, subStatuses: enabledSubStatuses, statusMap, subStatusMap, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
+    }
+    // Default config — build subStatusMap from DEFAULTS
+    const def = DEFAULTS[ota] ?? { subStatuses: DEFAULT_SUB_STATUSES, statusMap: DEFAULT_STATUS_MAP };
+    const defSubStatusMap: Record<string, string> = {};
+    for (const ss of def.subStatuses) {
+      // Use the first status from the statusMap as the parent, or the ss name itself
+      const parents = def.statusMap[ss];
+      defSubStatusMap[ss] = parents?.[0] ?? ss;
     }
     return {
-      ota,
-      ...(DEFAULTS[ota] ?? { subStatuses: DEFAULT_SUB_STATUSES, statusMap: DEFAULT_STATUS_MAP }),
+      ota, ...def, subStatusMap: defSubStatusMap,
       updatedAt: null, updatedBy: null, isDefault: true,
     };
   });
@@ -147,26 +163,33 @@ export async function POST(req: NextRequest) {
   if (!session || (session.role !== "admin" && session.role !== "head"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  // Now only accepts subStatuses — the list of enabled sub_status names from master
-  const { ota, subStatuses } = await req.json() as {
-    ota: string; subStatuses: string[];
+  // Accepts subStatuses (legacy) OR subStatusMap (new — sub-status → parent status)
+  const { ota, subStatuses, subStatusMap } = await req.json() as {
+    ota: string; subStatuses?: string[]; subStatusMap?: Record<string, string>;
   };
 
-  if (!ota || !Array.isArray(subStatuses))
+  if (!ota)
     return Response.json({ error: "Invalid payload" }, { status: 400 });
+
+  // Derive subStatuses from subStatusMap keys if provided
+  const resolvedSubStatuses: string[] = subStatusMap
+    ? Object.keys(subStatusMap)
+    : (subStatuses ?? []);
+
+  const resolvedSubStatusMap = subStatusMap ?? {};
 
   const sql = getSql();
   await ensureTable(sql);
 
   await sql.query(`
     INSERT INTO ota_status_config (ota, statuses, sub_statuses, updated_at, updated_by)
-    VALUES ($1, $2::jsonb, '{}'::jsonb, NOW(), $3)
+    VALUES ($1, $2::jsonb, $3::jsonb, NOW(), $4)
     ON CONFLICT (ota) DO UPDATE SET
       statuses     = $2::jsonb,
-      sub_statuses = '{}'::jsonb,
+      sub_statuses = $3::jsonb,
       updated_at   = NOW(),
-      updated_by   = $3
-  `, [ota, JSON.stringify(subStatuses), session.name]);
+      updated_by   = $4
+  `, [ota, JSON.stringify(resolvedSubStatuses), JSON.stringify(resolvedSubStatusMap), session.name]);
 
   return Response.json({ ok: true });
 }

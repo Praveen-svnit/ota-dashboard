@@ -377,13 +377,14 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("live");
 
   // Status Config tab state
-  type OtaStatusConfig = { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; updatedAt: string | null; updatedBy: string | null; isDefault: boolean };
-  const [scConfig,    setScConfig]    = useState<OtaStatusConfig | null>(null);
-  const [scAllSs,     setScAllSs]     = useState<string[]>([]);
-  const [scLoading,   setScLoading]   = useState(false);
-  const [scSaving,    setScSaving]    = useState(false);
-  const [scSaveOk,    setScSaveOk]    = useState(false);
-  const [scSaveErr,   setScSaveErr]   = useState(false);
+  type OtaStatusConfig = { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string>; updatedAt: string | null; updatedBy: string | null; isDefault: boolean };
+  const [scConfig,      setScConfig]      = useState<OtaStatusConfig | null>(null);
+  const [scSubStatusMap,setScSubStatusMap] = useState<Record<string, string>>({});  // editing state: { subStatus → parentStatus }
+  const [scAllSs,       setScAllSs]       = useState<string[]>([]);
+  const [scLoading,     setScLoading]     = useState(false);
+  const [scSaving,      setScSaving]      = useState(false);
+  const [scSaveOk,      setScSaveOk]      = useState(false);
+  const [scSaveErr,     setScSaveErr]     = useState(false);
 
   // Listing Creation sheet state
   const [lcRows,       setLcRows]       = useState<LcRow[]>([]);
@@ -594,7 +595,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
     setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal("");
+    setScConfig(null); setScSubStatusMap({});
     load();
+    // Load OTA status config (used by listing creation + config tab)
+    setScLoading(true);
+    fetch("/api/admin/status-config").then(r => r.json()).then((d: { configs: OtaStatusConfig[] }) => {
+      const cfg = d.configs?.find(c => c.ota === otaName) ?? null;
+      setScConfig(cfg);
+      setScSubStatusMap(cfg?.subStatusMap ?? {});
+      const allSs = Array.from(new Set(d.configs?.flatMap(c => c.subStatuses) ?? [])).sort();
+      setScAllSs(allSs);
+      setScLoading(false);
+    }).catch(() => setScLoading(false));
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function goToCategory(cat: string) {
@@ -783,17 +795,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               <button key={tab.key} onClick={() => {
                   setPropTab(tab.key);
                   if (tab.key === "listing" && !lcLoaded) loadLc();
-                  if (tab.key === "config" && !scConfig && !scLoading) {
-                    setScLoading(true);
-                    fetch("/api/admin/status-config").then(r => r.json()).then((d: { configs: OtaStatusConfig[] }) => {
-                      const cfg = d.configs?.find(c => c.ota === otaName) ?? null;
-                      setScConfig(cfg);
-                      // Collect all known sub-statuses (union of all OTAs) for the master list
-                      const allSs = Array.from(new Set(d.configs?.flatMap(c => c.subStatuses) ?? [])).sort();
-                      setScAllSs(allSs);
-                      setScLoading(false);
-                    }).catch(() => setScLoading(false));
-                  }
+                  if (tab.key === "config" && scConfig) setScSubStatusMap(scConfig.subStatusMap ?? {});
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
                   borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
@@ -1689,6 +1691,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 const next = { ...prev };
                 for (const id of lcSelected) {
                   next[id] = { ...(next[id] ?? {}), [lcBulkField]: lcBulkValue };
+                  // If bulk-setting sub-status, also auto-derive status
+                  if (lcBulkField === "subStatus") {
+                    const autoStatus = scSubStatusMap[lcBulkValue];
+                    if (autoStatus) next[id] = { ...next[id], status: autoStatus };
+                  }
                 }
                 return next;
               });
@@ -1840,8 +1847,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               {/* Bulk bar */}
               {lcAnySel && (() => {
                 const BULK_FIELDS = [
-                  { key: "status",      label: "Status",       type: "select", options: STATUS_OPTIONS_LC },
-                  { key: "subStatus",   label: "Sub-status",   type: "select", options: SUB_STATUS_OPTIONS_LC },
+                  { key: "subStatus",   label: "Sub-status",   type: "select", options: scConfig?.subStatuses.length ? scConfig.subStatuses : SUB_STATUS_OPTIONS_LC },
                   { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
                   { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
                   { key: "batchNumber", label: "Batch",        type: "text",   options: [] },
@@ -1965,28 +1971,27 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Status — editable */}
-                        <div style={cellSt(row.otaListingId, "status")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "status" })}>
-                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "status" ? (
-                            <select autoFocus value={statusVal} onChange={e => { lcSetField(row.otaListingId, "status", e.target.value); setLcEditCell(null); }} onBlur={() => setLcEditCell(null)}
-                              style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
-                              {STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              {statusVal
-                                ? <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal}</span>
-                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
-                              <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
-                            </div>
-                          )}
+                        {/* Status — read-only, auto-derived from sub-status config */}
+                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center" }}>
+                          {statusVal
+                            ? <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal}</span>
+                            : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
                         </div>
-                        {/* Sub-status — editable */}
+                        {/* Sub-status — editable dropdown (options from OTA status config) */}
                         <div style={cellSt(row.otaListingId, "subStatus")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "subStatus" })}>
                           {lcEditCell?.id === row.otaListingId && lcEditCell.field === "subStatus" ? (
-                            <select autoFocus value={subStatusVal} onChange={e => { lcSetField(row.otaListingId, "subStatus", e.target.value); setLcEditCell(null); }} onBlur={() => setLcEditCell(null)}
+                            <select autoFocus value={subStatusVal}
+                              onChange={e => {
+                                const newSS = e.target.value;
+                                lcSetField(row.otaListingId, "subStatus", newSS);
+                                const autoStatus = scSubStatusMap[newSS];
+                                if (autoStatus) lcSetField(row.otaListingId, "status", autoStatus);
+                                setLcEditCell(null);
+                              }}
+                              onBlur={() => setLcEditCell(null)}
                               style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
-                              {SUB_STATUS_OPTIONS_LC.map(s => <option key={s} value={s}>{s}</option>)}
+                              <option value="">— Select —</option>
+                              {(scConfig?.subStatuses.length ? scConfig.subStatuses : SUB_STATUS_OPTIONS_LC).map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
@@ -2136,24 +2141,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
         {/* ── Status Config tab ──────────────────────────────────────── */}
         {propTab === "config" && (() => {
-          const toggleSs = (ss: string) => {
-            if (!scConfig) return;
-            const cur = scConfig.subStatuses;
-            const next = cur.includes(ss) ? cur.filter(x => x !== ss) : [...cur, ss];
-            setScConfig({ ...scConfig, subStatuses: next });
-          };
+          const PARENT_STATUSES = [
+            "New", "Shell Created", "Live", "Not Live", "Ready to Go Live",
+            "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
+          ];
 
           const saveConfig = async () => {
-            if (!scConfig) return;
             setScSaving(true); setScSaveOk(false); setScSaveErr(false);
             try {
               const res = await fetch("/api/admin/status-config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ota: otaName, subStatuses: scConfig.subStatuses }),
+                body: JSON.stringify({ ota: otaName, subStatusMap: scSubStatusMap }),
               });
               if (!res.ok) throw new Error("failed");
-              setScConfig(prev => prev ? { ...prev, isDefault: false } : prev);
+              setScConfig(prev => prev ? { ...prev, subStatuses: Object.keys(scSubStatusMap), subStatusMap: { ...scSubStatusMap }, isDefault: false } : prev);
               setScSaveOk(true);
               setTimeout(() => setScSaveOk(false), 3000);
             } catch {
@@ -2163,8 +2165,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setScSaving(false);
           };
 
-          // Build all possible sub-statuses: union of master list + current config
-          const allOptions = Array.from(new Set([...scAllSs, ...(scConfig?.subStatuses ?? [])])).sort();
+          // Sub-statuses not yet assigned to any parent
+          const unassigned = scAllSs.filter(ss => !scSubStatusMap[ss]);
 
           return (
             <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
@@ -2184,44 +2186,70 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {scSaveOk  && <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>✓ Saved</span>}
                   {scSaveErr && <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 700 }}>✗ Save failed</span>}
-                  <button onClick={saveConfig} disabled={scSaving || !scConfig}
+                  <button onClick={saveConfig} disabled={scSaving}
                     style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0EA5E9", color: "#fff", fontSize: 11, fontWeight: 700, cursor: scSaving ? "not-allowed" : "pointer", opacity: scSaving ? 0.6 : 1 }}>
                     {scSaving ? "Saving…" : "Save Changes"}
                   </button>
                 </div>
               </div>
 
-              {scLoading && (
-                <div style={{ padding: 40, textAlign: "center", color: T.textMut, fontSize: 12 }}>Loading…</div>
-              )}
+              {scLoading && <div style={{ padding: 40, textAlign: "center", color: T.textMut, fontSize: 12 }}>Loading…</div>}
 
-              {!scLoading && scConfig && (
+              {!scLoading && (
                 <div style={{ padding: 16 }}>
                   <p style={{ fontSize: 11, color: T.textSec, marginBottom: 14, marginTop: 0 }}>
-                    Toggle which sub-statuses are active for <strong>{otaName}</strong>. Disabled sub-statuses won&apos;t appear in dropdowns for this OTA.
+                    Add sub-statuses under each Status for <strong>{otaName}</strong>. In Listing Creation, picking a sub-status will auto-fill the parent Status.
                   </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {allOptions.map(ss => {
-                      const enabled = scConfig.subStatuses.includes(ss);
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {PARENT_STATUSES.map(parent => {
+                      const assignedHere = Object.entries(scSubStatusMap)
+                        .filter(([, p]) => p === parent)
+                        .map(([ss]) => ss);
+                      const available = unassigned; // pool of not-yet-assigned sub-statuses
+
                       return (
-                        <button key={ss} onClick={() => toggleSs(ss)}
-                          style={{
-                            padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                            border: `1px solid ${enabled ? "#0EA5E9" : "#CBD5E1"}`,
-                            background: enabled ? "#E0F2FE" : "#F8FAFC",
-                            color: enabled ? "#0369A1" : "#64748B",
-                            transition: "all 0.12s",
-                          }}>
-                          {enabled ? "✓ " : ""}{ss}
-                        </button>
+                        <div key={parent} style={{ border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+                          {/* Parent status header */}
+                          <div style={{ background: "#F8FAFC", padding: "7px 12px", borderBottom: assignedHere.length > 0 || available.length > 0 ? "1px solid #F0F4F8" : "none", display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>{parent}</span>
+                            <span style={{ fontSize: 9, color: T.textMut, background: "#E2E8F0", padding: "1px 6px", borderRadius: 10, fontWeight: 600 }}>{assignedHere.length} sub-status{assignedHere.length !== 1 ? "es" : ""}</span>
+                          </div>
+                          {/* Sub-statuses under this parent */}
+                          <div style={{ padding: "8px 12px", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                            {assignedHere.map(ss => (
+                              <span key={ss} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "#E0F2FE", color: "#0369A1", border: "1px solid #BAE6FD" }}>
+                                {ss}
+                                <button onClick={() => setScSubStatusMap(prev => { const n = { ...prev }; delete n[ss]; return n; })}
+                                  style={{ background: "none", border: "none", cursor: "pointer", color: "#0369A1", padding: 0, lineHeight: 1, fontSize: 12, opacity: 0.7 }}>×</button>
+                              </span>
+                            ))}
+                            {/* Add sub-status dropdown */}
+                            <select
+                              value=""
+                              onChange={e => {
+                                const ss = e.target.value;
+                                if (ss) setScSubStatusMap(prev => ({ ...prev, [ss]: parent }));
+                              }}
+                              style={{ padding: "4px 8px", borderRadius: 20, border: "1px dashed #CBD5E1", background: "#F8FAFC", color: "#94A3B8", fontSize: 11, cursor: "pointer", outline: "none" }}>
+                              <option value="">+ Add sub-status</option>
+                              {available.map(ss => <option key={ss} value={ss}>{ss}</option>)}
+                            </select>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
-                  {allOptions.length === 0 && (
-                    <div style={{ padding: 20, color: T.textMut, fontSize: 12 }}>No sub-statuses found in master config. Add some via the admin Status Config page.</div>
+
+                  {unassigned.length > 0 && (
+                    <div style={{ marginTop: 12, padding: "8px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#B45309" }}>Unassigned sub-statuses: </span>
+                      <span style={{ fontSize: 10, color: "#92400E" }}>{unassigned.join(", ")}</span>
+                    </div>
                   )}
-                  <div style={{ marginTop: 14, fontSize: 10, color: T.textMut }}>
-                    {scConfig.subStatuses.length} of {allOptions.length} sub-statuses enabled
+
+                  <div style={{ marginTop: 12, fontSize: 10, color: T.textMut }}>
+                    {Object.keys(scSubStatusMap).length} sub-statuses configured
                   </div>
                 </div>
               )}
