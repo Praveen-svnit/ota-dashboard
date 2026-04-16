@@ -397,7 +397,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkIds,       setLcBulkIds]       = useState("");
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
   const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});  // propertyId+cbKey → saving
-  const [lcCbFilter,      setLcCbFilter]      = useState<Record<string, string>>({});   // cb_key → "Yes"|"No"|"" (empty = no filter)
+  const [lcCbFilterKey,   setLcCbFilterKey]   = useState("");   // which CB item to filter by
+  const [lcCbFilterVal,   setLcCbFilterVal]   = useState("");   // "Yes" | "No" | ""
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -1584,11 +1585,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 ? (r.status ?? "").toLowerCase() === v.toLowerCase()
                 : (r.subStatus ?? "").toLowerCase() === v.toLowerCase()
             );
-            const matchCb = Object.entries(lcCbFilter).every(([key, val]) => {
-              if (!val) return true;
-              const rowVal = (r.metrics ?? {})[key] || "No";
-              return rowVal === val;
-            });
+            const matchCb = !lcCbFilterKey || !lcCbFilterVal
+              || ((r.metrics ?? {})[lcCbFilterKey] || "No") === lcCbFilterVal;
             return matchSearch && matchStatus && matchOvv && matchCb;
           });
 
@@ -1638,15 +1636,31 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setTimeout(() => { setLcSaveOk(new Set()); setLcSaveErr(new Set()); }, 2500);
           }
 
-          function lcApplyBulk() {
+          async function lcApplyBulk() {
             if (!lcAnySel || !lcBulkField || !lcBulkValue) return;
-            setLcDirty(prev => {
-              const next = { ...prev };
-              for (const id of lcSelected) {
-                next[id] = { ...(next[id] ?? {}), [lcBulkField]: lcBulkValue };
-              }
-              return next;
-            });
+            // CB field — save directly to ota_metrics for each selected row
+            if (lcBulkField.startsWith("cb_")) {
+              const selectedRows = lcFiltered.filter(r => lcSelected.has(r.otaListingId));
+              await Promise.all(selectedRows.map(r =>
+                fetch("/api/crm/metrics", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ propertyId: r.propertyId, ota: "Agoda", metricKey: lcBulkField, metricValue: lcBulkValue }),
+                })
+              ));
+              setLcRows(prev => prev.map(r =>
+                lcSelected.has(r.otaListingId)
+                  ? { ...r, metrics: { ...(r.metrics ?? {}), [lcBulkField]: lcBulkValue } }
+                  : r
+              ));
+            } else {
+              setLcDirty(prev => {
+                const next = { ...prev };
+                for (const id of lcSelected) {
+                  next[id] = { ...(next[id] ?? {}), [lcBulkField]: lcBulkValue };
+                }
+                return next;
+              });
+            }
             setLcBulkField(""); setLcBulkValue(""); setLcSelected(new Set()); setLcEditCell(null);
           }
 
@@ -1723,35 +1737,32 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   selected={lcFhStatus}
                   onChange={next => { setLcFhStatus(next); loadLc(next); }}
                 />
-                {/* Content Box filters — Agoda only */}
-                {otaName === "Agoda" && (() => {
-                  const activeCbFilters = Object.values(lcCbFilter).filter(Boolean).length;
-                  return (
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      {CB_ITEMS.map(item => {
-                        const val = lcCbFilter[item.key] ?? "";
-                        return (
-                          <select key={item.key} value={val}
-                            onChange={e => setLcCbFilter(p => ({ ...p, [item.key]: e.target.value }))}
-                            style={{ padding: "4px 6px", border: `1px solid ${val ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 6, fontSize: 10, fontWeight: val ? 700 : 400,
-                              background: val === "Yes" ? "#D1FAE5" : val === "No" ? "#FEE2E2" : "#F8FAFC",
-                              color: val === "Yes" ? "#059669" : val === "No" ? "#DC2626" : "#64748B",
-                              outline: "none", cursor: "pointer" }}>
-                            <option value="">{item.label}</option>
-                            <option value="Yes">✓ Yes</option>
-                            <option value="No">✗ No</option>
-                          </select>
-                        );
-                      })}
-                      {activeCbFilters > 0 && (
-                        <button onClick={() => setLcCbFilter({})}
-                          style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #7C3AED", background: "#EDE9FE", color: "#6D28D9", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                          Clear CB ×
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Content Box filter — Agoda only, two-level */}
+                {otaName === "Agoda" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <select value={lcCbFilterKey} onChange={e => { setLcCbFilterKey(e.target.value); setLcCbFilterVal(""); }}
+                      style={{ padding: "5px 8px", border: `1px solid ${lcCbFilterKey ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 8, fontSize: 11, fontWeight: lcCbFilterKey ? 700 : 400,
+                        background: lcCbFilterKey ? "#F3EFFF" : "#F8FAFC", color: lcCbFilterKey ? "#6D28D9" : "#64748B", outline: "none", cursor: "pointer" }}>
+                      <option value="">Content Boxes ▾</option>
+                      {CB_ITEMS.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+                    </select>
+                    {lcCbFilterKey && (
+                      <select value={lcCbFilterVal} onChange={e => setLcCbFilterVal(e.target.value)}
+                        style={{ padding: "5px 8px", border: `1px solid ${lcCbFilterVal ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 8, fontSize: 11, fontWeight: lcCbFilterVal ? 700 : 400,
+                          background: lcCbFilterVal === "Yes" ? "#D1FAE5" : lcCbFilterVal === "No" ? "#FEE2E2" : "#F8FAFC",
+                          color: lcCbFilterVal === "Yes" ? "#059669" : lcCbFilterVal === "No" ? "#DC2626" : "#64748B",
+                          outline: "none", cursor: "pointer" }}>
+                        <option value="">Yes / No ▾</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </select>
+                    )}
+                    {(lcCbFilterKey || lcCbFilterVal) && (
+                      <button onClick={() => { setLcCbFilterKey(""); setLcCbFilterVal(""); }}
+                        style={{ padding: "4px 7px", borderRadius: 6, border: "1px solid #E2E8F0", background: "transparent", color: "#94A3B8", fontSize: 11, cursor: "pointer" }}>×</button>
+                    )}
+                  </div>
+                )}
                 {/* FH ID bulk select */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#F0F4FF", border: "1px solid #C7D2FE", borderRadius: 8, padding: "3px 4px 3px 10px" }}>
                   <span style={{ fontSize: 9, fontWeight: 700, color: "#6366F1", whiteSpace: "nowrap" }}>FH IDs</span>
@@ -1793,6 +1804,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   { key: "liveDate",    label: "OTA Live Date",type: "date",   options: [] },
                   { key: "listingLink", label: "Listing Link", type: "text",   options: [] },
                   { key: "note",        label: "Note",         type: "text",   options: [] },
+                  ...(otaName === "Agoda" ? CB_ITEMS.map(c => ({ key: c.key, label: `CB: ${c.label}`, type: "cb", options: ["Yes","No"] })) : []),
                 ];
                 const fieldDef = BULK_FIELDS.find(f => f.key === lcBulkField);
                 const canApply = !!lcBulkField && !!lcBulkValue;
@@ -1805,7 +1817,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       <option value="">Select field…</option>
                       {BULK_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
                     </select>
-                    {fieldDef && fieldDef.type === "select" && (
+                    {fieldDef && (fieldDef.type === "select" || fieldDef.type === "cb") && (
                       <select value={lcBulkValue} onChange={e => setLcBulkValue(e.target.value)}
                         style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "#312E81", color: lcBulkValue ? "#fff" : "#818CF8", fontSize: 11, outline: "none", cursor: "pointer" }}>
                         <option value="">Set value…</option>
