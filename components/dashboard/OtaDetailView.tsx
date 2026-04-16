@@ -1664,7 +1664,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             { key: "cb_child_time_policy",label: "Child/Time" },
             { key: "cb_image",            label: "Image" },
           ];
-          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 62px 62px 62px 62px 70px 68px 56px" : ""} 44px`;
+          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 56px 56px 56px 56px 64px 72px 52px" : ""} 44px`;
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1782,7 +1782,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: otaName === "Agoda" ? 2110 : 1650 }}>
+                <div style={{ minWidth: otaName === "Agoda" ? 2070 : 1650 }}>
                   {/* Header row */}
                   <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
                     <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1992,18 +1992,20 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           const current = (row.metrics ?? {})[item.key] ?? "";
                           const isSavingThis = !!cbSaving[row.propertyId + item.key];
                           return (
-                            <div key={item.key} style={{ borderLeft: "1px solid #F0F4F8", padding: "6px 4px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
-                              {["Yes", "No"].map(opt => (
-                                <button key={opt}
-                                  onClick={() => !isSavingThis && saveCbField(row.propertyId, item.key, opt)}
-                                  disabled={isSavingThis}
-                                  style={{ padding: "2px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: isSavingThis ? "wait" : "pointer", border: "none", width: "100%",
-                                    background: current === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#F1F5F9",
-                                    color: current === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#CBD5E1",
-                                    opacity: isSavingThis ? 0.6 : 1 }}>
-                                  {opt}
-                                </button>
-                              ))}
+                            <div key={item.key} style={{ borderLeft: "1px solid #F0F4F8", padding: "4px 5px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <select
+                                value={current}
+                                disabled={isSavingThis}
+                                onChange={e => saveCbField(row.propertyId, item.key, e.target.value)}
+                                style={{ width: "100%", padding: "2px 3px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", outline: "none",
+                                  border: `1px solid ${current === "Yes" ? "#6EE7B7" : current === "No" ? "#FCA5A5" : "#E2E8F0"}`,
+                                  background: current === "Yes" ? "#D1FAE5" : current === "No" ? "#FEE2E2" : "#F8FAFC",
+                                  color: current === "Yes" ? "#059669" : current === "No" ? "#DC2626" : "#94A3B8",
+                                  opacity: isSavingThis ? 0.6 : 1 }}>
+                                <option value="">—</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                              </select>
                             </div>
                           );
                         })}
