@@ -108,7 +108,7 @@ interface TatStat  { avgTat: number; d0_7: number; d8_15: number; d16_30: number
 interface DashStats { live: number; soldOut: number; total: number; onboardedThisMonth: number; mtdListings: number; }
 interface DashData { pivot: Record<string, Record<string, number>>; columns: string[]; otas: string[]; stats: DashStats; categories: CatRow[]; tatThreshold: number; tatBreakdown: Record<string, Record<string, number>>; tatSubStatusList: string[]; tatStats: Record<string, TatStat>; ssStatusPivot: Record<string, Record<string, Record<string, number>>>; }
 interface NLRow    { propertyId: string; name: string; city: string; fhLiveDate: string|null; ota: string; status: string|null; subStatus: string|null; liveDate: string|null; tat: number; tatError?: number; }
-interface LcRow    { otaListingId: number; propertyId: string; name: string; city: string; fhStatus: string; fhLiveDate: string|null; ota: string; otaId: string|null; status: string; subStatus: string; liveDate: string|null; tat: number|null; prePost: string|null; listingLink: string|null; batchNumber: string|null; crmNote: string|null; crmUpdatedAt: string|null; assignedName: string|null; }
+interface LcRow    { otaListingId: number; propertyId: string; name: string; city: string; fhStatus: string; fhLiveDate: string|null; ota: string; otaId: string|null; status: string; subStatus: string; liveDate: string|null; tat: number|null; prePost: string|null; listingLink: string|null; batchNumber: string|null; crmNote: string|null; crmUpdatedAt: string|null; assignedName: string|null; metrics: Record<string, string> | null; }
 type NLSortKey = "status" | "subStatus" | "liveDate" | "tat";
 interface NLData   { rows: NLRow[]; total: number; page: number; pages: number; }
 interface OvrRow   { fhId: string; fhLiveDate: string|null; ota: string; tat: number; }
@@ -396,6 +396,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkNote,      setLcBulkNote]      = useState("");
   const [lcBulkIds,       setLcBulkIds]       = useState("");
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
+  const [cbDirty,         setCbDirty]         = useState<Record<string, Record<string, string>>>({});  // propertyId → {cb_key: value}
+  const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});                 // propertyId → saving
+  const [cbExpanded,      setCbExpanded]      = useState<Set<string>>(new Set());                      // expanded propertyIds
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -1809,8 +1812,41 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
                     const sc = getSSColor(subStatusVal);
 
+                    const isCbExpanded = cbExpanded.has(row.propertyId);
+                    const cbItems = [
+                      { key: "cb_mapping",           label: "Mapping" },
+                      { key: "cb_room_plan",          label: "Room Plan" },
+                      { key: "cb_rate_plan",          label: "Rate Plan" },
+                      { key: "cb_policy",             label: "Policy" },
+                      { key: "cb_promotion",          label: "Promotion" },
+                      { key: "cb_child_time_policy",  label: "Child/Time Policy" },
+                      { key: "cb_image",              label: "Image" },
+                    ];
+
+                    async function saveCbRow(propertyId: string) {
+                      const dirty = cbDirty[propertyId];
+                      if (!dirty || !Object.keys(dirty).length) return;
+                      setCbSaving(p => ({ ...p, [propertyId]: true }));
+                      await Promise.all(
+                        Object.entries(dirty).map(([key, value]) =>
+                          fetch("/api/crm/metrics", {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: key, metricValue: value }),
+                          })
+                        )
+                      );
+                      // Merge dirty into row.metrics
+                      setLcRows(prev => prev.map(r => r.propertyId === propertyId
+                        ? { ...r, metrics: { ...(r.metrics ?? {}), ...dirty } }
+                        : r
+                      ));
+                      setCbDirty(p => { const n = { ...p }; delete n[propertyId]; return n; });
+                      setCbSaving(p => ({ ...p, [propertyId]: false }));
+                    }
+
                     return (
-                      <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F0F4F8", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
+                      <div key={row.otaListingId}>
+                      <div style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: isCbExpanded ? "none" : "1px solid #F0F4F8", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
                         {/* Checkbox */}
                         <div style={{ padding: "8px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <input type="checkbox" checked={isSel} onChange={() => setLcSelected(prev => { const n = new Set(prev); n.has(row.otaListingId) ? n.delete(row.otaListingId) : n.add(row.otaListingId); return n; })}
@@ -1964,15 +2000,67 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Save feedback */}
-                        <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {/* Save feedback / CRM / CB toggle */}
+                        <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
                           {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
                             : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
                             : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
                                 style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color: "#fff", borderRadius: 20, textDecoration: "none", boxShadow: "0 2px 6px #5D87FF30", whiteSpace: "nowrap" }}>
                                 CRM ↗
                               </a>}
+                          {otaName === "Agoda" && (
+                            <button onClick={() => setCbExpanded(prev => { const n = new Set(prev); n.has(row.propertyId) ? n.delete(row.propertyId) : n.add(row.propertyId); return n; })}
+                              title="Content Boxes"
+                              style={{ padding: "2px 6px", borderRadius: 8, border: `1px solid ${isCbExpanded ? "#7C3AED" : "#E2E8F0"}`, background: isCbExpanded ? "#EDE9FE" : "#F8FAFC", color: isCbExpanded ? "#6D28D9" : "#94A3B8", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                              {isCbExpanded ? "▲ CB" : "▼ CB"}
+                            </button>
+                          )}
                         </div>
+                      </div>
+
+                      {/* Content Boxes panel — Agoda only */}
+                      {otaName === "Agoda" && isCbExpanded && (() => {
+                        const savedMetrics = row.metrics ?? {};
+                        const dirty = cbDirty[row.propertyId] ?? {};
+                        const hasDirty = Object.keys(dirty).length > 0;
+                        const isSavingCb = cbSaving[row.propertyId];
+                        return (
+                          <div style={{ padding: "10px 16px 12px", background: "#FAF5FF", borderBottom: "1px solid #F0F4F8", borderLeft: "3px solid #7C3AED" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#6D28D9", textTransform: "uppercase", letterSpacing: "0.06em" }}>Content Boxes</span>
+                              {hasDirty && (
+                                <button onClick={() => saveCbRow(row.propertyId)} disabled={!!isSavingCb}
+                                  style={{ padding: "3px 12px", borderRadius: 12, border: "none", background: "#7C3AED", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                                  {isSavingCb ? "Saving…" : "Save"}
+                                </button>
+                              )}
+                              {!hasDirty && Object.keys(savedMetrics).some(k => k.startsWith("cb_")) && (
+                                <span style={{ fontSize: 9, color: "#059669", fontWeight: 600 }}>✓ Saved</span>
+                              )}
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {cbItems.map(item => {
+                                const saved = savedMetrics[item.key] ?? "";
+                                const draft = dirty[item.key] ?? saved;
+                                const isDirty = draft !== saved;
+                                return (
+                                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 5, background: isDirty ? "#FEF9C3" : "#fff", borderRadius: 8, padding: "4px 8px", border: `1px solid ${isDirty ? "#FCD34D" : "#E9D5FF"}` }}>
+                                    <span style={{ fontSize: 10, color: "#4B5563", whiteSpace: "nowrap" }}>{item.label}</span>
+                                    {["Yes", "No"].map(opt => (
+                                      <button key={opt} onClick={() => setCbDirty(p => ({ ...p, [row.propertyId]: { ...p[row.propertyId], [item.key]: opt } }))}
+                                        style={{ padding: "2px 7px", borderRadius: 10, fontSize: 9, fontWeight: 700, cursor: "pointer", border: "none",
+                                          background: draft === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#F1F5F9",
+                                          color: draft === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#94A3B8" }}>
+                                        {opt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       </div>
                     );
                   })}

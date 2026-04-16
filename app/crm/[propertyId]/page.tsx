@@ -1100,6 +1100,50 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                   <div style={{ padding: "12px 16px", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>After-Live Metrics</span>
                     <span style={{ fontSize: 10, color: "#94A3B8" }}>{activeListing.ota}</span>
+                    {Object.keys(metricEdit).length > 0 && (() => {
+                      const allDefs = defs;
+                      async function saveAll() {
+                        setSavingMetric("__all__");
+                        for (const def of allDefs) {
+                          if (def.type === "multi-toggle" && def.items) {
+                            for (const item of def.items) {
+                              const draft = metricEdit[item.key];
+                              if (draft !== undefined && draft !== (metrics[item.key] ?? "")) {
+                                await saveMetric(item.key, draft, def.key);
+                              }
+                            }
+                          } else {
+                            const dateFields = def.dates ?? [];
+                            const draftValue = metricEdit[def.key];
+                            if (draftValue !== undefined && draftValue !== (metrics[def.key] ?? "")) {
+                              await Promise.all(dateFields.map((df) => {
+                                const dv = metricEdit[df.key];
+                                if (dv !== undefined) return saveMetric(df.key, dv, def.key);
+                                return Promise.resolve();
+                              }));
+                              await saveMetric(def.key, draftValue, def.key);
+                            } else {
+                              for (const df of dateFields) {
+                                const dv = metricEdit[df.key];
+                                if (dv !== undefined && dv !== (metrics[df.key] ?? "")) {
+                                  await saveMetric(df.key, dv, def.key);
+                                }
+                              }
+                            }
+                          }
+                        }
+                        setSavingMetric(null);
+                        setMetricEdit({});
+                        fetch(`/api/crm/properties/${propertyId}`)
+                          .then((r) => r.json()).then((d) => setLogs(d.logs ?? []));
+                      }
+                      return (
+                        <button onClick={saveAll} disabled={savingMetric === "__all__"}
+                          style={{ marginLeft: "auto", padding: "5px 14px", borderRadius: 7, border: "none", background: color, color: "#FFF", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: savingMetric === "__all__" ? 0.7 : 1 }}>
+                          {savingMetric === "__all__" ? "Saving…" : "Save All Changes"}
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
                     {defs.map((def) => {
@@ -1133,13 +1177,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                                           {opt}
                                         </button>
                                       ))}
-                                      {dirty && (
-                                        <button onClick={async () => { setSavingMetric(item.key); await saveMetric(item.key, draft, def.key); setSavingMetric(null); }}
-                                          disabled={!draft || savingMetric === item.key}
-                                          style={{ padding: "3px 8px", borderRadius: 20, border: "none", background: color, color: "#FFF", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                                          {savingMetric === item.key ? "…" : "Save"}
-                                        </button>
-                                      )}
+                                      {dirty && <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />}
                                     </div>
                                   </div>
                                 );
@@ -1213,15 +1251,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                                   border: `1px solid ${color}30`, fontSize: 11, background: "#FFF", boxSizing: "border-box" }} />
                             </div>
                           ))}
-                          {isDirty ? (
-                            <button onClick={commitMetric} disabled={!canSave || isSaving}
-                              style={{ width: "100%", padding: "5px 0", borderRadius: 7, border: "none",
-                                background: canSave ? color : "#E2E8F0", color: canSave ? "#FFF" : "#94A3B8",
-                                fontSize: 11, fontWeight: 700, cursor: canSave ? "pointer" : "not-allowed",
-                                opacity: isSaving ? 0.7 : 1, marginTop: 4 }}>
-                              {isSaving ? "Saving…" : canSave ? "Save" : "Fill all fields"}
-                            </button>
-                          ) : allSaved && (
+                          {isDirty && (
+                            <div style={{ fontSize: 9, color: color, fontWeight: 600, marginTop: 4 }}>● Unsaved — click Save All Changes above</div>
+                          )}
+                          {!isDirty && allSaved && (
                             <div style={{ fontSize: 9, color: "#059669", fontWeight: 600, marginTop: 4 }}>✓ Saved</div>
                           )}
                         </div>

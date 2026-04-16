@@ -142,7 +142,10 @@ export async function GET(req: Request) {
         c.assigned_to                                          AS "assignedTo",
         c.crm_note                                             AS "crmNote",
         c.crm_updated_at                                       AS "crmUpdatedAt",
-        u.name                                                 AS "assignedName"
+        u.name                                                 AS "assignedName",
+        (SELECT json_object_agg(m.metric_key, m.metric_value)
+         FROM ota_metrics m
+         WHERE m.property_id = c.property_id AND m.ota = c.ota) AS metrics
       FROM (${innerCte}) c
       LEFT JOIN users u ON u.id = c.assigned_to
       ${where}
