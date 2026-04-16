@@ -1271,9 +1271,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 </td>
                               );
                             })}
-                            <td style={{ padding: "6px 12px", textAlign: "center" }}>
-                              <a href={`/crm/${p.propertyId}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "3px 10px", fontSize: 10, fontWeight: 700, background: "#5D87FF18", color: "#5D87FF", border: "1px solid #5D87FF40", borderRadius: 6, textDecoration: "none" }}>Open ↗</a>
-                            </td>
+                            <td style={{ padding: "6px 12px" }} />
                           </tr>
                         ))}
                         {metricsProps.length === 0 && (
@@ -1451,9 +1449,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           ? <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontWeight:700, fontSize:10, color:tatColor, background:tatColor+"18", border:`1px solid ${tatColor}30` }}>{row.tat}d</span>
                           : <span style={{ color:"#CBD5E1" }}>—</span>}
                       </td>
-                      <td style={{ padding: "8px 14px", textAlign: "center" }}>
-                        <a href={`/crm/${row.propertyId}`} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 12px", fontSize:10, fontWeight:700, background:"linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color:"#fff", borderRadius:20, textDecoration:"none", boxShadow:"0 2px 6px #5D87FF30" }}>CRM ↗</a>
-                      </td>
+                      <td style={{ padding: "8px 14px" }} />
                     </tr>
                   );
                 })}
@@ -1535,9 +1531,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           ? <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontWeight:700, fontSize:10, color:tatColor, background:tatColor+"18", border:`1px solid ${tatColor}30` }}>{row.tat}d</span>
                           : <span style={{ color:"#CBD5E1" }}>—</span>}
                       </td>
-                      <td style={{ padding: "8px 14px", textAlign: "center" }}>
-                        <a href={`/crm/${row.propertyId}`} style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"4px 12px", fontSize:10, fontWeight:700, background:"linear-gradient(135deg,#22C55E 0%,#16A34A 100%)", color:"#fff", borderRadius:20, textDecoration:"none", boxShadow:"0 2px 6px #16A34A30" }}>CRM ↗</a>
-                      </td>
+                      <td style={{ padding: "8px 14px" }} />
                     </tr>
                     );
                   })}
@@ -1822,9 +1816,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         </div>
                         {/* Property */}
                         <div style={{ borderLeft: "1px solid #F0F4F8", padding: "8px 10px", minWidth: 0 }}>
-                          <a href={`/crm/${row.propertyId}`}
-                            style={{ fontSize: 12, fontWeight: 600, color: "#0F172A", textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                            title={row.name}>{row.name || "—"}</a>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#0F172A", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.name}>{row.name || "—"}</span>
                         </div>
                         {/* City */}
                         <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>
@@ -1966,14 +1958,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* CRM / save feedback */}
+                        {/* Save feedback */}
                         <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
                             : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
-                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
-                                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color: "#fff", borderRadius: 20, textDecoration: "none", boxShadow: "0 2px 6px #5D87FF30", whiteSpace: "nowrap" }}>
-                                CRM ↗
-                              </a>}
+                            : null}
                         </div>
                       </div>
                     );

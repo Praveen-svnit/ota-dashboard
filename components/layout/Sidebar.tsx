@@ -122,6 +122,7 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* CRM */}
         <SectionHeader label="CRM" />
+        <NavLink icon="📋" label="Property Tracker" href="/listings" />
 
         {/* Listing Dashboard — with OTA sub-links */}
         <Link href="/listing-dashboard"
@@ -166,8 +167,6 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
           </div>
         )}
 
-        <NavLink icon="🏢" label="Property CRM"   href="/crm" />
-        <NavLink icon="📋" label="Property Status" href="/listings" />
         <NavLink icon="✅" label="Tasks"          href="/tasks" />
         <NavLink icon="⚠️" label="Incomplete Data" href="/incomplete" />
 

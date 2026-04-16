@@ -403,7 +403,7 @@ export default function ListingsPage() {
       {/* Top bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: T.textPri }}>Property Status</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: T.textPri }}>Property Tracker</span>
           {!loading && (
             <span style={{ fontSize: 11, color: "#374151", background: T.accentBg, border: "1px solid #BFDBFE", borderRadius: 6, padding: "2px 10px", fontWeight: 600 }}>
               {filtered.length.toLocaleString()}{hasFilter ? ` of ${properties.length.toLocaleString()}` : ""} properties
