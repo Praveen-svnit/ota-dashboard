@@ -2180,6 +2180,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           // Merge DB statuses with any already in the map (so saved ones always show)
           const allStatuses = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort();
 
+          // For adding a new OTA status row
+          const [scNewStatus, setScNewStatus] = React.useState("");
+          const [scAddingStatus, setScAddingStatus] = React.useState(false);
+          const addOtaStatus = (val: string) => {
+            const v = val.trim();
+            if (v && !allStatuses.includes(v)) {
+              setScStatusMap(prev => ({ ...prev, [v]: { preset: "", postset: "" } }));
+            }
+            setScNewStatus(""); setScAddingStatus(false);
+          };
+
           // For inline "add new" sub-status input
           const SSCell = ({ otaStatus, field }: { otaStatus: string; field: "preset" | "postset" }) => {
             const cur = scStatusMap[otaStatus]?.[field] ?? "";
@@ -2267,6 +2278,28 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 <td style={{ padding: "6px 10px" }}><SSCell otaStatus={status} field="postset" /></td>
                               </tr>
                             ))}
+                            {/* Add new OTA status row */}
+                            <tr style={{ background: "#F0FDF4", borderBottom: "1px solid #F0F4F8" }}>
+                              <td style={{ padding: "6px 10px", borderRight: "1px solid #E2E8F0" }} colSpan={3}>
+                                {scAddingStatus ? (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <input autoFocus value={scNewStatus} onChange={e => setScNewStatus(e.target.value)}
+                                      onKeyDown={e => { if (e.key === "Enter") addOtaStatus(scNewStatus); if (e.key === "Escape") { setScAddingStatus(false); setScNewStatus(""); } }}
+                                      placeholder="Type new OTA status…"
+                                      style={{ padding: "5px 10px", borderRadius: 6, border: "2px solid #16A34A", fontSize: 11, outline: "none", width: 220 }} />
+                                    <button onClick={() => addOtaStatus(scNewStatus)}
+                                      style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#16A34A", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Add</button>
+                                    <button onClick={() => { setScAddingStatus(false); setScNewStatus(""); }}
+                                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setScAddingStatus(true)}
+                                    style={{ padding: "5px 12px", borderRadius: 6, border: "1px dashed #16A34A", background: "none", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                    + Add OTA Status
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
