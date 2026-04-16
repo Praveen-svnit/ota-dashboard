@@ -387,13 +387,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("live");
 
   // Status Config tab state
-  const [scConfig,      setScConfig]      = useState<OtaStatusConfig | null>(null);
-  const [scStatusMap,   setScStatusMap]   = useState<Record<string, { preset: string; postset: string }>>({});  // editing state: otaStatus → { preset, postset }
-  const [scOtaStatuses, setScOtaStatuses] = useState<string[]>([]);  // unique statuses from DB for this OTA
-  const [scLoading,     setScLoading]     = useState(false);
-  const [scSaving,      setScSaving]      = useState(false);
-  const [scSaveOk,      setScSaveOk]      = useState(false);
-  const [scSaveErr,     setScSaveErr]     = useState(false);
+  const [scConfig,        setScConfig]        = useState<OtaStatusConfig | null>(null);
+  const [scStatusMap,     setScStatusMap]     = useState<Record<string, { preset: string; postset: string }>>({});
+  const [scOtaStatuses,   setScOtaStatuses]   = useState<string[]>([]);
+  const [scLoading,       setScLoading]       = useState(false);
+  const [scSaving,        setScSaving]        = useState(false);
+  const [scSaveOk,        setScSaveOk]        = useState(false);
+  const [scSaveErr,       setScSaveErr]       = useState(false);
+  const [scNewStatus,     setScNewStatus]     = useState("");
+  const [scAddingStatus,  setScAddingStatus]  = useState(false);
+  // SSCell editing: key = "otaStatus|field", value = true when showing text input
+  const [scSSAdding,      setScSSAdding]      = useState<Record<string, boolean>>({});
+  const [scSSNewVal,      setScSSNewVal]      = useState<Record<string, string>>({});
 
   // Listing Creation sheet state
   const [lcRows,       setLcRows]       = useState<LcRow[]>([]);
@@ -2152,164 +2157,175 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         })()}
 
         {/* ── Status Config tab ──────────────────────────────────────── */}
-        {propTab === "config" && (() => {
-          // All unique sub-statuses currently defined in the map (for dropdown options)
-          const existingSS = Array.from(new Set(
-            Object.values(scStatusMap).flatMap(v => [v.preset, v.postset]).filter(Boolean)
-          )).sort();
-
-          const saveConfig = async () => {
-            setScSaving(true); setScSaveOk(false); setScSaveErr(false);
-            try {
-              const res = await fetch("/api/admin/status-config", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ota: otaName, statusSubStatusMap: scStatusMap }),
-              });
-              if (!res.ok) throw new Error("failed");
-              setScConfig(prev => prev ? { ...prev, statusSubStatusMap: { ...scStatusMap }, isDefault: false } : prev);
-              setScSaveOk(true);
-              setTimeout(() => setScSaveOk(false), 3000);
-            } catch {
-              setScSaveErr(true);
-              setTimeout(() => setScSaveErr(false), 3000);
-            }
-            setScSaving(false);
-          };
-
-          // Merge DB statuses with any already in the map (so saved ones always show)
-          const allStatuses = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort();
-
-          // For adding a new OTA status row
-          const [scNewStatus, setScNewStatus] = React.useState("");
-          const [scAddingStatus, setScAddingStatus] = React.useState(false);
-          const addOtaStatus = (val: string) => {
-            const v = val.trim();
-            if (v && !allStatuses.includes(v)) {
-              setScStatusMap(prev => ({ ...prev, [v]: { preset: "", postset: "" } }));
-            }
-            setScNewStatus(""); setScAddingStatus(false);
-          };
-
-          // For inline "add new" sub-status input
-          const SSCell = ({ otaStatus, field }: { otaStatus: string; field: "preset" | "postset" }) => {
-            const cur = scStatusMap[otaStatus]?.[field] ?? "";
-            const [adding, setAdding] = React.useState(false);
-            const [newVal, setNewVal] = React.useState("");
-
-            const setVal = (val: string) => {
-              setScStatusMap(prev => ({
-                ...prev,
-                [otaStatus]: { preset: prev[otaStatus]?.preset ?? "", postset: prev[otaStatus]?.postset ?? "", [field]: val },
-              }));
-            };
-
-            if (adding) {
-              return (
-                <input autoFocus value={newVal} onChange={e => setNewVal(e.target.value)}
-                  onBlur={() => { if (newVal.trim()) setVal(newVal.trim()); setAdding(false); setNewVal(""); }}
-                  onKeyDown={e => { if (e.key === "Enter" && newVal.trim()) { setVal(newVal.trim()); setAdding(false); setNewVal(""); } if (e.key === "Escape") { setAdding(false); setNewVal(""); } }}
-                  placeholder="Type new sub-status…"
-                  style={{ padding: "4px 8px", borderRadius: 6, border: "2px solid #7C3AED", fontSize: 11, outline: "none", width: 170 }} />
-              );
-            }
-
-            return (
-              <select value={cur} onChange={e => { if (e.target.value === "__new__") setAdding(true); else setVal(e.target.value); }}
-                style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${cur ? "#7C3AED" : "#CBD5E1"}`, background: cur ? "#F5F3FF" : "#F8FAFC", color: cur ? "#5B21B6" : "#94A3B8", fontSize: 11, outline: "none", cursor: "pointer", minWidth: 160 }}>
-                <option value="">— None —</option>
-                {existingSS.map(s => <option key={s} value={s}>{s}</option>)}
-                <option value="__new__">+ Add new…</option>
-              </select>
-            );
-          };
-
-          return (
-            <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
-              {/* Header */}
-              <div style={{ padding: "12px 16px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>Status Config · {otaName}</span>
-                  {scConfig?.updatedAt && (
-                    <span style={{ fontSize: 10, color: T.textMut, marginLeft: 10 }}>
-                      Last saved {new Date(scConfig.updatedAt).toLocaleDateString("en-IN")}{scConfig.updatedBy ? ` by ${scConfig.updatedBy}` : ""}
-                    </span>
-                  )}
-                  {scConfig?.isDefault && (
-                    <span style={{ marginLeft: 8, fontSize: 10, padding: "2px 6px", borderRadius: 99, background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Default</span>
-                  )}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {scSaveOk  && <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>✓ Saved</span>}
-                  {scSaveErr && <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 700 }}>✗ Save failed</span>}
-                  <button onClick={saveConfig} disabled={scSaving}
-                    style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0EA5E9", color: "#fff", fontSize: 11, fontWeight: 700, cursor: scSaving ? "not-allowed" : "pointer", opacity: scSaving ? 0.6 : 1 }}>
-                    {scSaving ? "Saving…" : "Save Changes"}
-                  </button>
-                </div>
+        {propTab === "config" && (
+          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
+            {/* Header */}
+            <div style={{ padding: "12px 16px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>Status Config · {otaName}</span>
+                {scConfig?.updatedAt && (
+                  <span style={{ fontSize: 10, color: T.textMut, marginLeft: 10 }}>
+                    Last saved {new Date(scConfig.updatedAt).toLocaleDateString("en-IN")}{scConfig.updatedBy ? ` by ${scConfig.updatedBy}` : ""}
+                  </span>
+                )}
+                {scConfig?.isDefault && (
+                  <span style={{ marginLeft: 8, fontSize: 10, padding: "2px 6px", borderRadius: 99, background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Default</span>
+                )}
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {scSaveOk  && <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>✓ Saved</span>}
+                {scSaveErr && <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 700 }}>✗ Save failed</span>}
+                <button
+                  onClick={async () => {
+                    setScSaving(true); setScSaveOk(false); setScSaveErr(false);
+                    try {
+                      const res = await fetch("/api/admin/status-config", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ota: otaName, statusSubStatusMap: scStatusMap }),
+                      });
+                      if (!res.ok) throw new Error("failed");
+                      setScConfig(prev => prev ? { ...prev, statusSubStatusMap: { ...scStatusMap }, isDefault: false } : prev);
+                      setScSaveOk(true);
+                      setTimeout(() => setScSaveOk(false), 3000);
+                    } catch {
+                      setScSaveErr(true);
+                      setTimeout(() => setScSaveErr(false), 3000);
+                    }
+                    setScSaving(false);
+                  }}
+                  disabled={scSaving}
+                  style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0EA5E9", color: "#fff", fontSize: 11, fontWeight: 700, cursor: scSaving ? "not-allowed" : "pointer", opacity: scSaving ? 0.6 : 1 }}>
+                  {scSaving ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            </div>
 
-              {scLoading && <div style={{ padding: 40, textAlign: "center", color: T.textMut, fontSize: 12 }}>Loading…</div>}
+            {scLoading && <div style={{ padding: 40, textAlign: "center", color: T.textMut, fontSize: 12 }}>Loading…</div>}
 
-              {!scLoading && (
+            {!scLoading && (() => {
+              // All unique sub-statuses in the map (for dropdown options)
+              const existingSS = Array.from(new Set(
+                Object.values(scStatusMap).flatMap(v => [v.preset, v.postset]).filter(Boolean)
+              )).sort();
+
+              // Merge DB statuses with saved config keys
+              const allStatuses = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort();
+
+              const setSSVal = (otaStatus: string, field: "preset" | "postset", val: string) => {
+                setScStatusMap(prev => ({
+                  ...prev,
+                  [otaStatus]: { preset: prev[otaStatus]?.preset ?? "", postset: prev[otaStatus]?.postset ?? "", [field]: val },
+                }));
+              };
+
+              const addOtaStatus = (val: string) => {
+                const v = val.trim();
+                if (v && !allStatuses.includes(v)) {
+                  setScStatusMap(prev => ({ ...prev, [v]: { preset: "", postset: "" } }));
+                }
+                setScNewStatus(""); setScAddingStatus(false);
+              };
+
+              return (
                 <div style={{ padding: 16 }}>
                   <p style={{ fontSize: 11, color: T.textSec, marginBottom: 14, marginTop: 0 }}>
                     For each <strong>{otaName}</strong> status, set the sub-status shown when a listing is in Preset or Postset mode.
                     Sub-status is automatically derived — not manually editable in Listing Creation or CRM.
                   </p>
 
-                  {allStatuses.length === 0
-                    ? <div style={{ padding: "24px 0", textAlign: "center", color: T.textMut, fontSize: 12 }}>No statuses found for {otaName} yet.</div>
-                    : (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", minWidth: 500 }}>
-                          <thead>
-                            <tr style={{ background: "#F8FAFC" }}>
-                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: T.textSec, borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap", minWidth: 180 }}>OTA Status</th>
-                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#5B21B6", borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>Preset Sub-status</th>
-                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#0369A1", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" }}>PostSet Sub-status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {allStatuses.map((status, i) => (
-                              <tr key={status} style={{ background: i % 2 === 0 ? "#FFFFFF" : "#F8FAFC", borderBottom: "1px solid #F0F4F8" }}>
-                                <td style={{ padding: "8px 14px", borderRight: "1px solid #E2E8F0", fontWeight: 600, color: T.textPri }}>{status}</td>
-                                <td style={{ padding: "6px 10px", borderRight: "1px solid #E2E8F0" }}><SSCell otaStatus={status} field="preset" /></td>
-                                <td style={{ padding: "6px 10px" }}><SSCell otaStatus={status} field="postset" /></td>
-                              </tr>
-                            ))}
-                            {/* Add new OTA status row */}
-                            <tr style={{ background: "#F0FDF4", borderBottom: "1px solid #F0F4F8" }}>
-                              <td style={{ padding: "6px 10px", borderRight: "1px solid #E2E8F0" }} colSpan={3}>
-                                {scAddingStatus ? (
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <input autoFocus value={scNewStatus} onChange={e => setScNewStatus(e.target.value)}
-                                      onKeyDown={e => { if (e.key === "Enter") addOtaStatus(scNewStatus); if (e.key === "Escape") { setScAddingStatus(false); setScNewStatus(""); } }}
-                                      placeholder="Type new OTA status…"
-                                      style={{ padding: "5px 10px", borderRadius: 6, border: "2px solid #16A34A", fontSize: 11, outline: "none", width: 220 }} />
-                                    <button onClick={() => addOtaStatus(scNewStatus)}
-                                      style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#16A34A", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Add</button>
-                                    <button onClick={() => { setScAddingStatus(false); setScNewStatus(""); }}
-                                      style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 11, cursor: "pointer" }}>Cancel</button>
-                                  </div>
-                                ) : (
-                                  <button onClick={() => setScAddingStatus(true)}
-                                    style={{ padding: "5px 12px", borderRadius: 6, border: "1px dashed #16A34A", background: "none", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                    + Add OTA Status
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    )
-                  }
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", minWidth: 500 }}>
+                      <thead>
+                        <tr style={{ background: "#F8FAFC" }}>
+                          <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: T.textSec, borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap", minWidth: 180 }}>OTA Status</th>
+                          <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#5B21B6", borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>Preset Sub-status</th>
+                          <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#0369A1", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" }}>PostSet Sub-status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allStatuses.map((status, i) => (
+                          <tr key={status} style={{ background: i % 2 === 0 ? "#FFFFFF" : "#F8FAFC", borderBottom: "1px solid #F0F4F8" }}>
+                            <td style={{ padding: "8px 14px", borderRight: "1px solid #E2E8F0", fontWeight: 600, color: T.textPri }}>{status}</td>
+                            {(["preset", "postset"] as const).map(field => {
+                              const cellKey = `${status}|${field}`;
+                              const cur = scStatusMap[status]?.[field] ?? "";
+                              const isAdding = !!scSSAdding[cellKey];
+                              return (
+                                <td key={field} style={{ padding: "6px 10px", borderRight: field === "preset" ? "1px solid #E2E8F0" : undefined }}>
+                                  {isAdding ? (
+                                    <input autoFocus value={scSSNewVal[cellKey] ?? ""}
+                                      onChange={e => setScSSNewVal(prev => ({ ...prev, [cellKey]: e.target.value }))}
+                                      onBlur={() => {
+                                        const v = (scSSNewVal[cellKey] ?? "").trim();
+                                        if (v) setSSVal(status, field, v);
+                                        setScSSAdding(prev => ({ ...prev, [cellKey]: false }));
+                                        setScSSNewVal(prev => ({ ...prev, [cellKey]: "" }));
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === "Enter") {
+                                          const v = (scSSNewVal[cellKey] ?? "").trim();
+                                          if (v) setSSVal(status, field, v);
+                                          setScSSAdding(prev => ({ ...prev, [cellKey]: false }));
+                                          setScSSNewVal(prev => ({ ...prev, [cellKey]: "" }));
+                                        }
+                                        if (e.key === "Escape") {
+                                          setScSSAdding(prev => ({ ...prev, [cellKey]: false }));
+                                          setScSSNewVal(prev => ({ ...prev, [cellKey]: "" }));
+                                        }
+                                      }}
+                                      placeholder="Type new sub-status…"
+                                      style={{ padding: "4px 8px", borderRadius: 6, border: "2px solid #7C3AED", fontSize: 11, outline: "none", width: 170 }} />
+                                  ) : (
+                                    <select value={cur}
+                                      onChange={e => {
+                                        if (e.target.value === "__new__") {
+                                          setScSSAdding(prev => ({ ...prev, [cellKey]: true }));
+                                        } else {
+                                          setSSVal(status, field, e.target.value);
+                                        }
+                                      }}
+                                      style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${cur ? "#7C3AED" : "#CBD5E1"}`, background: cur ? "#F5F3FF" : "#F8FAFC", color: cur ? "#5B21B6" : "#94A3B8", fontSize: 11, outline: "none", cursor: "pointer", minWidth: 160 }}>
+                                      <option value="">— None —</option>
+                                      {existingSS.map(s => <option key={s} value={s}>{s}</option>)}
+                                      <option value="__new__">+ Add new…</option>
+                                    </select>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        {/* Add new OTA status row */}
+                        <tr style={{ background: "#F0FDF4" }}>
+                          <td colSpan={3} style={{ padding: "6px 10px" }}>
+                            {scAddingStatus ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <input autoFocus value={scNewStatus} onChange={e => setScNewStatus(e.target.value)}
+                                  onKeyDown={e => { if (e.key === "Enter") addOtaStatus(scNewStatus); if (e.key === "Escape") { setScAddingStatus(false); setScNewStatus(""); } }}
+                                  placeholder="Type new OTA status…"
+                                  style={{ padding: "5px 10px", borderRadius: 6, border: "2px solid #16A34A", fontSize: 11, outline: "none", width: 220 }} />
+                                <button onClick={() => addOtaStatus(scNewStatus)}
+                                  style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#16A34A", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Add</button>
+                                <button onClick={() => { setScAddingStatus(false); setScNewStatus(""); }}
+                                  style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setScAddingStatus(true)}
+                                style={{ padding: "5px 12px", borderRadius: 6, border: "1px dashed #16A34A", background: "none", color: "#16A34A", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                + Add OTA Status
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              )}
-            </div>
-          );
-        })()}
+              );
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );
