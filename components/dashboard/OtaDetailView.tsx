@@ -1859,7 +1859,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               {/* Bulk bar */}
               {lcAnySel && (() => {
                 const BULK_FIELDS = [
-                  { key: "status",      label: "Status",       type: "select", options: scOtaStatuses.length ? scOtaStatuses : STATUS_OPTIONS_LC },
+                  { key: "status",      label: "Status",       type: "select", options: (() => { const s = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort(); return s.length ? s : STATUS_OPTIONS_LC; })() },
                   { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
                   { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
                   { key: "batchNumber", label: "Batch",        type: "text",   options: [] },
@@ -1995,7 +1995,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                               onBlur={() => setLcEditCell(null)}
                               style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
                               <option value="">— Select —</option>
-                              {(scOtaStatuses.length ? scOtaStatuses : STATUS_OPTIONS_LC).map(s => <option key={s} value={s}>{s}</option>)}
+                              {(Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort() || STATUS_OPTIONS_LC).map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
