@@ -374,7 +374,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
 
-  const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing">("live");
+  const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("live");
+
+  // Status Config tab state
+  type OtaStatusConfig = { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; updatedAt: string | null; updatedBy: string | null; isDefault: boolean };
+  const [scConfig,    setScConfig]    = useState<OtaStatusConfig | null>(null);
+  const [scAllSs,     setScAllSs]     = useState<string[]>([]);
+  const [scLoading,   setScLoading]   = useState(false);
+  const [scSaving,    setScSaving]    = useState(false);
+  const [scSaveOk,    setScSaveOk]    = useState(false);
+  const [scSaveErr,   setScSaveErr]   = useState(false);
 
   // Listing Creation sheet state
   const [lcRows,       setLcRows]       = useState<LcRow[]>([]);
@@ -767,12 +776,24 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             { key: "live",    label: "Live",             count: liveData?.total, color: T.live,    bg: T.liveL   },
             { key: "notlive", label: "Not Live",         count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
             { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined, color: "#7C3AED", bg: "#EDE9FE" },
-          ] as const).map(tab => {
+            { key: "config",  label: "Status Config",    count: undefined,       color: "#0EA5E9", bg: "#E0F2FE" },
+          ] as { key: "live"|"notlive"|"listing"|"config"; label: string; count: number|undefined; color: string; bg: string }[]).map(tab => {
             const active = propTab === tab.key;
             return (
               <button key={tab.key} onClick={() => {
                   setPropTab(tab.key);
                   if (tab.key === "listing" && !lcLoaded) loadLc();
+                  if (tab.key === "config" && !scConfig && !scLoading) {
+                    setScLoading(true);
+                    fetch("/api/admin/status-config").then(r => r.json()).then((d: { configs: OtaStatusConfig[] }) => {
+                      const cfg = d.configs?.find(c => c.ota === otaName) ?? null;
+                      setScConfig(cfg);
+                      // Collect all known sub-statuses (union of all OTAs) for the master list
+                      const allSs = Array.from(new Set(d.configs?.flatMap(c => c.subStatuses) ?? [])).sort();
+                      setScAllSs(allSs);
+                      setScLoading(false);
+                    }).catch(() => setScLoading(false));
+                  }
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
                   borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
@@ -2109,6 +2130,101 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 {lcFiltered.length.toLocaleString()} rows{lcFiltered.length !== lcRows.length ? ` (of ${lcRows.length})` : ""}
                 {lcSaveErr.size > 0 && <span style={{ color: "#DC2626", fontWeight: 700, marginLeft: 12 }}>{lcSaveErr.size} rows failed to save</span>}
               </div>
+            </div>
+          );
+        })()}
+
+        {/* ── Status Config tab ──────────────────────────────────────── */}
+        {propTab === "config" && (() => {
+          const toggleSs = (ss: string) => {
+            if (!scConfig) return;
+            const cur = scConfig.subStatuses;
+            const next = cur.includes(ss) ? cur.filter(x => x !== ss) : [...cur, ss];
+            setScConfig({ ...scConfig, subStatuses: next });
+          };
+
+          const saveConfig = async () => {
+            if (!scConfig) return;
+            setScSaving(true); setScSaveOk(false); setScSaveErr(false);
+            try {
+              const res = await fetch("/api/admin/status-config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ota: otaName, subStatuses: scConfig.subStatuses }),
+              });
+              if (!res.ok) throw new Error("failed");
+              setScConfig(prev => prev ? { ...prev, isDefault: false } : prev);
+              setScSaveOk(true);
+              setTimeout(() => setScSaveOk(false), 3000);
+            } catch {
+              setScSaveErr(true);
+              setTimeout(() => setScSaveErr(false), 3000);
+            }
+            setScSaving(false);
+          };
+
+          // Build all possible sub-statuses: union of master list + current config
+          const allOptions = Array.from(new Set([...scAllSs, ...(scConfig?.subStatuses ?? [])])).sort();
+
+          return (
+            <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
+              {/* Header */}
+              <div style={{ padding: "12px 16px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>Status Config · {otaName}</span>
+                  {scConfig?.updatedAt && (
+                    <span style={{ fontSize: 10, color: T.textMut, marginLeft: 10 }}>
+                      Last saved {new Date(scConfig.updatedAt).toLocaleDateString("en-IN")}{scConfig.updatedBy ? ` by ${scConfig.updatedBy}` : ""}
+                    </span>
+                  )}
+                  {scConfig?.isDefault && (
+                    <span style={{ marginLeft: 8, fontSize: 10, padding: "2px 6px", borderRadius: 99, background: "#FEF3C7", color: "#B45309", fontWeight: 700 }}>Default</span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {scSaveOk  && <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>✓ Saved</span>}
+                  {scSaveErr && <span style={{ fontSize: 11, color: "#DC2626", fontWeight: 700 }}>✗ Save failed</span>}
+                  <button onClick={saveConfig} disabled={scSaving || !scConfig}
+                    style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0EA5E9", color: "#fff", fontSize: 11, fontWeight: 700, cursor: scSaving ? "not-allowed" : "pointer", opacity: scSaving ? 0.6 : 1 }}>
+                    {scSaving ? "Saving…" : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+
+              {scLoading && (
+                <div style={{ padding: 40, textAlign: "center", color: T.textMut, fontSize: 12 }}>Loading…</div>
+              )}
+
+              {!scLoading && scConfig && (
+                <div style={{ padding: 16 }}>
+                  <p style={{ fontSize: 11, color: T.textSec, marginBottom: 14, marginTop: 0 }}>
+                    Toggle which sub-statuses are active for <strong>{otaName}</strong>. Disabled sub-statuses won&apos;t appear in dropdowns for this OTA.
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {allOptions.map(ss => {
+                      const enabled = scConfig.subStatuses.includes(ss);
+                      return (
+                        <button key={ss} onClick={() => toggleSs(ss)}
+                          style={{
+                            padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                            border: `1px solid ${enabled ? "#0EA5E9" : "#CBD5E1"}`,
+                            background: enabled ? "#E0F2FE" : "#F8FAFC",
+                            color: enabled ? "#0369A1" : "#64748B",
+                            transition: "all 0.12s",
+                          }}>
+                          {enabled ? "✓ " : ""}{ss}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {allOptions.length === 0 && (
+                    <div style={{ padding: 20, color: T.textMut, fontSize: 12 }}>No sub-statuses found in master config. Add some via the admin Status Config page.</div>
+                  )}
+                  <div style={{ marginTop: 14, fontSize: 10, color: T.textMut }}>
+                    {scConfig.subStatuses.length} of {allOptions.length} sub-statuses enabled
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

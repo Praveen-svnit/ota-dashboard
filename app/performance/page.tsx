@@ -317,7 +317,7 @@ const [perfTab,        setPerfTab]        = useState<"summary" | "individual" | 
               ["CRM",           "/crm",                false],
               ["Task Manager",  "/tasks",               false],
               ["Performance",   "/performance",         true ],
-              ["Status Config", "/admin/status-config", false],
+
             ] as [string, string, boolean][]).map(([label, href, active]) => (
               <a key={label} href={href} style={{
                 padding: "7px 22px", borderRadius: 7, fontSize: 12, fontWeight: 600,
