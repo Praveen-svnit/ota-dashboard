@@ -396,8 +396,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkNote,      setLcBulkNote]      = useState("");
   const [lcBulkIds,       setLcBulkIds]       = useState("");
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
-  const [cbDirty,         setCbDirty]         = useState<Record<string, Record<string, string>>>({});  // propertyId → {cb_key: value}
-  const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});                 // propertyId → saving
+  const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});  // propertyId+cbKey → saving
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -1656,7 +1655,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 220px" : ""} 44px`;
+          const CB_ITEMS = [
+            { key: "cb_mapping",          label: "Mapping" },
+            { key: "cb_room_plan",        label: "Room Plan" },
+            { key: "cb_rate_plan",        label: "Rate Plan" },
+            { key: "cb_policy",           label: "Policy" },
+            { key: "cb_promotion",        label: "Promotion" },
+            { key: "cb_child_time_policy",label: "Child/Time" },
+            { key: "cb_image",            label: "Image" },
+          ];
+          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 62px 62px 62px 62px 70px 68px 56px" : ""} 44px`;
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1774,7 +1782,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: otaName === "Agoda" ? 1870 : 1650 }}>
+                <div style={{ minWidth: otaName === "Agoda" ? 2110 : 1650 }}>
                   {/* Header row */}
                   <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
                     <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1784,7 +1792,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                     </div>
                     <div style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, display: "flex", alignItems: "center", borderLeft: "1px solid #E2E8F0" }}>FH ID</div>
-                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",...(otaName === "Agoda" ? ["Content Boxes"] : []),""].map(h => (
+                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",...(otaName === "Agoda" ? CB_ITEMS.map(c => c.label) : []),""].map(h => (
                       <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
                     ))}
                   </div>
@@ -1811,34 +1819,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
                     const sc = getSSColor(subStatusVal);
 
-                    const cbItems = [
-                      { key: "cb_mapping",           label: "Mapping" },
-                      { key: "cb_room_plan",          label: "Room Plan" },
-                      { key: "cb_rate_plan",          label: "Rate Plan" },
-                      { key: "cb_policy",             label: "Policy" },
-                      { key: "cb_promotion",          label: "Promotion" },
-                      { key: "cb_child_time_policy",  label: "Child/Time Policy" },
-                      { key: "cb_image",              label: "Image" },
-                    ];
-
-                    async function saveCbRow(propertyId: string) {
-                      const dirty = cbDirty[propertyId];
-                      if (!dirty || !Object.keys(dirty).length) return;
-                      setCbSaving(p => ({ ...p, [propertyId]: true }));
-                      await Promise.all(
-                        Object.entries(dirty).map(([key, value]) =>
-                          fetch("/api/crm/metrics", {
-                            method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: key, metricValue: value }),
-                          })
-                        )
-                      );
+                    async function saveCbField(propertyId: string, cbKey: string, value: string) {
+                      setCbSaving(p => ({ ...p, [propertyId + cbKey]: true }));
+                      await fetch("/api/crm/metrics", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
+                      });
                       setLcRows(prev => prev.map(r => r.propertyId === propertyId
-                        ? { ...r, metrics: { ...(r.metrics ?? {}), ...dirty } }
+                        ? { ...r, metrics: { ...(r.metrics ?? {}), [cbKey]: value } }
                         : r
                       ));
-                      setCbDirty(p => { const n = { ...p }; delete n[propertyId]; return n; });
-                      setCbSaving(p => ({ ...p, [propertyId]: false }));
+                      setCbSaving(p => ({ ...p, [propertyId + cbKey]: false }));
                     }
 
                     return (
@@ -1996,42 +1987,26 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Content Boxes — Agoda only */}
-                        {otaName === "Agoda" && (() => {
-                          const savedMetrics = row.metrics ?? {};
-                          const dirty = cbDirty[row.propertyId] ?? {};
-                          const hasDirty = Object.keys(dirty).length > 0;
-                          const isSavingCb = cbSaving[row.propertyId];
+                        {/* Content Boxes — 7 individual columns, Agoda only */}
+                        {otaName === "Agoda" && CB_ITEMS.map(item => {
+                          const current = (row.metrics ?? {})[item.key] ?? "";
+                          const isSavingThis = !!cbSaving[row.propertyId + item.key];
                           return (
-                            <div style={{ borderLeft: "1px solid #F0F4F8", padding: "6px 8px", display: "flex", flexDirection: "column", gap: 3, background: hasDirty ? "#FEFCE8" : "transparent" }}>
-                              {cbItems.map(item => {
-                                const saved = savedMetrics[item.key] ?? "";
-                                const draft = dirty[item.key] ?? saved;
-                                const isDirty = draft !== saved;
-                                return (
-                                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                    <span style={{ fontSize: 9, color: "#64748B", width: 72, flexShrink: 0 }}>{item.label}</span>
-                                    {["Yes", "No"].map(opt => (
-                                      <button key={opt} onClick={() => setCbDirty(p => ({ ...p, [row.propertyId]: { ...(p[row.propertyId] ?? {}), [item.key]: opt } }))}
-                                        style={{ padding: "1px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: "pointer", border: "none",
-                                          background: draft === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#F1F5F9",
-                                          color: draft === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#CBD5E1",
-                                          outline: isDirty && draft === opt ? "1px solid #FCD34D" : "none" }}>
-                                        {opt}
-                                      </button>
-                                    ))}
-                                  </div>
-                                );
-                              })}
-                              {hasDirty && (
-                                <button onClick={() => saveCbRow(row.propertyId)} disabled={!!isSavingCb}
-                                  style={{ marginTop: 2, padding: "2px 0", borderRadius: 6, border: "none", background: "#7C3AED", color: "#fff", fontSize: 9, fontWeight: 700, cursor: "pointer", width: "100%" }}>
-                                  {isSavingCb ? "Saving…" : "Save CB"}
+                            <div key={item.key} style={{ borderLeft: "1px solid #F0F4F8", padding: "6px 4px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                              {["Yes", "No"].map(opt => (
+                                <button key={opt}
+                                  onClick={() => !isSavingThis && saveCbField(row.propertyId, item.key, opt)}
+                                  disabled={isSavingThis}
+                                  style={{ padding: "2px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: isSavingThis ? "wait" : "pointer", border: "none", width: "100%",
+                                    background: current === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#F1F5F9",
+                                    color: current === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#CBD5E1",
+                                    opacity: isSavingThis ? 0.6 : 1 }}>
+                                  {opt}
                                 </button>
-                              )}
+                              ))}
                             </div>
                           );
-                        })()}
+                        })}
                         {/* Save feedback / CRM */}
                         <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
