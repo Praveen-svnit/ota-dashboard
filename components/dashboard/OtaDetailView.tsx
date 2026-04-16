@@ -70,9 +70,12 @@ function normalizeSs(s: string | null | undefined): string {
 
 // Type for OTA status config (used in listing creation + config tab)
 type OtaStatusConfig = {
-  ota: string; subStatuses: string[]; statusMap: Record<string, string[]>;
-  subStatusMap: Record<string, string>; updatedAt: string | null;
-  updatedBy: string | null; isDefault: boolean;
+  ota: string;
+  statusSubStatusMap: Record<string, { preset: string; postset: string }>;
+  subStatuses: string[];
+  updatedAt: string | null;
+  updatedBy: string | null;
+  isDefault: boolean;
 };
 
 const STATUS_OPTIONS_LC = [
@@ -385,8 +388,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
   // Status Config tab state
   const [scConfig,      setScConfig]      = useState<OtaStatusConfig | null>(null);
-  const [scSubStatusMap,setScSubStatusMap] = useState<Record<string, string>>({});  // editing state: { subStatus → parentStatus }
-  const [scAllSs,       setScAllSs]       = useState<string[]>([]);
+  const [scStatusMap,   setScStatusMap]   = useState<Record<string, { preset: string; postset: string }>>({});  // editing state: otaStatus → { preset, postset }
+  const [scOtaStatuses, setScOtaStatuses] = useState<string[]>([]);  // unique statuses from DB for this OTA
   const [scLoading,     setScLoading]     = useState(false);
   const [scSaving,      setScSaving]      = useState(false);
   const [scSaveOk,      setScSaveOk]      = useState(false);
@@ -601,16 +604,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
     setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal("");
-    setScConfig(null); setScSubStatusMap({});
+    setScConfig(null); setScStatusMap({}); setScOtaStatuses([]);
     load();
-    // Load OTA status config (used by listing creation + config tab)
+    // Load OTA status config + actual OTA statuses from DB (used by listing creation + config tab)
     setScLoading(true);
-    fetch("/api/admin/status-config").then(r => r.json()).then((d: { configs: OtaStatusConfig[] }) => {
-      const cfg = d.configs?.find(c => c.ota === otaName) ?? null;
+    Promise.all([
+      fetch("/api/admin/status-config").then(r => r.json()),
+      fetch(`/api/crm/ota-statuses?ota=${encodeURIComponent(otaName)}`).then(r => r.json()),
+    ]).then(([cfgData, ssData]: [{ configs: OtaStatusConfig[] }, { statuses: string[] }]) => {
+      const cfg = cfgData.configs?.find(c => c.ota === otaName) ?? null;
       setScConfig(cfg);
-      setScSubStatusMap(cfg?.subStatusMap ?? {});
-      const allSs = Array.from(new Set(d.configs?.flatMap(c => c.subStatuses) ?? [])).sort();
-      setScAllSs(allSs);
+      setScStatusMap(cfg?.statusSubStatusMap ?? {});
+      setScOtaStatuses(ssData.statuses ?? []);
       setScLoading(false);
     }).catch(() => setScLoading(false));
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -801,7 +806,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               <button key={tab.key} onClick={() => {
                   setPropTab(tab.key);
                   if (tab.key === "listing" && !lcLoaded) loadLc();
-                  if (tab.key === "config" && scConfig) setScSubStatusMap(scConfig.subStatusMap ?? {});
+                  if (tab.key === "config" && scConfig) setScStatusMap(scConfig.statusSubStatusMap ?? {});
                 }}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
                   borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
@@ -1697,11 +1702,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 const next = { ...prev };
                 for (const id of lcSelected) {
                   next[id] = { ...(next[id] ?? {}), [lcBulkField]: lcBulkValue };
-                  // If bulk-setting sub-status, also auto-derive status
-                  if (lcBulkField === "subStatus") {
-                    const autoStatus = scSubStatusMap[lcBulkValue];
-                    if (autoStatus) next[id] = { ...next[id], status: autoStatus };
-                  }
+                  // sub-status is now auto-derived from status; no special logic needed here
                 }
                 return next;
               });
@@ -1853,7 +1854,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               {/* Bulk bar */}
               {lcAnySel && (() => {
                 const BULK_FIELDS = [
-                  { key: "subStatus",   label: "Sub-status",   type: "select", options: scConfig?.subStatuses.length ? scConfig.subStatuses : SUB_STATUS_OPTIONS_LC },
+                  { key: "status",      label: "Status",       type: "select", options: scOtaStatuses.length ? scOtaStatuses : STATUS_OPTIONS_LC },
                   { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
                   { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
                   { key: "batchNumber", label: "Batch",        type: "text",   options: [] },
@@ -1977,40 +1978,45 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Status — read-only, auto-derived from sub-status config */}
-                        <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center" }}>
-                          {statusVal
-                            ? <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal}</span>
-                            : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
-                        </div>
-                        {/* Sub-status — editable dropdown (options from OTA status config) */}
-                        <div style={cellSt(row.otaListingId, "subStatus")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "subStatus" })}>
-                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "subStatus" ? (
-                            <select autoFocus value={subStatusVal}
+                        {/* Status — editable dropdown (OTA-specific statuses from DB) */}
+                        <div style={cellSt(row.otaListingId, "status")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "status" })}>
+                          {lcEditCell?.id === row.otaListingId && lcEditCell.field === "status" ? (
+                            <select autoFocus value={statusVal}
                               onChange={e => {
-                                const newSS = e.target.value;
-                                lcSetField(row.otaListingId, "subStatus", newSS);
-                                const autoStatus = scSubStatusMap[newSS];
-                                if (autoStatus) lcSetField(row.otaListingId, "status", autoStatus);
+                                const newStatus = e.target.value;
+                                lcSetField(row.otaListingId, "status", newStatus);
                                 setLcEditCell(null);
                               }}
                               onBlur={() => setLcEditCell(null)}
                               style={{ width: "100%", padding: "2px 4px", border: "2px solid #7C3AED", borderRadius: 4, fontSize: 11, outline: "none", cursor: "pointer" }}>
                               <option value="">— Select —</option>
-                              {(scConfig?.subStatuses.length ? scConfig.subStatuses : SUB_STATUS_OPTIONS_LC).map(s => <option key={s} value={s}>{s}</option>)}
+                              {(scOtaStatuses.length ? scOtaStatuses : STATUS_OPTIONS_LC).map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           ) : (
                             <div style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                              {subStatusVal
-                                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, border: `1px solid ${sc.text}20` }}>
-                                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
-                                    {subStatusVal}
-                                  </span>
+                              {statusVal
+                                ? <span style={{ fontSize: 10, fontWeight: 600, color: "#475569", background: "#F1F5F9", padding: "2px 8px", borderRadius: 20 }}>{statusVal}</span>
                                 : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
                               <span style={{ fontSize: 9, color: "#CBD5E1", marginLeft: "auto" }}>▾</span>
                             </div>
                           )}
                         </div>
+                        {/* Sub-status — read-only, auto-derived from status config (preset/postset) */}
+                        {(() => {
+                          const prePostKey = (row.prePost ?? "").toLowerCase().includes("post") ? "postset" : "preset";
+                          const derivedSS = scStatusMap[statusVal]?.[prePostKey] ?? subStatusVal;
+                          const dsc = getSSColor(derivedSS);
+                          return (
+                            <div style={{ padding: "8px 10px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center" }}>
+                              {derivedSS
+                                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: dsc.bg, color: dsc.text, border: `1px solid ${dsc.text}20` }}>
+                                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: dsc.text, flexShrink: 0 }} />
+                                    {derivedSS}
+                                  </span>
+                                : <span style={{ fontSize: 10, color: "#CBD5E1" }}>—</span>}
+                            </div>
+                          );
+                        })()}
                         {/* OTA Live Date — editable */}
                         <div style={cellSt(row.otaListingId, "liveDate")} onClick={() => setLcEditCell({ id: row.otaListingId, field: "liveDate" })}>
                           {lcEditCell?.id === row.otaListingId && lcEditCell.field === "liveDate" ? (
@@ -2147,10 +2153,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
         {/* ── Status Config tab ──────────────────────────────────────── */}
         {propTab === "config" && (() => {
-          const PARENT_STATUSES = [
-            "New", "Shell Created", "Live", "Not Live", "Ready to Go Live",
-            "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
-          ];
+          // All unique sub-statuses currently defined in the map (for dropdown options)
+          const existingSS = Array.from(new Set(
+            Object.values(scStatusMap).flatMap(v => [v.preset, v.postset]).filter(Boolean)
+          )).sort();
 
           const saveConfig = async () => {
             setScSaving(true); setScSaveOk(false); setScSaveErr(false);
@@ -2158,10 +2164,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               const res = await fetch("/api/admin/status-config", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ota: otaName, subStatusMap: scSubStatusMap }),
+                body: JSON.stringify({ ota: otaName, statusSubStatusMap: scStatusMap }),
               });
               if (!res.ok) throw new Error("failed");
-              setScConfig(prev => prev ? { ...prev, subStatuses: Object.keys(scSubStatusMap), subStatusMap: { ...scSubStatusMap }, isDefault: false } : prev);
+              setScConfig(prev => prev ? { ...prev, statusSubStatusMap: { ...scStatusMap }, isDefault: false } : prev);
               setScSaveOk(true);
               setTimeout(() => setScSaveOk(false), 3000);
             } catch {
@@ -2171,8 +2177,41 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setScSaving(false);
           };
 
-          // Sub-statuses not yet assigned to any parent
-          const unassigned = scAllSs.filter(ss => !scSubStatusMap[ss]);
+          // Merge DB statuses with any already in the map (so saved ones always show)
+          const allStatuses = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort();
+
+          // For inline "add new" sub-status input
+          const SSCell = ({ otaStatus, field }: { otaStatus: string; field: "preset" | "postset" }) => {
+            const cur = scStatusMap[otaStatus]?.[field] ?? "";
+            const [adding, setAdding] = React.useState(false);
+            const [newVal, setNewVal] = React.useState("");
+
+            const setVal = (val: string) => {
+              setScStatusMap(prev => ({
+                ...prev,
+                [otaStatus]: { preset: prev[otaStatus]?.preset ?? "", postset: prev[otaStatus]?.postset ?? "", [field]: val },
+              }));
+            };
+
+            if (adding) {
+              return (
+                <input autoFocus value={newVal} onChange={e => setNewVal(e.target.value)}
+                  onBlur={() => { if (newVal.trim()) setVal(newVal.trim()); setAdding(false); setNewVal(""); }}
+                  onKeyDown={e => { if (e.key === "Enter" && newVal.trim()) { setVal(newVal.trim()); setAdding(false); setNewVal(""); } if (e.key === "Escape") { setAdding(false); setNewVal(""); } }}
+                  placeholder="Type new sub-status…"
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "2px solid #7C3AED", fontSize: 11, outline: "none", width: 170 }} />
+              );
+            }
+
+            return (
+              <select value={cur} onChange={e => { if (e.target.value === "__new__") setAdding(true); else setVal(e.target.value); }}
+                style={{ padding: "5px 8px", borderRadius: 6, border: `1px solid ${cur ? "#7C3AED" : "#CBD5E1"}`, background: cur ? "#F5F3FF" : "#F8FAFC", color: cur ? "#5B21B6" : "#94A3B8", fontSize: 11, outline: "none", cursor: "pointer", minWidth: 160 }}>
+                <option value="">— None —</option>
+                {existingSS.map(s => <option key={s} value={s}>{s}</option>)}
+                <option value="__new__">+ Add new…</option>
+              </select>
+            );
+          };
 
           return (
             <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden" }}>
@@ -2204,59 +2243,35 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               {!scLoading && (
                 <div style={{ padding: 16 }}>
                   <p style={{ fontSize: 11, color: T.textSec, marginBottom: 14, marginTop: 0 }}>
-                    Add sub-statuses under each Status for <strong>{otaName}</strong>. In Listing Creation, picking a sub-status will auto-fill the parent Status.
+                    For each <strong>{otaName}</strong> status, set the sub-status shown when a listing is in Preset or Postset mode.
+                    Sub-status is automatically derived — not manually editable in Listing Creation or CRM.
                   </p>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {PARENT_STATUSES.map(parent => {
-                      const assignedHere = Object.entries(scSubStatusMap)
-                        .filter(([, p]) => p === parent)
-                        .map(([ss]) => ss);
-                      const available = unassigned; // pool of not-yet-assigned sub-statuses
-
-                      return (
-                        <div key={parent} style={{ border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
-                          {/* Parent status header */}
-                          <div style={{ background: "#F8FAFC", padding: "7px 12px", borderBottom: assignedHere.length > 0 || available.length > 0 ? "1px solid #F0F4F8" : "none", display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: T.textPri }}>{parent}</span>
-                            <span style={{ fontSize: 9, color: T.textMut, background: "#E2E8F0", padding: "1px 6px", borderRadius: 10, fontWeight: 600 }}>{assignedHere.length} sub-status{assignedHere.length !== 1 ? "es" : ""}</span>
-                          </div>
-                          {/* Sub-statuses under this parent */}
-                          <div style={{ padding: "8px 12px", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                            {assignedHere.map(ss => (
-                              <span key={ss} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "#E0F2FE", color: "#0369A1", border: "1px solid #BAE6FD" }}>
-                                {ss}
-                                <button onClick={() => setScSubStatusMap(prev => { const n = { ...prev }; delete n[ss]; return n; })}
-                                  style={{ background: "none", border: "none", cursor: "pointer", color: "#0369A1", padding: 0, lineHeight: 1, fontSize: 12, opacity: 0.7 }}>×</button>
-                              </span>
+                  {allStatuses.length === 0
+                    ? <div style={{ padding: "24px 0", textAlign: "center", color: T.textMut, fontSize: 12 }}>No statuses found for {otaName} yet.</div>
+                    : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%", minWidth: 500 }}>
+                          <thead>
+                            <tr style={{ background: "#F8FAFC" }}>
+                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: T.textSec, borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap", minWidth: 180 }}>OTA Status</th>
+                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#5B21B6", borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>Preset Sub-status</th>
+                              <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#0369A1", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" }}>PostSet Sub-status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allStatuses.map((status, i) => (
+                              <tr key={status} style={{ background: i % 2 === 0 ? "#FFFFFF" : "#F8FAFC", borderBottom: "1px solid #F0F4F8" }}>
+                                <td style={{ padding: "8px 14px", borderRight: "1px solid #E2E8F0", fontWeight: 600, color: T.textPri }}>{status}</td>
+                                <td style={{ padding: "6px 10px", borderRight: "1px solid #E2E8F0" }}><SSCell otaStatus={status} field="preset" /></td>
+                                <td style={{ padding: "6px 10px" }}><SSCell otaStatus={status} field="postset" /></td>
+                              </tr>
                             ))}
-                            {/* Add sub-status dropdown */}
-                            <select
-                              value=""
-                              onChange={e => {
-                                const ss = e.target.value;
-                                if (ss) setScSubStatusMap(prev => ({ ...prev, [ss]: parent }));
-                              }}
-                              style={{ padding: "4px 8px", borderRadius: 20, border: "1px dashed #CBD5E1", background: "#F8FAFC", color: "#94A3B8", fontSize: 11, cursor: "pointer", outline: "none" }}>
-                              <option value="">+ Add sub-status</option>
-                              {available.map(ss => <option key={ss} value={ss}>{ss}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {unassigned.length > 0 && (
-                    <div style={{ marginTop: 12, padding: "8px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#B45309" }}>Unassigned sub-statuses: </span>
-                      <span style={{ fontSize: 10, color: "#92400E" }}>{unassigned.join(", ")}</span>
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 12, fontSize: 10, color: T.textMut }}>
-                    {Object.keys(scSubStatusMap).length} sub-statuses configured
-                  </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  }
                 </div>
               )}
             </div>

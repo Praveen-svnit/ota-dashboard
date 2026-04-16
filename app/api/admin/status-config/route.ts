@@ -3,65 +3,40 @@ import { getSession } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { OTAS } from "@/lib/constants";
 
+// Status → { preset sub-status, postset sub-status }
+export type StatusSubStatusMap = Record<string, { preset: string; postset: string }>;
+
 export type OtaStatusConfig = {
   ota: string;
-  subStatuses: string[];
-  statusMap: Record<string, string[]>;    // { [subStatus]: string[] }  derived from master
-  subStatusMap: Record<string, string>;   // { [subStatus]: parentStatus }  stored per-OTA
+  statusSubStatusMap: StatusSubStatusMap;
+  subStatuses: string[];   // derived: unique sub-statuses from the map (for dropdowns etc.)
   updatedAt: string | null;
   updatedBy: string | null;
   isDefault: boolean;
 };
 
-// ── Defaults (used when no custom config saved AND master table empty) ─────
+// ── Agoda default mapping (from the gsheet logic) ─────────────────────────
 
-const DEFAULT_SUB_STATUSES = [
-  "Live", "Not Live", "Shell Created", "Ready to Go Live",
-  "Content in Progress", "Listing in Progress", "Content Pending",
-  "Images Pending", "Approval Pending", "OTA Verification",
-  "Under Review", "Suspended", "Duplicate", "Pending", "Soldout", "Closed",
-];
-
-const DEFAULT_STATUS_MAP: Record<string, string[]> = {
-  "Live":                 ["Live"],
-  "Not Live":             ["Not Live"],
-  "Shell Created":        ["Shell Created"],
-  "Ready to Go Live":     ["Ready to Go Live"],
-  "Content in Progress":  ["Content in Progress"],
-  "Listing in Progress":  ["Listing in Progress"],
-  "Content Pending":      ["Content in Progress", "Shell Created"],
-  "Images Pending":       ["Content in Progress", "Shell Created"],
-  "Approval Pending":     ["Ready to Go Live"],
-  "OTA Verification":     ["Listing in Progress"],
-  "Under Review":         ["Listing in Progress"],
-  "Suspended":            ["Not Live"],
-  "Duplicate":            ["Not Live"],
-  "Pending":              ["Pending"],
-  "Soldout":              ["Soldout"],
-  "Closed":               ["Closed"],
+const AGODA_DEFAULT_MAP: StatusSubStatusMap = {
+  "Live":                     { preset: "Live",              postset: "Live"              },
+  "Listing Claimed by Owner": { preset: "Revenue",           postset: "Supply/Operations" },
+  "Delisted":                 { preset: "Churned",           postset: "Churned"           },
+  "Not to List on OTA":       { preset: "Exception",         postset: "Exception"         },
+  "Only FH":                  { preset: "Rev+",              postset: "Rev+"              },
+  "Ready to go Live":         { preset: "Pending at OTA",    postset: "Pending at OTA"    },
+  "Yet to be Shared":         { preset: "Pending at OTA",    postset: "Pending at OTA"    },
+  "Listing Under Process":    { preset: "Pending at Agoda",  postset: "Pending at Agoda"  },
+  "Live (Duplicate)":         { preset: "Live",              postset: "Live"              },
 };
 
-const AGODA_SUB_STATUSES = [
-  "Live", "Revenue", "Churned", "Exception", "Rev+",
-  "Pending at OTA", "Pending at Agoda", "Supply/Operations",
-];
-
-const AGODA_STATUS_MAP: Record<string, string[]> = {
-  "Live":              ["Live", "Live (Duplicate)"],
-  "Revenue":           ["Listing Claimed by Owner"],
-  "Churned":           ["Delisted"],
-  "Exception":         ["Not to List on OTA"],
-  "Rev+":              ["Only FH"],
-  "Pending at OTA":    ["Ready to go Live", "Yet to be Shared"],
-  "Pending at Agoda":  ["Listing Under Process"],
-  "Supply/Operations": ["Listing Claimed by Owner"],
-};
-
-const DEFAULTS: Record<string, { subStatuses: string[]; statusMap: Record<string, string[]> }> = {};
-for (const ota of OTAS) {
-  DEFAULTS[ota] = ota === "Agoda"
-    ? { subStatuses: AGODA_SUB_STATUSES, statusMap: AGODA_STATUS_MAP }
-    : { subStatuses: DEFAULT_SUB_STATUSES, statusMap: DEFAULT_STATUS_MAP };
+// Helper: derive unique sub-statuses from a statusSubStatusMap
+function deriveSubStatuses(map: StatusSubStatusMap): string[] {
+  const set = new Set<string>();
+  for (const { preset, postset } of Object.values(map)) {
+    if (preset)  set.add(preset);
+    if (postset) set.add(postset);
+  }
+  return Array.from(set).sort();
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -78,20 +53,6 @@ async function ensureTable(sql: ReturnType<typeof getSql>) {
   `, []);
 }
 
-async function getMasterMap(sql: ReturnType<typeof getSql>): Promise<Record<string, string[]>> {
-  try {
-    const rows = await sql.query(
-      `SELECT sub_status AS "subStatus", statuses FROM status_config_master ORDER BY sort_order`,
-      []
-    ) as { subStatus: string; statuses: string[] }[];
-    const map: Record<string, string[]> = {};
-    for (const r of rows) map[r.subStatus] = r.statuses;
-    return map;
-  } catch {
-    return {}; // master table not yet created — fall back to stored statusMap
-  }
-}
-
 // ── Route handlers ─────────────────────────────────────────────────────────
 
 export async function GET() {
@@ -102,15 +63,12 @@ export async function GET() {
   const sql = getSql();
   await ensureTable(sql);
 
-  const masterMap = await getMasterMap(sql);
-  const hasMaster = Object.keys(masterMap).length > 0;
-
   const rows = await sql.query(
-    `SELECT ota, statuses, sub_statuses AS "subStatusMapRaw",
+    `SELECT ota, sub_statuses AS "rawMap",
             updated_at AS "updatedAt", updated_by AS "updatedBy"
      FROM ota_status_config`,
     []
-  ) as { ota: string; statuses: string[]; subStatusMapRaw: unknown; updatedAt: string; updatedBy: string }[];
+  ) as { ota: string; rawMap: unknown; updatedAt: string; updatedBy: string }[];
 
   const dbMap: Record<string, typeof rows[0]> = {};
   for (const r of rows) dbMap[r.ota] = r;
@@ -118,40 +76,31 @@ export async function GET() {
   const configs: OtaStatusConfig[] = OTAS.map(ota => {
     const row = dbMap[ota];
     if (row) {
-      // subStatusMap: { [subStatus]: parentStatus } — stored in sub_statuses column
-      const subStatusMap: Record<string, string> =
-        (row.subStatusMapRaw && typeof row.subStatusMapRaw === "object" && !Array.isArray(row.subStatusMapRaw))
-          ? row.subStatusMapRaw as Record<string, string>
+      const statusSubStatusMap: StatusSubStatusMap =
+        (row.rawMap && typeof row.rawMap === "object" && !Array.isArray(row.rawMap))
+          ? row.rawMap as StatusSubStatusMap
           : {};
-
-      // enabledSubStatuses = keys of subStatusMap (if populated) OR legacy statuses array
-      const enabledSubStatuses: string[] = Object.keys(subStatusMap).length > 0
-        ? Object.keys(subStatusMap)
-        : (Array.isArray(row.statuses) ? row.statuses : []);
-
-      // Derive statusMap from master if available; fall back to empty
-      let statusMap: Record<string, string[]>;
-      if (hasMaster) {
-        statusMap = {};
-        for (const ss of enabledSubStatuses) {
-          if (masterMap[ss]) statusMap[ss] = masterMap[ss];
-        }
-      } else {
-        statusMap = {};
-      }
-      return { ota, subStatuses: enabledSubStatuses, statusMap, subStatusMap, updatedAt: row.updatedAt, updatedBy: row.updatedBy, isDefault: false };
+      // If stored map is the old format (sub-status → parent), treat as empty
+      const isNewFormat = Object.values(statusSubStatusMap).every(v => typeof v === "object" && ("preset" in v || "postset" in v));
+      const resolvedMap = isNewFormat ? statusSubStatusMap : {};
+      return {
+        ota,
+        statusSubStatusMap: resolvedMap,
+        subStatuses: deriveSubStatuses(resolvedMap),
+        updatedAt: row.updatedAt,
+        updatedBy: row.updatedBy,
+        isDefault: false,
+      };
     }
-    // Default config — build subStatusMap from DEFAULTS
-    const def = DEFAULTS[ota] ?? { subStatuses: DEFAULT_SUB_STATUSES, statusMap: DEFAULT_STATUS_MAP };
-    const defSubStatusMap: Record<string, string> = {};
-    for (const ss of def.subStatuses) {
-      // Use the first status from the statusMap as the parent, or the ss name itself
-      const parents = def.statusMap[ss];
-      defSubStatusMap[ss] = parents?.[0] ?? ss;
-    }
+    // Default: Agoda gets the built-in map, others get empty
+    const defaultMap = ota === "Agoda" ? AGODA_DEFAULT_MAP : {};
     return {
-      ota, ...def, subStatusMap: defSubStatusMap,
-      updatedAt: null, updatedBy: null, isDefault: true,
+      ota,
+      statusSubStatusMap: defaultMap,
+      subStatuses: deriveSubStatuses(defaultMap),
+      updatedAt: null,
+      updatedBy: null,
+      isDefault: true,
     };
   });
 
@@ -163,23 +112,18 @@ export async function POST(req: NextRequest) {
   if (!session || (session.role !== "admin" && session.role !== "head"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  // Accepts subStatuses (legacy) OR subStatusMap (new — sub-status → parent status)
-  const { ota, subStatuses, subStatusMap } = await req.json() as {
-    ota: string; subStatuses?: string[]; subStatusMap?: Record<string, string>;
+  const { ota, statusSubStatusMap } = await req.json() as {
+    ota: string; statusSubStatusMap: StatusSubStatusMap;
   };
 
-  if (!ota)
+  if (!ota || !statusSubStatusMap)
     return Response.json({ error: "Invalid payload" }, { status: 400 });
-
-  // Derive subStatuses from subStatusMap keys if provided
-  const resolvedSubStatuses: string[] = subStatusMap
-    ? Object.keys(subStatusMap)
-    : (subStatuses ?? []);
-
-  const resolvedSubStatusMap = subStatusMap ?? {};
 
   const sql = getSql();
   await ensureTable(sql);
+
+  // statuses column: list of OTA status keys (for legacy compat)
+  const statusKeys = Object.keys(statusSubStatusMap);
 
   await sql.query(`
     INSERT INTO ota_status_config (ota, statuses, sub_statuses, updated_at, updated_by)
@@ -189,7 +133,7 @@ export async function POST(req: NextRequest) {
       sub_statuses = $3::jsonb,
       updated_at   = NOW(),
       updated_by   = $4
-  `, [ota, JSON.stringify(resolvedSubStatuses), JSON.stringify(resolvedSubStatusMap), session.name]);
+  `, [ota, JSON.stringify(statusKeys), JSON.stringify(statusSubStatusMap), session.name]);
 
   return Response.json({ ok: true });
 }

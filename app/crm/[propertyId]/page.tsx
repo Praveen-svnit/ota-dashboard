@@ -160,7 +160,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
   const [logs,     setLogs]     = useState<Log[]>([]);
 
   const [loading,  setLoading]  = useState(true);
-  const [otaConfigs, setOtaConfigs] = useState<Record<string, { subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }>>({});
+  const [otaConfigs, setOtaConfigs] = useState<Record<string, { statusSubStatusMap: Record<string, { preset: string; postset: string }>; subStatuses: string[] }>>({});
 
   // Metrics
   const [metrics,    setMetrics]    = useState<Record<string, string>>({});
@@ -211,10 +211,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       .then((r) => r.json()).then((d) => setTaskUsers(d.users ?? []));
     fetch("/api/admin/status-config")
       .then((r) => r.json())
-      .then((d: { configs?: { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }[] }) => {
+      .then((d: { configs?: { ota: string; statusSubStatusMap: Record<string, { preset: string; postset: string }>; subStatuses: string[] }[] }) => {
         if (!d.configs) return;
-        const map: Record<string, { subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string> }> = {};
-        for (const c of d.configs) map[c.ota] = { subStatuses: c.subStatuses, statusMap: c.statusMap, subStatusMap: c.subStatusMap ?? {} };
+        const map: Record<string, { statusSubStatusMap: Record<string, { preset: string; postset: string }>; subStatuses: string[] }> = {};
+        for (const c of d.configs) map[c.ota] = { statusSubStatusMap: c.statusSubStatusMap ?? {}, subStatuses: c.subStatuses ?? [] };
         setOtaConfigs(map);
       })
       .catch(() => {/* non-admin users may get 403 — silently ignore */});
@@ -222,15 +222,11 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
 
   function getStatusOptions(ota: string): string[] {
     const cfg = otaConfigs[ota];
-    if (!cfg) return ota === "Agoda" ? Object.keys(AGODA_STATUS_MAP) : STATUS_OPTIONS_FALLBACK;
-    // Derive unique statuses from the statusMap values
-    return [...new Set(Object.values(cfg.statusMap).flat())];
-  }
-
-  function getSubStatusOptions(ota: string): string[] {
-    const cfg = otaConfigs[ota];
-    if (!cfg) return SUB_STATUS_OPTIONS_FALLBACK;
-    return cfg.subStatuses;
+    if (cfg) {
+      const keys = Object.keys(cfg.statusSubStatusMap);
+      if (keys.length) return keys;
+    }
+    return ota === "Agoda" ? Object.keys(AGODA_STATUS_MAP) : STATUS_OPTIONS_FALLBACK;
   }
 
   async function addOta(ota: string) {
@@ -340,19 +336,23 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       userRole: "",
     };
 
-    // When sub-status is saved: auto-derive and save the parent status from config
-    const ota = listings.find(l => l.id === listingId)?.ota ?? "";
-    const autoStatus = field === "subStatus"
-      ? (otaConfigs[ota]?.subStatusMap?.[value] ?? null)
+    // When status is saved: auto-derive and save the sub-status from config (based on pre/post)
+    const listing = listings.find(l => l.id === listingId);
+    const ota = listing?.ota ?? "";
+    const cfg = otaConfigs[ota];
+    const prePost = listing?.prePost ?? "";
+    const prePostKey: "preset" | "postset" = prePost.toLowerCase().includes("post") ? "postset" : "preset";
+    const autoSubStatus = field === "status" && cfg
+      ? (cfg.statusSubStatusMap[value]?.[prePostKey] ?? null)
       : null;
 
-    if (field === "subStatus" && autoStatus) {
+    if (field === "status" && autoSubStatus) {
       await fetch("/api/crm/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otaListingId: listingId, propertyId, field: "status", value: autoStatus, note: `Auto-derived from sub-status: ${value}` }),
+        body: JSON.stringify({ otaListingId: listingId, propertyId, field: "subStatus", value: autoSubStatus, note: `Auto-derived from status: ${value}` }),
       });
-      setListings(prev => prev.map(l => l.id === listingId ? { ...l, subStatus: value, status: autoStatus, crmUpdatedAt: now } : l));
+      setListings(prev => prev.map(l => l.id === listingId ? { ...l, status: value, subStatus: autoSubStatus, crmUpdatedAt: now } : l));
     } else {
       setListings(prev => prev.map(l => l.id === listingId
         ? { ...l, [field]: value, crmUpdatedAt: now } : l));
@@ -576,70 +576,52 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
                           </span>
                         </div>
 
-                        {/* Status — read-only, auto-derived from sub-status config */}
+                        {/* Status (editable) + Sub-status (auto-derived, read-only) */}
                         {(() => {
+                          const cfgMap = otaConfigs[activeListing.ota]?.statusSubStatusMap ?? {};
+                          const prePostKey: "preset" | "postset" = (activeListing.prePost ?? "").toLowerCase().includes("post") ? "postset" : "preset";
+                          const derivedSubStatus = cfgMap[activeListing.status ?? ""]?.[prePostKey] ?? activeListing.subStatus ?? "";
                           return (
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            {/* Status badge — read-only */}
-                            <span style={{
-                              display: "inline-flex", alignItems: "center", gap: 5,
-                              background: sc.bg, color: sc.color,
-                              padding: "5px 12px", borderRadius: 20,
-                              fontSize: 13, fontWeight: 700, lineHeight: 1,
-                            }}>
-                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
-                              {activeListing.status || "—"}
-                            </span>
-
-                            {/* Sub-status tag — editable */}
-                            {isEditing("subStatus") ? (
+                            {/* Status — editable */}
+                            {isEditing("status") ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 380 }}>
                                 <select value={editValue} onChange={(e) => setEditValue(e.target.value)}
                                   style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #CBD5E160", fontSize: 13, fontWeight: 600, background: "#FFF" }}>
-                                  {getSubStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
+                                  {getStatusOptions(activeListing.ota).map((s) => <option key={s} value={s}>{s}</option>)}
                                 </select>
                                 <input value={editNote} onChange={(e) => { setEditNote(e.target.value); setNoteErr(false); }}
                                   placeholder="Reason for change (required)…"
-                                  style={{ padding: "7px 10px", borderRadius: 8, fontSize: 12,
-                                    border: `1px solid ${noteErr ? "#FCA5A5" : "#E2E8F0"}`,
-                                    outline: "none", background: noteErr ? "#FEF2F2" : "#F8FAFC" }} />
+                                  style={{ padding: "7px 10px", borderRadius: 8, fontSize: 12, border: `1px solid ${noteErr ? "#FCA5A5" : "#E2E8F0"}`, outline: "none", background: noteErr ? "#FEF2F2" : "#F8FAFC" }} />
                                 {noteErr && <span style={{ fontSize: 10, color: "#DC2626" }}>Note is required before saving</span>}
                                 <div style={{ display: "flex", gap: 6 }}>
-                                  <button onClick={() => saveField(activeListing.id, "subStatus", editValue)} disabled={saving}
-                                    style={{ padding: "7px 16px", borderRadius: 8, border: "none",
-                                      background: "#475569", color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                                  <button onClick={() => saveField(activeListing.id, "status", editValue)} disabled={saving}
+                                    style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "#475569", color: "#FFF", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                                     {saving ? "Saving…" : "Save"}
                                   </button>
                                   <button onClick={() => { setEditing(null); setEditNote(""); setNoteErr(false); }}
-                                    style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0",
-                                      background: "#FFF", fontSize: 12, cursor: "pointer", color: "#64748B" }}>
+                                    style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#FFF", fontSize: 12, cursor: "pointer", color: "#64748B" }}>
                                     Cancel
                                   </button>
                                 </div>
                               </div>
                             ) : (
                               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <span style={{
-                                  display: "inline-flex", alignItems: "center",
-                                  background: "#F1F5F9", color: "#475569",
-                                  padding: "5px 12px", borderRadius: 20,
-                                  fontSize: 12, fontWeight: 600, lineHeight: 1,
-                                  border: "1px solid #E2E8F0",
-                                }}>
-                                  {activeListing.subStatus || "—"}
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: sc.bg, color: sc.color, padding: "5px 12px", borderRadius: 20, fontSize: 13, fontWeight: 700, lineHeight: 1 }}>
+                                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: sc.dot, flexShrink: 0 }} />
+                                  {activeListing.status || "—"}
                                 </span>
-                                <button onClick={() => {
-                                  setEditing({ id: activeListing.id, field: "subStatus" });
-                                  setEditValue(activeListing.subStatus ?? "");
-                                  setEditNote(""); setNoteErr(false);
-                                }}
-                                  style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none",
-                                    cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
+                                <button onClick={() => { setEditing({ id: activeListing.id, field: "status" }); setEditValue(activeListing.status ?? ""); setEditNote(""); setNoteErr(false); }}
+                                  style={{ fontSize: 10, color: "#CBD5E1", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4 }}
                                   onMouseEnter={e => (e.currentTarget.style.color = "#94A3B8")}
                                   onMouseLeave={e => (e.currentTarget.style.color = "#CBD5E1")}>✎</button>
                               </div>
                             )}
 
+                            {/* Sub-status — read-only, auto-derived from status config */}
+                            <span style={{ display: "inline-flex", alignItems: "center", background: "#F1F5F9", color: "#475569", padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, lineHeight: 1, border: "1px solid #E2E8F0" }}>
+                              {derivedSubStatus || "—"}
+                            </span>
                           </div>
                           );
                         })()}
