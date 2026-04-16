@@ -68,6 +68,13 @@ function normalizeSs(s: string | null | undefined): string {
   return s.trim();
 }
 
+// Type for OTA status config (used in listing creation + config tab)
+type OtaStatusConfig = {
+  ota: string; subStatuses: string[]; statusMap: Record<string, string[]>;
+  subStatusMap: Record<string, string>; updatedAt: string | null;
+  updatedBy: string | null; isDefault: boolean;
+};
+
 const STATUS_OPTIONS_LC = [
   "New", "Shell Created", "Live", "Not Live", "Ready to Go Live",
   "Content in Progress", "Listing in Progress", "Pending", "Soldout", "Closed",
@@ -377,7 +384,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("live");
 
   // Status Config tab state
-  type OtaStatusConfig = { ota: string; subStatuses: string[]; statusMap: Record<string, string[]>; subStatusMap: Record<string, string>; updatedAt: string | null; updatedBy: string | null; isDefault: boolean };
   const [scConfig,      setScConfig]      = useState<OtaStatusConfig | null>(null);
   const [scSubStatusMap,setScSubStatusMap] = useState<Record<string, string>>({});  // editing state: { subStatus → parentStatus }
   const [scAllSs,       setScAllSs]       = useState<string[]>([]);
