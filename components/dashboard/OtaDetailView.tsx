@@ -398,7 +398,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
   const [cbDirty,         setCbDirty]         = useState<Record<string, Record<string, string>>>({});  // propertyId → {cb_key: value}
   const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});                 // propertyId → saving
-  const [cbExpanded,      setCbExpanded]      = useState<Set<string>>(new Set());                      // expanded propertyIds
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -1647,7 +1646,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           }
 
           function lcSelectByFhIds() {
-            const ids = lcBulkIds.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+            const ids = lcBulkIds.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
             if (!ids.length) return;
             const matched = new Set<number>();
             for (const row of lcFiltered) {
@@ -1657,7 +1656,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             setLcBulkIds("");
           }
 
-          const COLS = "28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px 44px";
+          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 220px" : ""} 44px`;
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1704,7 +1703,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     value={lcBulkIds}
                     onChange={e => setLcBulkIds(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") lcSelectByFhIds(); }}
-                    placeholder="FH001, FH002…"
+                    placeholder="FH001 FH002…"
                     style={{ padding: "4px 8px", border: "none", borderRadius: 6, fontSize: 11, outline: "none", background: "transparent", width: 160, color: "#374151" }}
                   />
                   <button onClick={lcSelectByFhIds} disabled={!lcBulkIds.trim()}
@@ -1775,7 +1774,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 1650 }}>
+                <div style={{ minWidth: otaName === "Agoda" ? 1870 : 1650 }}>
                   {/* Header row */}
                   <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
                     <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1785,7 +1784,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                     </div>
                     <div style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, display: "flex", alignItems: "center", borderLeft: "1px solid #E2E8F0" }}>FH ID</div>
-                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",""].map(h => (
+                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",...(otaName === "Agoda" ? ["Content Boxes"] : []),""].map(h => (
                       <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
                     ))}
                   </div>
@@ -1812,7 +1811,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
                     const sc = getSSColor(subStatusVal);
 
-                    const isCbExpanded = cbExpanded.has(row.propertyId);
                     const cbItems = [
                       { key: "cb_mapping",           label: "Mapping" },
                       { key: "cb_room_plan",          label: "Room Plan" },
@@ -1835,7 +1833,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           })
                         )
                       );
-                      // Merge dirty into row.metrics
                       setLcRows(prev => prev.map(r => r.propertyId === propertyId
                         ? { ...r, metrics: { ...(r.metrics ?? {}), ...dirty } }
                         : r
@@ -1845,8 +1842,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     }
 
                     return (
-                      <div key={row.otaListingId}>
-                      <div style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: isCbExpanded ? "none" : "1px solid #F0F4F8", alignItems: "center", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
+                      <div key={row.otaListingId} style={{ display: "grid", gridTemplateColumns: COLS, padding: "0 8px", background: rowBg, borderBottom: "1px solid #F0F4F8", alignItems: "stretch", outline: isSel ? "2px solid #7C3AED" : "none", outlineOffset: -1 }}>
                         {/* Checkbox */}
                         <div style={{ padding: "8px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <input type="checkbox" checked={isSel} onChange={() => setLcSelected(prev => { const n = new Set(prev); n.has(row.otaListingId) ? n.delete(row.otaListingId) : n.add(row.otaListingId); return n; })}
@@ -2000,67 +1996,51 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Save feedback / CRM / CB toggle */}
-                        <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
-                          {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
-                            : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
-                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
-                                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color: "#fff", borderRadius: 20, textDecoration: "none", boxShadow: "0 2px 6px #5D87FF30", whiteSpace: "nowrap" }}>
-                                CRM ↗
-                              </a>}
-                          {otaName === "Agoda" && (
-                            <button onClick={() => setCbExpanded(prev => { const n = new Set(prev); n.has(row.propertyId) ? n.delete(row.propertyId) : n.add(row.propertyId); return n; })}
-                              title="Content Boxes"
-                              style={{ padding: "2px 6px", borderRadius: 8, border: `1px solid ${isCbExpanded ? "#7C3AED" : "#E2E8F0"}`, background: isCbExpanded ? "#EDE9FE" : "#F8FAFC", color: isCbExpanded ? "#6D28D9" : "#94A3B8", fontSize: 9, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                              {isCbExpanded ? "▲ CB" : "▼ CB"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content Boxes panel — Agoda only */}
-                      {otaName === "Agoda" && isCbExpanded && (() => {
-                        const savedMetrics = row.metrics ?? {};
-                        const dirty = cbDirty[row.propertyId] ?? {};
-                        const hasDirty = Object.keys(dirty).length > 0;
-                        const isSavingCb = cbSaving[row.propertyId];
-                        return (
-                          <div style={{ padding: "10px 16px 12px", background: "#FAF5FF", borderBottom: "1px solid #F0F4F8", borderLeft: "3px solid #7C3AED" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "#6D28D9", textTransform: "uppercase", letterSpacing: "0.06em" }}>Content Boxes</span>
-                              {hasDirty && (
-                                <button onClick={() => saveCbRow(row.propertyId)} disabled={!!isSavingCb}
-                                  style={{ padding: "3px 12px", borderRadius: 12, border: "none", background: "#7C3AED", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                                  {isSavingCb ? "Saving…" : "Save"}
-                                </button>
-                              )}
-                              {!hasDirty && Object.keys(savedMetrics).some(k => k.startsWith("cb_")) && (
-                                <span style={{ fontSize: 9, color: "#059669", fontWeight: 600 }}>✓ Saved</span>
-                              )}
-                            </div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {/* Content Boxes — Agoda only */}
+                        {otaName === "Agoda" && (() => {
+                          const savedMetrics = row.metrics ?? {};
+                          const dirty = cbDirty[row.propertyId] ?? {};
+                          const hasDirty = Object.keys(dirty).length > 0;
+                          const isSavingCb = cbSaving[row.propertyId];
+                          return (
+                            <div style={{ borderLeft: "1px solid #F0F4F8", padding: "6px 8px", display: "flex", flexDirection: "column", gap: 3, background: hasDirty ? "#FEFCE8" : "transparent" }}>
                               {cbItems.map(item => {
                                 const saved = savedMetrics[item.key] ?? "";
                                 const draft = dirty[item.key] ?? saved;
                                 const isDirty = draft !== saved;
                                 return (
-                                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 5, background: isDirty ? "#FEF9C3" : "#fff", borderRadius: 8, padding: "4px 8px", border: `1px solid ${isDirty ? "#FCD34D" : "#E9D5FF"}` }}>
-                                    <span style={{ fontSize: 10, color: "#4B5563", whiteSpace: "nowrap" }}>{item.label}</span>
+                                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <span style={{ fontSize: 9, color: "#64748B", width: 72, flexShrink: 0 }}>{item.label}</span>
                                     {["Yes", "No"].map(opt => (
-                                      <button key={opt} onClick={() => setCbDirty(p => ({ ...p, [row.propertyId]: { ...p[row.propertyId], [item.key]: opt } }))}
-                                        style={{ padding: "2px 7px", borderRadius: 10, fontSize: 9, fontWeight: 700, cursor: "pointer", border: "none",
+                                      <button key={opt} onClick={() => setCbDirty(p => ({ ...p, [row.propertyId]: { ...(p[row.propertyId] ?? {}), [item.key]: opt } }))}
+                                        style={{ padding: "1px 6px", borderRadius: 8, fontSize: 9, fontWeight: 700, cursor: "pointer", border: "none",
                                           background: draft === opt ? (opt === "Yes" ? "#D1FAE5" : "#FEE2E2") : "#F1F5F9",
-                                          color: draft === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#94A3B8" }}>
+                                          color: draft === opt ? (opt === "Yes" ? "#059669" : "#DC2626") : "#CBD5E1",
+                                          outline: isDirty && draft === opt ? "1px solid #FCD34D" : "none" }}>
                                         {opt}
                                       </button>
                                     ))}
                                   </div>
                                 );
                               })}
+                              {hasDirty && (
+                                <button onClick={() => saveCbRow(row.propertyId)} disabled={!!isSavingCb}
+                                  style={{ marginTop: 2, padding: "2px 0", borderRadius: 6, border: "none", background: "#7C3AED", color: "#fff", fontSize: 9, fontWeight: 700, cursor: "pointer", width: "100%" }}>
+                                  {isSavingCb ? "Saving…" : "Save CB"}
+                                </button>
+                              )}
                             </div>
-                          </div>
-                        );
-                      })()}
+                          );
+                        })()}
+                        {/* Save feedback / CRM */}
+                        <div style={{ padding: "8px 6px", borderLeft: "1px solid #F0F4F8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {isSaveOk ? <span style={{ fontSize: 12, color: "#16A34A" }}>✓</span>
+                            : isSaveErr ? <span style={{ fontSize: 12, color: "#DC2626" }} title="Save failed">✕</span>
+                            : <a href={`/crm/${row.propertyId}`} target="_blank" rel="noopener noreferrer"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "4px 10px", fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#667eea 0%,#5D87FF 100%)", color: "#fff", borderRadius: 20, textDecoration: "none", boxShadow: "0 2px 6px #5D87FF30", whiteSpace: "nowrap" }}>
+                                CRM ↗
+                              </a>}
+                        </div>
                       </div>
                     );
                   })}
