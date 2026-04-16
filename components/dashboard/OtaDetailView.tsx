@@ -825,15 +825,17 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 12, fontWeight: 800, color: "#0F172A" }}>Overview</span>
                 <span style={{ fontSize: 10, color: "#94A3B8" }}>{grandTot2.toLocaleString()} listings</span>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  background: live2 > 0 ? "#DCFCE7" : "#F1F5F9",
-                  color: live2 > 0 ? "#166534" : "#64748B",
-                  padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: live2 > 0 ? "#22C55E" : "#9CA3AF" }} />
-                  {livePct2}% live
-                </span>
+                {propTab !== "listing" && (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    background: live2 > 0 ? "#DCFCE7" : "#F1F5F9",
+                    color: live2 > 0 ? "#166534" : "#64748B",
+                    padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: live2 > 0 ? "#22C55E" : "#9CA3AF" }} />
+                    {livePct2}% live
+                  </span>
+                )}
               </div>
               <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{ovvExpanded ? "▾" : "▸"}</span>
             </div>
