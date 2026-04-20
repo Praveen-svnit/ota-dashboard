@@ -75,7 +75,7 @@ export default function MigrationPage() {
   // Auth check
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
-      if (!d?.user || (d.user.role !== "admin" && d.user.role !== "head")) {
+      if (!d?.user) {
         router.replace("/login");
       } else {
         setRole(d.user.role);

@@ -109,7 +109,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session || (session.role !== "admin" && session.role !== "head"))
+  if (!session || (session.role !== "admin" && session.role !== "head" && session.role !== "intern"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
   const { ota, statusSubStatusMap } = await req.json() as {
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
-  if (!session || (session.role !== "admin" && session.role !== "head"))
+  if (!session || (session.role !== "admin" && session.role !== "head" && session.role !== "intern"))
     return Response.json({ error: "Forbidden" }, { status: 403 });
 
   const { ota } = await req.json() as { ota: string };
