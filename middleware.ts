@@ -7,7 +7,7 @@ const SECRET      = new TextEncoder().encode(
 );
 const COOKIE_NAME = "ota_session";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/sync-inventory", "/api/sync-rns", "/api/init-db"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/sync-inventory", "/api/sync-ota-listings", "/api/sync-rns", "/api/init-db", "/api/cron/"];
 
 async function isValidApiKey(token: string, req: NextRequest): Promise<boolean> {
   if (!token.startsWith("ota_")) return false;
