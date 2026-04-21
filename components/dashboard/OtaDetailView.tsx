@@ -411,6 +411,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcSelected,   setLcSelected]   = useState<Set<number>>(new Set());
   const [lcEditCell,   setLcEditCell]   = useState<{ id: number; field: string } | null>(null);
   const [lcSaving,     setLcSaving]     = useState(false);
+  const [lcOtaIdUploadOpen, setLcOtaIdUploadOpen] = useState(false);
+  const [lcOtaIdPaste,      setLcOtaIdPaste]      = useState("");
   const [lcSaveOk,     setLcSaveOk]     = useState<Set<number>>(new Set());
   const [lcSaveErr,    setLcSaveErr]    = useState<Set<number>>(new Set());
   const [lcBulkField,     setLcBulkField]     = useState("");
@@ -1842,6 +1844,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   </button>
                 </div>
                 <button onClick={() => loadLc()} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#374151" }}>↻</button>
+                <button onClick={() => { setLcOtaIdPaste(""); setLcOtaIdUploadOpen(true); }}
+                  style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #7C3AED", background: "#EDE9FE", fontSize: 11, fontWeight: 700, cursor: "pointer", color: "#7C3AED" }}>
+                  ⬆ Upload OTA IDs
+                </button>
                 <div style={{ flex: 1 }} />
                 {lcDirtyCount > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#FEF9C3", color: "#854D0E", border: "1px solid #FDE68A", borderRadius: 20, padding: "3px 10px" }}>{lcDirtyCount} unsaved</span>}
                 {lcDirtyCount > 0 && (
@@ -1861,7 +1867,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 const BULK_FIELDS = [
                   { key: "status",      label: "Status",       type: "select", options: (() => { const s = Array.from(new Set([...scOtaStatuses, ...Object.keys(scStatusMap)])).sort(); return s.length ? s : STATUS_OPTIONS_LC; })() },
                   { key: "prePost",     label: "Pre/Post",     type: "select", options: ["Preset","Postset"] },
-                  { key: "otaId",       label: "OTA ID",       type: "text",   options: [] },
                   { key: "batchNumber", label: "Batch",        type: "text",   options: [] },
                   { key: "liveDate",    label: "OTA Live Date",type: "date",   options: [] },
                   { key: "listingLink", label: "Listing Link", type: "text",   options: [] },
@@ -1902,6 +1907,94 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     {lcCbBulkState === "err" && <span style={{ fontSize: 11, color: "#FCA5A5", fontWeight: 700 }}>✗ Some saves failed</span>}
                     <button onClick={() => setLcSelected(new Set())}
                       style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid #4338CA", background: "transparent", color: "#818CF8", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                );
+              })()}
+
+              {/* OTA ID Upload Modal */}
+              {lcOtaIdUploadOpen && (() => {
+                // Parse pasted text: each line = "FH_ID<tab or comma>OTA_ID"
+                const lines = lcOtaIdPaste.split("\n").map(l => l.trim()).filter(Boolean);
+                const parsed: { fhId: string; otaId: string; row: LcRow | undefined }[] = [];
+                for (const line of lines) {
+                  const parts = line.includes("\t") ? line.split("\t") : line.split(",");
+                  const fhId  = parts[0]?.trim();
+                  const otaId = parts[1]?.trim();
+                  if (!fhId || !otaId) continue;
+                  // skip header row
+                  if (fhId.toLowerCase().includes("fh") && isNaN(Number(otaId))) continue;
+                  const row = lcRows.find(r => r.propertyId === fhId);
+                  parsed.push({ fhId, otaId, row });
+                }
+                const matched   = parsed.filter(p => p.row);
+                const unmatched = parsed.filter(p => !p.row);
+
+                function applyOtaIds() {
+                  for (const p of matched) {
+                    if (p.row) lcSetField(p.row.otaListingId, "otaId", p.otaId);
+                  }
+                  setLcOtaIdUploadOpen(false);
+                  setLcOtaIdPaste("");
+                }
+
+                return (
+                  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ background: "#fff", borderRadius: 14, width: 620, maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+                      {/* Header */}
+                      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>Bulk Upload OTA IDs</div>
+                          <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>Paste two columns: FH ID and OTA ID (tab or comma separated)</div>
+                        </div>
+                        <button onClick={() => setLcOtaIdUploadOpen(false)} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "#94A3B8", lineHeight: 1 }}>✕</button>
+                      </div>
+
+                      {/* Paste area */}
+                      <div style={{ padding: "14px 20px", borderBottom: "1px solid #E2E8F0" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                          Paste data below (e.g. from Excel — FH ID column + OTA ID column)
+                        </div>
+                        <textarea
+                          value={lcOtaIdPaste}
+                          onChange={e => setLcOtaIdPaste(e.target.value)}
+                          placeholder={"FH12345\t98765432\nFH12346\t98765433\n..."}
+                          rows={5}
+                          style={{ width: "100%", fontFamily: "monospace", fontSize: 12, padding: "8px 10px", border: "1.5px solid #C7D2FE", borderRadius: 8, outline: "none", resize: "vertical", color: "#1E293B", background: "#F8FAFF", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Preview */}
+                      {parsed.length > 0 && (
+                        <div style={{ padding: "12px 20px", overflowY: "auto", flex: 1 }}>
+                          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#16A34A", background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 20, padding: "2px 10px" }}>✓ {matched.length} matched</div>
+                            {unmatched.length > 0 && <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 20, padding: "2px 10px" }}>✗ {unmatched.length} not found</div>}
+                          </div>
+                          <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px", background: "#F1F5F9", padding: "6px 10px", fontSize: 9, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", gap: 8 }}>
+                              <div>FH ID</div><div>Property</div><div>OTA ID</div><div>Status</div>
+                            </div>
+                            {parsed.map((p, i) => (
+                              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px", padding: "6px 10px", fontSize: 11, borderTop: "1px solid #F1F5F9", gap: 8, background: p.row ? "#fff" : "#FEF2F2" }}>
+                                <div style={{ fontFamily: "monospace", color: "#374151", fontWeight: 600 }}>{p.fhId}</div>
+                                <div style={{ color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.row?.name ?? "—"}</div>
+                                <div style={{ fontFamily: "monospace", color: "#7C3AED", fontWeight: 600 }}>{p.otaId}</div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: p.row ? "#16A34A" : "#DC2626" }}>{p.row ? "✓ Match" : "✗ Not found"}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Footer */}
+                      <div style={{ padding: "12px 20px", borderTop: "1px solid #E2E8F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <button onClick={() => setLcOtaIdUploadOpen(false)} style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#374151" }}>Cancel</button>
+                        <button onClick={applyOtaIds} disabled={matched.length === 0}
+                          style={{ padding: "7px 20px", borderRadius: 8, border: "none", background: matched.length > 0 ? "linear-gradient(135deg,#8B5CF6,#7C3AED)" : "#E2E8F0", color: matched.length > 0 ? "#fff" : "#9CA3AF", fontSize: 12, fontWeight: 700, cursor: matched.length > 0 ? "pointer" : "not-allowed", boxShadow: matched.length > 0 ? "0 2px 8px #7C3AED40" : "none" }}>
+                          Apply {matched.length > 0 ? `${matched.length} OTA IDs` : ""}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
