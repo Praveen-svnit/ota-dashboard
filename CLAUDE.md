@@ -103,3 +103,30 @@ TAT color scale (days): ≤15 → gray `#64748B`, ≤30 → amber `#B45309`, ≤
 
 ### Google Sheets sync date parsing
 `sync-ota-listings` handles four date formats: Excel serial (30000–60000), `d/M/yyyy`, `d-Mon-yyyy`, `M/D/YYYY`, `YYYY-MM-DD`.
+
+### Status Config system
+Each OTA has a `statusSubStatusMap: Record<string, { preset: string; postset: string }>` stored in `ota_status_config.sub_statuses` (JSONB). For each OTA status, it maps to a sub-status for Preset and PostSet mode. Sub-status is always auto-derived — never manually edited in Listing Creation or CRM.
+
+- API: `GET/POST/DELETE /api/admin/status-config` — fetch/save per-OTA config. Allowed roles: admin, head, intern.
+- API: `GET /api/crm/ota-statuses?ota=X` — returns unique statuses from `ota_listing` for that OTA (used to populate Status Config table rows and Listing Creation status dropdown).
+- Agoda default map is hardcoded in the route (`AGODA_DEFAULT_MAP`); others default to `{}`.
+- Status Config tab lives on each OTA's detail page (tab key `"config"`) in `OtaDetailView.tsx`.
+- Listing Creation: Status = editable dropdown (merged `scOtaStatuses` + `Object.keys(scStatusMap)`). Sub-status = read-only, derived as `scStatusMap[status]?.[preset|postset]`.
+- CRM page: same pattern — Status editable, sub-status read-only derived.
+
+### SWC / React hooks rules (critical — caused prod crashes twice)
+- Never call `useState` / `React.useState` inside: IIFE blocks, conditional renders, `.map()` callbacks, or inline components defined inside render.
+- Never declare `async function foo()` inside `.map()` callbacks — use `const foo = async () => {}` instead.
+- Never declare `type Foo = ...` inside a component function body — declare at module scope.
+- All hooks must be at the top level of the component function. Move state used in conditional tabs to the component's top-level state.
+
+### Middleware auth / cron (important)
+`middleware.ts` `PUBLIC_PATHS` must include any route that is called without a user session:
+- `/api/cron/` — Vercel Cron sends `Bearer <CRON_SECRET>` which doesn't match the `ota_*` API key format; the route validates the secret itself.
+- `/api/sync-ota-listings` — called from the cron context.
+- If a sync route is missing from PUBLIC_PATHS it silently returns 401 and never runs.
+
+### Role access
+- Roles in use: `admin`, `head`, `intern`, (others).
+- Admin panel pages: accessible to all logged-in users; dangerous API actions (bootstrap-ota, api-keys CRUD) remain admin/head only.
+- Status Config save: admin + head + intern allowed.
