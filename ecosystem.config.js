@@ -12,7 +12,20 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3000,
-        // OTA_DB_PATH: "/absolute/path/to/ota.db"  ← set this on the server
+      },
+    },
+    {
+      name: "ota-auto-sync",
+      script: "scripts/auto-sync.js",
+      cwd: "./",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      // Waits 30s after startup, then syncs inventory + OTA listings every hour.
+      // APP_URL must match the port the Next.js server is running on.
+      env: {
+        NODE_ENV: "production",
+        APP_URL: "http://localhost:3000",
       },
     },
   ],
