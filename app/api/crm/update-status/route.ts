@@ -67,7 +67,19 @@ export async function POST(req: Request) {
   if (field === "note") {
     await sql`UPDATE ota_listing SET crm_note = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   } else if (field === "status") {
-    await sql`UPDATE ota_listing SET status = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
+    // Auto-derive sub_status from the OTA's status config so DB stays in sync
+    const configRows = await sql`
+      SELECT sub_statuses FROM ota_status_config WHERE ota = ${listing.ota} LIMIT 1
+    ` as Array<{ sub_statuses: Record<string, { preset: string; postset: string }> }>;
+    const statusMap   = configRows[0]?.sub_statuses ?? {};
+    const prePostKey  = (listing.pre_post ?? "").toLowerCase() === "postset" ? "postset" : "preset";
+    const derivedSS   = statusMap[value]?.[prePostKey] ?? null;
+
+    if (derivedSS) {
+      await sql`UPDATE ota_listing SET status = ${value}, sub_status = ${derivedSS}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
+    } else {
+      await sql`UPDATE ota_listing SET status = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
+    }
   } else if (field === "subStatus") {
     await sql`UPDATE ota_listing SET sub_status = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   } else if (field === "assignedTo") {
