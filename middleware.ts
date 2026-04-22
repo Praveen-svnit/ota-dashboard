@@ -70,7 +70,9 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return NextResponse.redirect(new URL("/login", req.url));
+  const loginUrl = new URL("/login", req.url);
+  loginUrl.searchParams.set("from", pathname + req.nextUrl.search);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

@@ -31,6 +31,16 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
     fetch("/api/auth/me").then((r) => r.ok ? r.json() : null).then((d) => d && setSessionUser(d.user));
   }, []);
 
+  // Persist last visited path so login page can redirect back after re-auth
+  useEffect(() => {
+    if (pathname && pathname !== "/login") {
+      try {
+        const search = searchParams.toString();
+        localStorage.setItem("ota_last_path", pathname + (search ? `?${search}` : ""));
+      } catch { /* private browsing */ }
+    }
+  }, [pathname, searchParams]);
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");

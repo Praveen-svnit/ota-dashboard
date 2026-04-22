@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
-  const router = useRouter();
+function LoginForm() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+  const fromParam    = searchParams.get("from");
+
+  // Resolve redirect destination: ?from= > localStorage last path > "/"
+  function getRedirectDest(): string {
+    if (fromParam && fromParam.startsWith("/") && !fromParam.startsWith("//") && !fromParam.startsWith("/login")) {
+      return fromParam;
+    }
+    try {
+      const local = localStorage.getItem("ota_last_path");
+      if (local && local.startsWith("/") && !local.startsWith("/login")) return local;
+    } catch { /* private browsing */ }
+    return "/";
+  }
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error,    setError]    = useState("");
@@ -22,7 +36,7 @@ export default function LoginPage() {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Login failed"); return; }
-      router.push("/");
+      router.push(getRedirectDest());
       router.refresh();
     } catch {
       setError("Network error");
@@ -126,5 +140,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
