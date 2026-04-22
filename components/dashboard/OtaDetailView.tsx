@@ -420,6 +420,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcBulkStatus,    setLcBulkStatus]    = useState("");
   const [lcBulkSubStatus, setLcBulkSubStatus] = useState("");
   const [lcBulkNote,      setLcBulkNote]      = useState("");
+  const [lcLiveFilter,    setLcLiveFilter]    = useState<"all" | "live" | "notlive">("notlive");
   const [lcBulkIds,       setLcBulkIds]       = useState("");
   const [lcOvvFilter,     setLcOvvFilter]     = useState<{ label: string; field: "status" | "subStatus"; values: string[] } | null>(null);
   const [cbSaving,        setCbSaving]        = useState<Record<string, boolean>>({});  // propertyId+cbKey → saving
@@ -559,10 +560,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     fetch(`/api/crm/properties?${p}`)
       .then(r => r.json())
       .then(d => {
-        // Normalise sub_status to match dashboard pivot labels, then exclude Live
+        // Normalise sub_status to match dashboard pivot labels
         const rows = ((d.rows ?? []) as LcRow[])
-          .map(r => ({ ...r, subStatus: normalizeSs(r.subStatus) }))
-          .filter(r => r.subStatus !== "Live");
+          .map(r => ({ ...r, subStatus: normalizeSs(r.subStatus) }));
         setLcRows(rows);
         setLcLoaded(true);
       })
@@ -1627,6 +1627,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             const matchSearch = !s || r.name?.toLowerCase().includes(s) || r.propertyId?.toLowerCase().includes(s) || r.city?.toLowerCase().includes(s);
             // subStatus is already normalised in lcRows; toolbar dropdown filters by it
             const matchStatus = lcStatusFilter === "all" || (r.subStatus ?? "").toLowerCase() === lcStatusFilter.toLowerCase();
+            const isLive = (r.subStatus ?? "") === "Live";
+            const matchLiveFilter = lcLiveFilter === "all" || (lcLiveFilter === "live" ? isLive : !isLive);
             const matchOvv = !lcOvvFilter || lcOvvFilter.values.some(v =>
               lcOvvFilter.field === "status"
                 ? (r.status ?? "").toLowerCase() === v.toLowerCase()
@@ -1637,7 +1639,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               if (lcCbFilterVal === "Not Set") return !raw;
               return (raw || "No") === lcCbFilterVal;
             })();
-            return matchSearch && matchStatus && matchOvv && matchCb;
+            return matchSearch && matchStatus && matchLiveFilter && matchOvv && matchCb;
           });
 
           const lcDirtyCount = Object.keys(lcDirty).length;
@@ -1748,7 +1750,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             background: lcIsDirty(id, field) ? "#FEF9C3" : "transparent",
           });
 
-          const allSubStatuses = [...new Set(lcRows.map(r => r.subStatus).filter(Boolean))].sort();
+          const liveFilteredRows = lcRows.filter(r => {
+            const isLive = (r.subStatus ?? "") === "Live";
+            return lcLiveFilter === "all" || (lcLiveFilter === "live" ? isLive : !isLive);
+          });
+          const allSubStatuses = [...new Set(liveFilteredRows.map(r => r.subStatus).filter(Boolean))].sort();
 
           const saveCbField = async (propertyId: string, cbKey: string, value: string) => {
             const k = propertyId + cbKey;
@@ -1789,6 +1795,22 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     <button onClick={() => setLcOvvFilter(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"#7C3AED", fontSize:12, lineHeight:1, padding:0 }}>×</button>
                   </div>
                 )}
+                {/* Live / Not Live toggle */}
+                <div style={{ display: "flex", borderRadius: 8, border: "1px solid #E2E8F0", overflow: "hidden", flexShrink: 0 }}>
+                  {(["notlive", "all", "live"] as const).map((v, i) => {
+                    const labels = { notlive: "Not Live", all: "All", live: "Live" };
+                    const active = lcLiveFilter === v;
+                    const activeColor = v === "live" ? "#16A34A" : v === "notlive" ? "#DC2626" : "#6366F1";
+                    return (
+                      <button key={v} onClick={() => setLcLiveFilter(v)}
+                        style={{ padding: "5px 10px", fontSize: 11, fontWeight: active ? 700 : 500, border: "none",
+                          borderLeft: i > 0 ? "1px solid #E2E8F0" : "none",
+                          background: active ? activeColor : "#F8FAFC", color: active ? "#fff" : "#64748B", cursor: "pointer" }}>
+                        {labels[v]}
+                      </button>
+                    );
+                  })}
+                </div>
                 {/* Sub-status filter */}
                 <select value={lcStatusFilter} onChange={e => setLcStatusFilter(e.target.value)}
                   style={{ padding: "6px 10px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, background: lcStatusFilter !== "all" ? "#EDE9FE" : "#F8FAFC", color: lcStatusFilter !== "all" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
