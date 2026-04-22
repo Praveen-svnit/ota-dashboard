@@ -2,9 +2,10 @@ module.exports = {
   apps: [
     {
       name: "ota-dashboard",
-      script: "node_modules/.bin/next",
+      script: "node_modules/next/dist/bin/next",
       args: "start",
       cwd: "./",
+      exec_mode: "fork",
       instances: 1,
       autorestart: true,
       watch: false,
@@ -18,6 +19,7 @@ module.exports = {
       name: "ota-auto-sync",
       script: "scripts/auto-sync.js",
       cwd: "./",
+      exec_mode: "fork",
       instances: 1,
       autorestart: true,
       watch: false,

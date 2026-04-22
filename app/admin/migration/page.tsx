@@ -60,6 +60,7 @@ export default function MigrationPage() {
   const [syncingInv,   setSyncingInv]   = useState(false);
   const [globalLog,    setGlobalLog]    = useState<string | null>(null);
   const [globalErr,    setGlobalErr]    = useState(false);
+  const [lastSynced,   setLastSynced]   = useState<string | null>(null);
 
   // Property search
   const [query,        setQuery]        = useState("");
@@ -72,6 +73,13 @@ export default function MigrationPage() {
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipSearch   = useRef(false);
 
+  function fetchLastSynced() {
+    fetch("/api/sync-inventory")
+      .then(r => r.json())
+      .then(d => setLastSynced(d.lastSynced ?? null))
+      .catch(() => {});
+  }
+
   // Auth check
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => {
@@ -79,6 +87,7 @@ export default function MigrationPage() {
         router.replace("/login");
       } else {
         setRole(d.user.role);
+        fetchLastSynced();
       }
     });
   }, [router]);
@@ -98,7 +107,7 @@ export default function MigrationPage() {
       const res  = await fetch("/api/sync-inventory", { method: "POST" });
       const json = await res.json();
       if (!res.ok || json.error) { setGlobalLog(json.error ?? "Unknown error"); setGlobalErr(true); }
-      else { setGlobalLog(json.message ?? "Sync complete."); setGlobalErr(false); }
+      else { setGlobalLog(json.message ?? "Sync complete."); setGlobalErr(false); fetchLastSynced(); }
     } catch (e: unknown) {
       setGlobalLog(e instanceof Error ? e.message : "Network error"); setGlobalErr(true);
     } finally { setSyncingInv(false); }
@@ -265,6 +274,20 @@ export default function MigrationPage() {
           <span style={{ animation: syncingInv ? "spin 1s linear infinite" : "none" }}>{syncingInv ? "⟳" : "⇅"}</span>
           {syncingInv ? "Syncing…" : "Sync Inventory to DB"}
         </button>
+
+        {/* Last sync timestamp */}
+        <span style={{
+          fontSize: 11, color: "#64748B", background: "#F8FAFC",
+          border: "1px solid #E2E8F0", borderRadius: 6, padding: "4px 10px",
+          display: "flex", alignItems: "center", gap: 5,
+        }}>
+          <span style={{ color: "#94A3B8" }}>Last synced:</span>
+          <span style={{ fontWeight: 600, color: lastSynced ? "#0F172A" : "#CBD5E1" }}>
+            {lastSynced
+              ? new Date(lastSynced).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+              : "Never"}
+          </span>
+        </span>
 
         {globalLog && (
           <span style={{ fontSize: 11, color: globalErr ? "#DC2626" : "#059669", fontWeight: 500 }}>

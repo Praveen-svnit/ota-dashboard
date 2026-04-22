@@ -145,6 +145,17 @@ async function runSync() {
   return { upserted, skipped, debug };
 }
 
+// Returns the timestamp of the last successful inventory sync
+export async function GET() {
+  try {
+    const sql = getSql();
+    const rows = await sql`SELECT MAX(synced_at) AS last_synced FROM inventory`;
+    return Response.json({ lastSynced: rows[0]?.last_synced ?? null });
+  } catch {
+    return Response.json({ lastSynced: null });
+  }
+}
+
 // Manual trigger — admin/head only
 export async function POST() {
   const session = await getSession();
