@@ -19,7 +19,15 @@ export function getSql(): SqlFn {
       ssl: false,
       max: 10,
       idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
       options: '-c search_path=public',
+    });
+
+    // Prevent idle-connection drops from crashing the process.
+    // pg.Pool emits 'error' on background client errors; without a listener
+    // Node.js treats it as an unhandled EventEmitter error and exits.
+    _pool.on('error', (err) => {
+      console.error('[db-pool] idle client error (non-fatal):', err.message);
     });
 
     const sql = async (strings: TemplateStringsArray, ...values: unknown[]) => {
