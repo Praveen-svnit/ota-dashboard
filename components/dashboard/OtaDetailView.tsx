@@ -522,7 +522,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     if (otaTo)           p.set("otaTo", otaTo);
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
-      .then(d => { setLiveData(d); setLivePage(page); })
+      .then(d => {
+        // Normalize sub_status labels same as Listing Creation and Not Live tabs
+        if (d.rows) d.rows = d.rows.map((r: NLRow) => ({ ...r, subStatus: normalizeSs(r.subStatus) }));
+        setLiveData(d); setLivePage(page);
+      })
       .catch(() => {})
       .finally(() => setLiveLoading(false));
   }
@@ -1967,7 +1971,10 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       {parsed.length > 0 && (
                         <div style={{ padding: "12px 20px", overflowY: "auto", flex: 1 }}>
                           <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "#16A34A", background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 20, padding: "2px 10px" }}>✓ {matched.length} matched</div>
+                            {matched.length > 0
+                              ? <div style={{ fontSize: 11, fontWeight: 700, color: "#16A34A", background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 20, padding: "2px 10px" }}>✓ {matched.length} matched</div>
+                              : <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 20, padding: "2px 10px" }}>No FH IDs matched — check the IDs and try again</div>
+                            }
                             {unmatched.length > 0 && <div style={{ fontSize: 11, fontWeight: 700, color: "#DC2626", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 20, padding: "2px 10px" }}>✗ {unmatched.length} not found</div>}
                           </div>
                           <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>

@@ -336,27 +336,18 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ prope
       userRole: "",
     };
 
-    // When status is saved: auto-derive and save the sub-status from config (based on pre/post)
+    // sub_status is auto-derived server-side in update-status API when field=status.
+    // Derive it here only for optimistic UI update (no second fetch needed).
     const listing = listings.find(l => l.id === listingId);
-    const ota = listing?.ota ?? "";
-    const cfg = otaConfigs[ota];
-    const prePost = listing?.prePost ?? "";
-    const prePostKey: "preset" | "postset" = prePost.toLowerCase().includes("post") ? "postset" : "preset";
-    const autoSubStatus = field === "status" && cfg
+    const cfg = otaConfigs[listing?.ota ?? ""];
+    const prePostKey: "preset" | "postset" = (listing?.prePost ?? "").toLowerCase().includes("post") ? "postset" : "preset";
+    const derivedSubStatus = field === "status" && cfg
       ? (cfg.statusSubStatusMap[value]?.[prePostKey] ?? null)
       : null;
 
-    if (field === "status" && autoSubStatus) {
-      await fetch("/api/crm/update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otaListingId: listingId, propertyId, field: "subStatus", value: autoSubStatus, note: `Auto-derived from status: ${value}` }),
-      });
-      setListings(prev => prev.map(l => l.id === listingId ? { ...l, status: value, subStatus: autoSubStatus, crmUpdatedAt: now } : l));
-    } else {
-      setListings(prev => prev.map(l => l.id === listingId
-        ? { ...l, [field]: value, crmUpdatedAt: now } : l));
-    }
+    setListings(prev => prev.map(l => l.id === listingId
+      ? { ...l, [field]: value, ...(derivedSubStatus ? { subStatus: derivedSubStatus } : {}), crmUpdatedAt: now }
+      : l));
 
     setLogs(prev => [newLog, ...prev]);
     setSaving(false);

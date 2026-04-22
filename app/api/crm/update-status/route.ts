@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 
 const FIELD_TO_COL: Record<string, string> = {
   status:       "status",
-  subStatus:    "sub_status",
+  // subStatus is intentionally excluded — it is always auto-derived from status via OTA config
   note:         "crm_note",
   assignedTo:   "assigned_to",
   liveDate:     "live_date",
@@ -75,11 +75,8 @@ export async function POST(req: Request) {
     const prePostKey  = (listing.pre_post ?? "").toLowerCase() === "postset" ? "postset" : "preset";
     const derivedSS   = statusMap[value]?.[prePostKey] ?? null;
 
-    if (derivedSS) {
-      await sql`UPDATE ota_listing SET status = ${value}, sub_status = ${derivedSS}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
-    } else {
-      await sql`UPDATE ota_listing SET status = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
-    }
+    // Always update sub_status: use derived value if config exists, else clear it to avoid stale mismatch
+    await sql`UPDATE ota_listing SET status = ${value}, sub_status = ${derivedSS}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   } else if (field === "subStatus") {
     await sql`UPDATE ota_listing SET sub_status = ${value}, crm_updated_at = ${now}, updated_by = ${session.id} WHERE id = ${otaListingId}`;
   } else if (field === "assignedTo") {
