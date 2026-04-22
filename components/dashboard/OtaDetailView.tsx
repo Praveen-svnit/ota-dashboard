@@ -1697,7 +1697,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
               const results = await Promise.all(selectedRows.map(r =>
                 fetch("/api/crm/metrics", {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ propertyId: r.propertyId, ota: "Agoda", metricKey: lcBulkField, metricValue: lcBulkValue }),
+                  body: JSON.stringify({ propertyId: r.propertyId, ota: otaName, metricKey: lcBulkField, metricValue: lcBulkValue }),
                 }).then(res => res.ok).catch(() => false)
               ));
               const anyFailed = results.some(ok => !ok);
@@ -1743,7 +1743,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             { key: "cb_child_time_policy",label: "Child/Time" },
             { key: "cb_image",            label: "Image" },
           ];
-          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${otaName === "Agoda" ? " 56px 56px 56px 56px 64px 72px 52px" : ""} 44px`;
+          const hasCb = otaName === "Agoda" || otaName === "Ixigo";
+          const COLS = `28px 90px minmax(160px,2fr) 80px 80px 90px 120px 130px 120px 90px 80px 90px 90px 160px 160px${hasCb ? " 56px 56px 56px 56px 64px 72px 52px" : ""} 44px`;
 
           const cellSt = (id: number, field: string): React.CSSProperties => ({
             padding: "5px 6px", borderLeft: "1px solid #E8EDF2",
@@ -1763,7 +1764,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
             try {
               const res = await fetch("/api/crm/metrics", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ propertyId, ota: "Agoda", metricKey: cbKey, metricValue: value }),
+                body: JSON.stringify({ propertyId, ota: otaName, metricKey: cbKey, metricValue: value }),
               });
               if (!res.ok) throw new Error("save failed");
               setLcRows(prev => prev.map(r => r.propertyId === propertyId
@@ -1824,8 +1825,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   selected={lcFhStatus}
                   onChange={next => { setLcFhStatus(next); loadLc(next); }}
                 />
-                {/* Content Box filter — Agoda only, two-level */}
-                {otaName === "Agoda" && (
+                {/* Content Box filter — Agoda / Ixigo only, two-level */}
+                {hasCb && (
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <select value={lcCbFilterKey} onChange={e => { setLcCbFilterKey(e.target.value); setLcCbFilterVal(""); }}
                       style={{ padding: "5px 8px", border: `1px solid ${lcCbFilterKey ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 8, fontSize: 11, fontWeight: lcCbFilterKey ? 700 : 400,
@@ -1897,7 +1898,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   { key: "liveDate",    label: "OTA Live Date",type: "date",   options: [] },
                   { key: "listingLink", label: "Listing Link", type: "text",   options: [] },
                   { key: "note",        label: "Note",         type: "text",   options: [] },
-                  ...(otaName === "Agoda" ? CB_ITEMS.map(c => ({ key: c.key, label: `CB: ${c.label}`, type: "cb", options: ["Yes","No"] })) : []),
+                  ...(hasCb ? CB_ITEMS.map(c => ({ key: c.key, label: `CB: ${c.label}`, type: "cb", options: ["Yes","No"] })) : []),
                 ];
                 const fieldDef = BULK_FIELDS.find(f => f.key === lcBulkField);
                 const canApply = !!lcBulkField && !!lcBulkValue;
@@ -2030,7 +2031,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
               {/* Sheet grid */}
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: otaName === "Agoda" ? 2070 : 1650 }}>
+                <div style={{ minWidth: hasCb ? 2070 : 1650 }}>
                   {/* Header row */}
                   <div style={{ display: "grid", gridTemplateColumns: COLS, background: "#F1F5F9", borderBottom: "2px solid #E2E8F0", padding: "0 8px", position: "sticky", top: 0, zIndex: 5 }}>
                     <div style={{ padding: "7px 4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2040,7 +2041,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                       }} style={{ accentColor: "#7C3AED", width: 12, height: 12, cursor: "pointer" }} />
                     </div>
                     <div style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, display: "flex", alignItems: "center", borderLeft: "1px solid #E2E8F0" }}>FH ID</div>
-                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",...(otaName === "Agoda" ? CB_ITEMS.map(c => c.label) : []),""].map(h => (
+                    {["Property","City","FH St.","FH Date","OTA ID","Status","Sub-status","OTA Date","TAT","Batch","Pre/Post","Listing Link","Note",...(hasCb ? CB_ITEMS.map(c => c.label) : []),""].map(h => (
                       <div key={h} style={{ padding: "7px 6px", fontSize: 9, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, borderLeft: "1px solid #E2E8F0", display: "flex", alignItems: "center" }}>{h}</div>
                     ))}
                   </div>
@@ -2226,8 +2227,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                             </div>
                           )}
                         </div>
-                        {/* Content Boxes — 7 individual columns, Agoda only */}
-                        {otaName === "Agoda" && CB_ITEMS.map(item => {
+                        {/* Content Boxes — 7 individual columns, Agoda / Ixigo only */}
+                        {hasCb && CB_ITEMS.map(item => {
                           const k = row.propertyId + item.key;
                           const current = (row.metrics ?? {})[item.key] || "No";
                           const isSavingThis = !!cbSaving[k];
