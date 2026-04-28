@@ -1,7 +1,14 @@
 import { getSql } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
-const ALLOWED_FIELDS = ["photoshoot_status", "shoot_date", "photographer", "remarks"];
+const ALLOWED_FIELDS = [
+  "photoshoot_status", "shoot_date", "remarks",
+  "ota_gommt","ota_booking","ota_agoda","ota_expedia","ota_cleartrip",
+  "ota_yatra","ota_ixigo","ota_akbar","ota_easemytrip","ota_indigo","ota_gmb",
+  "ai_editing_done",
+  "ai_gommt","ai_booking","ai_agoda","ai_expedia","ai_cleartrip",
+  "ai_yatra","ai_ixigo","ai_akbar","ai_easemytrip","ai_indigo","ai_gmb",
+];
 
 export async function POST(req: Request) {
   const session = await getSession();
