@@ -428,6 +428,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [lcCbBulkState,   setLcCbBulkState]   = useState<"idle"|"saving"|"ok"|"err">("idle");
   const [lcCbFilterKey,   setLcCbFilterKey]   = useState("");   // which CB item to filter by
   const [lcCbFilterVal,   setLcCbFilterVal]   = useState("");   // "Yes" | "No" | ""
+  const [lcError,         setLcError]         = useState("");
 
   // OTA Metrics (quality KPIs)
   type MetricAgg = { value: string; count: number }[];
@@ -555,18 +556,20 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
   function loadLc(fhStatus = lcFhStatus) {
     setLcLoading(true);
+    setLcError("");
     const p = new URLSearchParams({ export: "1", ota: otaName });
     if (fhStatus.length) p.set("fhStatus", fhStatus.join(","));
     fetch(`/api/crm/properties?${p}`)
       .then(r => r.json())
       .then(d => {
+        if (d.error) { setLcError(d.error); return; }
         // Normalise sub_status to match dashboard pivot labels
         const rows = ((d.rows ?? []) as LcRow[])
           .map(r => ({ ...r, subStatus: normalizeSs(r.subStatus) }));
         setLcRows(rows);
         setLcLoaded(true);
       })
-      .catch(() => {})
+      .catch((e: Error) => setLcError(e.message))
       .finally(() => setLcLoading(false));
   }
 
@@ -614,7 +617,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setPropTab("live");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
-    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal("");
+    setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal(""); setLcError("");
     setScConfig(null); setScStatusMap({}); setScOtaStatuses([]);
     load();
     // Load OTA status config + actual OTA statuses from DB (used by listing creation + config tab)
@@ -2048,6 +2051,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
                   {/* Loading */}
                   {lcLoading && <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>Loading…</div>}
+                  {!lcLoading && lcError && <div style={{ padding: 40, textAlign: "center", color: "#DC2626", fontSize: 12 }}>Error: {lcError} — <button onClick={() => loadLc()} style={{ textDecoration: "underline", background: "none", border: "none", cursor: "pointer", color: "#DC2626", fontSize: 12 }}>Retry</button></div>}
 
                   {/* Data rows */}
                   {!lcLoading && lcFiltered.map((row, i) => {
