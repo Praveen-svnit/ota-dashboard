@@ -2,6 +2,34 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 
+const BULK_FIELD_OPTS: { key: string; label: string; group: string; opts: string[] | null }[] = [
+  { key: "photoshoot_status", label: "Photoshoot Status", group: "General",         opts: ["Shoot Done","Shoot Pending"] },
+  { key: "remarks",           label: "Remarks",           group: "General",         opts: null },
+  { key: "ota_gommt",      label: "GoMMT",      group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_booking",    label: "Booking.com",group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_agoda",      label: "Agoda",      group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_expedia",    label: "Expedia",    group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_cleartrip",  label: "Cleartrip",  group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_yatra",      label: "Yatra",      group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_ixigo",      label: "Ixigo",      group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_akbar",      label: "Akbar",      group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_easemytrip", label: "EaseMyTrip", group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_indigo",     label: "Indigo",     group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ota_gmb",        label: "GMB",        group: "Photoshoot OTA", opts: ["Pending","Updated"] },
+  { key: "ai_editing_done",label: "AI Editing Done", group: "AI Editing",  opts: ["No","Yes"] },
+  { key: "ai_gommt",      label: "GoMMT",      group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_booking",    label: "Booking.com",group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_agoda",      label: "Agoda",      group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_expedia",    label: "Expedia",     group: "AI Image OTA",  opts: ["Pending","Updated"] },
+  { key: "ai_cleartrip",  label: "Cleartrip",  group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_yatra",      label: "Yatra",      group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_ixigo",      label: "Ixigo",      group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_akbar",      label: "Akbar",      group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_easemytrip", label: "EaseMyTrip", group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_indigo",     label: "Indigo",     group: "AI Image OTA",   opts: ["Pending","Updated"] },
+  { key: "ai_gmb",        label: "GMB",        group: "AI Image OTA",   opts: ["Pending","Updated"] },
+];
+
 const OTA_FIELDS: { key: string; label: string }[] = [
   { key: "ota_gommt",      label: "GoMMT"       },
   { key: "ota_booking",    label: "Booking.com"  },
@@ -102,6 +130,13 @@ export default function PhotoshootPage() {
   const [cityFilter,   setCityFilter]   = useState("all");
   const [saving,       setSaving]       = useState<Record<string, boolean>>({});
   const [editCell,     setEditCell]     = useState<{ id: string; field: string } | null>(null);
+  const [bulkOpen,     setBulkOpen]     = useState(false);
+  const [bulkIds,      setBulkIds]      = useState("");
+  const [bulkField,    setBulkField]    = useState("photoshoot_status");
+  const [bulkValue,    setBulkValue]    = useState("Shoot Done");
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkResult,   setBulkResult]   = useState<{ updated: number } | null>(null);
+  const [bulkError,    setBulkError]    = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -144,6 +179,39 @@ export default function PhotoshootPage() {
   }
 
   const isSaving = (id: string, field: string) => !!saving[`${id}:${field}`];
+
+  const bulkParsedIds = useMemo(() => [...new Set(bulkIds.trim().split(/\s+/).filter(Boolean))], [bulkIds]);
+  const bulkFieldCfg  = BULK_FIELD_OPTS.find(f => f.key === bulkField)!;
+
+  function onBulkFieldChange(key: string) {
+    const cfg = BULK_FIELD_OPTS.find(f => f.key === key)!;
+    setBulkField(key);
+    setBulkValue(cfg.opts ? cfg.opts[0] : "");
+    setBulkResult(null);
+    setBulkError("");
+  }
+
+  async function applyBulk() {
+    if (!bulkParsedIds.length) return;
+    setBulkApplying(true);
+    setBulkResult(null);
+    setBulkError("");
+    try {
+      const res  = await fetch("/api/photoshoot/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_ids: bulkParsedIds, field: bulkField, value: bulkValue }),
+      });
+      const data = await res.json();
+      if (!data.ok) { setBulkError(data.error ?? "Failed"); return; }
+      setBulkResult(data);
+      load();
+    } catch (e) {
+      setBulkError((e as Error).message);
+    } finally {
+      setBulkApplying(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
@@ -206,6 +274,14 @@ export default function PhotoshootPage() {
               ✓ {syncResult.synced} synced — Done: {syncResult.shootDone} · Pending: {syncResult.shootPending}
             </span>
           )}
+          <button onClick={() => { setBulkOpen(o => !o); setBulkResult(null); setBulkError(""); }}
+            style={{
+              padding: "8px 18px", borderRadius: 8, border: "1px solid #E2E8F0",
+              background: bulkOpen ? "#EEF2FF" : "#fff", color: bulkOpen ? "#4F46E5" : "#374151",
+              fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}>
+            ✏ Bulk Update
+          </button>
           <button onClick={syncFromSheets} disabled={syncing || loading}
             style={{
               padding: "8px 18px", borderRadius: 8, border: "none", cursor: syncing ? "not-allowed" : "pointer",
@@ -265,6 +341,86 @@ export default function PhotoshootPage() {
             {loading ? "Loading…" : `${filtered.length} of ${rows.length} properties`}
           </div>
         </div>
+
+        {/* Bulk Update Panel */}
+        {bulkOpen && (
+          <div style={{ background: "#fff", borderRadius: 12, border: "2px solid #C7D2FE", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#4F46E5" }}>✏ Bulk Update</div>
+
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+              {/* IDs textarea */}
+              <div style={{ flex: "1 1 280px" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 5, textTransform: "uppercase" }}>
+                  FH Property IDs (space-separated)
+                </div>
+                <textarea
+                  value={bulkIds}
+                  onChange={e => { setBulkIds(e.target.value); setBulkResult(null); }}
+                  placeholder="e.g. FH12345 FH67890 FH11111"
+                  rows={3}
+                  style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", resize: "vertical", fontFamily: "monospace", boxSizing: "border-box" }}
+                />
+                {bulkParsedIds.length > 0 && (
+                  <div style={{ fontSize: 10, color: "#64748B", marginTop: 4 }}>
+                    {bulkParsedIds.length} unique ID{bulkParsedIds.length !== 1 ? "s" : ""} entered
+                  </div>
+                )}
+              </div>
+
+              {/* Field + Value selectors */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "0 0 auto" }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 5, textTransform: "uppercase" }}>Field</div>
+                  <select value={bulkField} onChange={e => onBulkFieldChange(e.target.value)}
+                    style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", background: "#fff", color: "#374151", minWidth: 200 }}>
+                    {["General","Photoshoot OTA","AI Editing","AI Image OTA"].map(grp => (
+                      <optgroup key={grp} label={grp}>
+                        {BULK_FIELD_OPTS.filter(f => f.group === grp).map(f => (
+                          <option key={f.key} value={f.key}>{f.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", marginBottom: 5, textTransform: "uppercase" }}>Set Value To</div>
+                  {bulkFieldCfg.opts ? (
+                    <select value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                      style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", background: "#fff", color: "#374151", minWidth: 200 }}>
+                      {bulkFieldCfg.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input type="text" value={bulkValue} onChange={e => setBulkValue(e.target.value)}
+                      placeholder="Enter value…"
+                      style={{ padding: "7px 12px", border: "1.5px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", width: 200 }} />
+                  )}
+                </div>
+              </div>
+
+              {/* Apply button + result */}
+              <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 8, flex: "0 0 auto", paddingTop: 24 }}>
+                <button onClick={applyBulk} disabled={bulkApplying || bulkParsedIds.length === 0}
+                  style={{
+                    padding: "9px 22px", borderRadius: 8, border: "none",
+                    background: bulkParsedIds.length === 0 ? "#CBD5E1" : "linear-gradient(135deg,#4F46E5,#7C3AED)",
+                    color: "#fff", fontSize: 12, fontWeight: 800,
+                    cursor: bulkParsedIds.length === 0 || bulkApplying ? "not-allowed" : "pointer",
+                    boxShadow: bulkParsedIds.length > 0 ? "0 2px 8px #4F46E540" : "none",
+                  }}>
+                  {bulkApplying ? "Applying…" : `Apply to ${bulkParsedIds.length || 0} IDs`}
+                </button>
+                {bulkResult && (
+                  <div style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>
+                    ✓ Updated {bulkResult.updated} propert{bulkResult.updated !== 1 ? "ies" : "y"}
+                  </div>
+                )}
+                {bulkError && (
+                  <div style={{ fontSize: 11, color: "#DC2626" }}>⚠ {bulkError}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
