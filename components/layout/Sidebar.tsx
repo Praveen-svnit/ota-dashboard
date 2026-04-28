@@ -132,9 +132,10 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
 
         {/* CRM */}
         <SectionHeader label="CRM" />
-        <NavLink icon="📋" label="Property Tracker" href="/listings" />
-        <NavLink icon="🏢" label="Property CRM"     href="/crm" />
-        <NavLink icon="🔗" label="Mapping Tracker"  href="/mapping-tracker" />
+        <NavLink icon="📋" label="Property Tracker"   href="/listings" />
+        <NavLink icon="🏢" label="Property CRM"      href="/crm" />
+        <NavLink icon="🔗" label="Mapping Tracker"   href="/mapping-tracker" />
+        <NavLink icon="📷" label="Photoshoot Update" href="/photoshoot" />
 
         {/* Listing Dashboard — with OTA sub-links */}
         <Link href="/listing-dashboard"

@@ -352,4 +352,19 @@ export async function initPostgresSchema() {
       revoked     BOOLEAN NOT NULL DEFAULT FALSE
     )
   `;
+
+  // ── Photoshoot Tracker ─────────────────────────────────────────────────────
+  await sql`
+    CREATE TABLE IF NOT EXISTS photoshoot_tracker (
+      id                  SERIAL PRIMARY KEY,
+      property_id         TEXT NOT NULL UNIQUE,
+      photoshoot_status   TEXT NOT NULL DEFAULT 'Not Started',
+      shoot_date          DATE,
+      photographer        TEXT,
+      remarks             TEXT,
+      updated_by          TEXT,
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_photoshoot_status ON photoshoot_tracker(photoshoot_status)`;
 }
