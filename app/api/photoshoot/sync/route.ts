@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     }
     if (vendorMap.has(pid)) {
       vendorEdited++;
-      return { pid, status: "Vendor Edited", link: vendorMap.get(pid)!, source: "Vendor Edited link" };
+      return { pid, status: "Shoot Done",    link: vendorMap.get(pid)!, source: "Vendor Edited link" };
     }
     shootPending++;
     return   { pid, status: "Shoot Pending", link: null,                source: "none"               };

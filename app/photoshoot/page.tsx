@@ -18,11 +18,10 @@ interface PhotoRow {
   updated_at:        string | null;
 }
 
-const STATUSES = ["Shoot Done", "Vendor Edited", "Shoot Pending", "Not Required", "Scheduled"];
+const STATUSES = ["Shoot Done", "Shoot Pending", "Not Required", "Scheduled"];
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
   "Shoot Done":    { bg: "#DCFCE7", text: "#16A34A", border: "#86EFAC" },
-  "Vendor Edited": { bg: "#EDE9FE", text: "#7C3AED", border: "#C4B5FD" },
   "Shoot Pending": { bg: "#FEF3C7", text: "#D97706", border: "#FDE68A" },
   "Not Required":  { bg: "#F1F5F9", text: "#64748B", border: "#CBD5E1" },
   "Scheduled":     { bg: "#EEF2FF", text: "#4F46E5", border: "#A5B4FC" },
@@ -143,12 +142,11 @@ export default function PhotoshootPage() {
         {/* Summary tiles */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           {[
-            { key: "all",           label: "Total",         val: counts.total,                  bg: "#F1F5F9", text: "#374151", border: "#E2E8F0" },
-            { key: "Shoot Done",    label: "Shoot Done",    val: counts["Shoot Done"]    ?? 0, ...STATUS_STYLE["Shoot Done"]    },
-            { key: "Vendor Edited", label: "Vendor Edited", val: counts["Vendor Edited"] ?? 0, ...STATUS_STYLE["Vendor Edited"] },
-            { key: "Shoot Pending", label: "Shoot Pending", val: counts["Shoot Pending"] ?? 0, ...STATUS_STYLE["Shoot Pending"] },
-            { key: "Scheduled",     label: "Scheduled",     val: counts["Scheduled"]     ?? 0, ...STATUS_STYLE["Scheduled"]     },
-            { key: "Not Required",  label: "Not Required",  val: counts["Not Required"]  ?? 0, ...STATUS_STYLE["Not Required"]  },
+            { key: "all",          label: "Total",        val: counts.total,                 bg: "#F1F5F9", text: "#374151", border: "#E2E8F0" },
+            { key: "Shoot Done",   label: "Shoot Done",   val: counts["Shoot Done"]   ?? 0, ...STATUS_STYLE["Shoot Done"]   },
+            { key: "Shoot Pending",label: "Shoot Pending",val: counts["Shoot Pending"] ?? 0, ...STATUS_STYLE["Shoot Pending"] },
+            { key: "Scheduled",    label: "Scheduled",    val: counts["Scheduled"]    ?? 0, ...STATUS_STYLE["Scheduled"]    },
+            { key: "Not Required", label: "Not Required", val: counts["Not Required"] ?? 0, ...STATUS_STYLE["Not Required"] },
           ].map(tile => (
             <div key={tile.key} onClick={() => setStatusFilter(tile.key === statusFilter ? "all" : tile.key)}
               style={{
