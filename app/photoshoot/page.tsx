@@ -102,8 +102,10 @@ export default function PhotoshootPage() {
   }, [rows, statusFilter, cityFilter, search]);
 
   const counts = useMemo(() => {
+    const known = new Set(STATUSES);
     const c: Record<string, number> = { total: rows.length };
     for (const s of STATUSES) c[s] = rows.filter(r => r.photoshoot_status === s).length;
+    c["Other"] = rows.filter(r => !known.has(r.photoshoot_status)).length;
     return c;
   }, [rows]);
 
@@ -147,6 +149,7 @@ export default function PhotoshootPage() {
             { key: "Shoot Pending",label: "Shoot Pending",val: counts["Shoot Pending"] ?? 0, ...STATUS_STYLE["Shoot Pending"] },
             { key: "Scheduled",    label: "Scheduled",    val: counts["Scheduled"]    ?? 0, ...STATUS_STYLE["Scheduled"]    },
             { key: "Not Required", label: "Not Required", val: counts["Not Required"] ?? 0, ...STATUS_STYLE["Not Required"] },
+            ...(counts["Other"] > 0 ? [{ key: "Other", label: "Other", val: counts["Other"], bg: "#FFF7ED", text: "#C2410C", border: "#FED7AA" }] : []),
           ].map(tile => (
             <div key={tile.key} onClick={() => setStatusFilter(tile.key === statusFilter ? "all" : tile.key)}
               style={{
