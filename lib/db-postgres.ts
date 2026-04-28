@@ -356,15 +356,19 @@ export async function initPostgresSchema() {
   // ── Photoshoot Tracker ─────────────────────────────────────────────────────
   await sql`
     CREATE TABLE IF NOT EXISTS photoshoot_tracker (
-      id                  SERIAL PRIMARY KEY,
-      property_id         TEXT NOT NULL UNIQUE,
-      photoshoot_status   TEXT NOT NULL DEFAULT 'Not Started',
-      shoot_date          DATE,
-      photographer        TEXT,
-      remarks             TEXT,
-      updated_by          TEXT,
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      id                SERIAL PRIMARY KEY,
+      property_id       TEXT NOT NULL UNIQUE,
+      photoshoot_status TEXT NOT NULL DEFAULT 'Shoot Pending',
+      shoot_date        DATE,
+      photographer      TEXT,
+      remarks           TEXT,
+      shoot_link        TEXT,
+      shoot_source      TEXT,
+      updated_by        TEXT,
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE photoshoot_tracker ADD COLUMN IF NOT EXISTS shoot_link   TEXT`;
+  await sql`ALTER TABLE photoshoot_tracker ADD COLUMN IF NOT EXISTS shoot_source TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS idx_photoshoot_status ON photoshoot_tracker(photoshoot_status)`;
 }

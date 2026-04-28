@@ -29,6 +29,10 @@ export async function GET(req: Request) {
 
   const fhStatuses = fhStatus.split(",").filter(Boolean);
 
+  // Ensure new columns exist
+  await sql`ALTER TABLE photoshoot_tracker ADD COLUMN IF NOT EXISTS shoot_link   TEXT`;
+  await sql`ALTER TABLE photoshoot_tracker ADD COLUMN IF NOT EXISTS shoot_source TEXT`;
+
   const rows = await sql.query(
     `SELECT
        i.property_id,
@@ -36,10 +40,12 @@ export async function GET(req: Request) {
        i.city,
        i.fh_status,
        i.fh_live_date,
-       COALESCE(p.photoshoot_status, 'Not Started') AS photoshoot_status,
+       COALESCE(p.photoshoot_status, 'Shoot Pending') AS photoshoot_status,
        p.shoot_date,
        p.photographer,
        p.remarks,
+       p.shoot_link,
+       p.shoot_source,
        p.updated_by,
        p.updated_at
      FROM inventory i
