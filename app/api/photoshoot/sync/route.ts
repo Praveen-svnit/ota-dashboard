@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { parseCSV } from "@/lib/sheets";
 
 const SHEET_ID = "1OlT0XA3Nk_RFpgbehysSCGcd955-Dyg7biWu9sbbPpQ";
-const BATCH    = 500; // rows per upsert — stays well under pg's 65535 param limit
+const BATCH    = 500;
 
 async function fetchTab(tab: string): Promise<{ cols: string[]; rows: string[][] }> {
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
@@ -17,6 +17,16 @@ function clean(v: string | undefined): string | null {
   return t && t !== "#N/A" && t !== "#REF!" ? t : null;
 }
 
+// Parse "M/D/YYYY HH:MM:SS" → "YYYY-MM-DD"
+function parseShootDate(v: string | undefined): string | null {
+  const t = (v ?? "").trim();
+  if (!t) return null;
+  // Format: 10/20/2021 16:50:04
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+}
+
 export async function POST(req: Request) {
   void req;
   const session = await getSession();
@@ -24,7 +34,6 @@ export async function POST(req: Request) {
 
   const sql = getSql();
 
-  // Ensure columns exist + fetch all three sources in parallel
   const [form1, vendor, inventory] = await Promise.all([
     fetchTab("Form Responses 1"),
     fetchTab("Vendor Edited link"),
@@ -33,62 +42,69 @@ export async function POST(req: Request) {
     sql`ALTER TABLE photoshoot_tracker ADD COLUMN IF NOT EXISTS shoot_source TEXT`,
   ]) as [{ cols: string[]; rows: string[][] }, { cols: string[]; rows: string[][] }, Record<string, unknown>[]];
 
-  // ── Build lookup maps from sheet data ──────────────────────────────────────
-  // Form Responses 1: col C (idx 2) = FH ID, col D (idx 3) = Drive Link
-  const formMap = new Map<string, string | null>();
+  // ── Form Responses 1: col A (idx 0) = Timestamp, col C (idx 2) = FH ID, col D (idx 3) = Drive Link
+  const formMap = new Map<string, { link: string | null; shootDate: string | null }>();
   for (const row of form1.rows) {
     const pid = clean(row[2]);
     if (!pid) continue;
-    const link = clean(row[3]);
-    formMap.set(pid, link?.startsWith("http") ? link : null); // last row wins (most recent)
+    const link      = clean(row[3]);
+    const shootDate = parseShootDate(row[0]);
+    formMap.set(pid, {
+      link:      link?.startsWith("http") ? link : null,
+      shootDate,
+    }); // last row wins (most recent submission)
   }
 
-  // Vendor Edited link: col A (idx 0) = FH ID, col D (idx 3) = Edited Link
-  const vendorMap = new Map<string, string | null>();
+  // ── Vendor Edited link: col A (idx 0) = FH ID, col D (idx 3) = Edited Link, col M (idx 12) = Date
+  const vendorMap = new Map<string, { link: string | null; shootDate: string | null }>();
   for (const row of vendor.rows) {
-    const pid = clean(row[0]);
+    const pid  = clean(row[0]);
     if (!pid) continue;
-    const link = clean(row[3]);
-    vendorMap.set(pid, link?.startsWith("http") ? link : null);
+    const link      = clean(row[3]);
+    const shootDate = parseShootDate(row[12]);
+    vendorMap.set(pid, { link: link?.startsWith("http") ? link : null, shootDate });
   }
 
-  // ── Classify every inventory property ──────────────────────────────────────
+  // ── Classify every inventory property ─────────────────────────────────────
   const now = new Date().toISOString();
   let shootDone = 0, vendorEdited = 0, shootPending = 0;
 
-  type Row = { pid: string; status: string; link: string | null; source: string };
+  type Row = { pid: string; status: string; link: string | null; source: string; shootDate: string | null };
   const classified: Row[] = inventory.map(r => {
     const pid = String(r.property_id);
     if (formMap.has(pid)) {
+      const { link, shootDate } = formMap.get(pid)!;
       shootDone++;
-      return { pid, status: "Shoot Done",    link: formMap.get(pid)!,   source: "Form Responses 1"  };
+      return { pid, status: "Shoot Done", link, source: "Form Responses 1", shootDate };
     }
     if (vendorMap.has(pid)) {
+      const { link, shootDate } = vendorMap.get(pid)!;
       vendorEdited++;
-      return { pid, status: "Shoot Done",    link: vendorMap.get(pid)!, source: "Vendor Edited link" };
+      return { pid, status: "Shoot Done", link, source: "Vendor Edited link", shootDate };
     }
     shootPending++;
-    return   { pid, status: "Shoot Pending", link: null,                source: "none"               };
+    return { pid, status: "Shoot Pending", link: null, source: "none", shootDate: null };
   });
 
-  // ── Batch upsert — one multi-row query per 500 properties ──────────────────
+  // ── Batch upsert — 7 columns per row ──────────────────────────────────────
   for (let i = 0; i < classified.length; i += BATCH) {
     const chunk = classified.slice(i, i + BATCH);
-    const cols  = 6; // columns per row
+    const cols  = 7;
     const placeholders = chunk
-      .map((_, j) => `($${j * cols + 1},$${j * cols + 2},$${j * cols + 3},$${j * cols + 4},$${j * cols + 5},$${j * cols + 6})`)
+      .map((_, j) => `($${j*cols+1},$${j*cols+2},$${j*cols+3},$${j*cols+4},$${j*cols+5},$${j*cols+6},$${j*cols+7})`)
       .join(",");
-    const params = chunk.flatMap(({ pid, status, link, source }) =>
-      [pid, status, link, source, "sync", now]
+    const params = chunk.flatMap(({ pid, status, link, source, shootDate }) =>
+      [pid, status, link, source, shootDate, "sync", now]
     );
     await sql.query(
       `INSERT INTO photoshoot_tracker
-         (property_id, photoshoot_status, shoot_link, shoot_source, updated_by, updated_at)
+         (property_id, photoshoot_status, shoot_link, shoot_source, shoot_date, updated_by, updated_at)
        VALUES ${placeholders}
        ON CONFLICT (property_id) DO UPDATE SET
          photoshoot_status = EXCLUDED.photoshoot_status,
          shoot_link        = EXCLUDED.shoot_link,
          shoot_source      = EXCLUDED.shoot_source,
+         shoot_date        = EXCLUDED.shoot_date,
          updated_by        = EXCLUDED.updated_by,
          updated_at        = EXCLUDED.updated_at`,
       params
