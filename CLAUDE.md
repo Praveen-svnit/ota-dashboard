@@ -19,7 +19,7 @@ npm run sync:rns   # Sync RNS property list
 
 Requires a `.env.local` with:
 ```
-DATABASE_URL=postgres://...   # Neon PostgreSQL connection string
+DATABASE_URL=postgresql://user:pass@host:5432/dbname   # PostgreSQL connection string
 CRON_SECRET=...               # Bearer token for cron endpoints
 ```
 
