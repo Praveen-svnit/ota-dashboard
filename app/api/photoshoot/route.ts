@@ -42,9 +42,16 @@ export async function GET(req: Request) {
        COALESCE(p.ai_editing_done,'No') AS ai_editing_done,
        ${otaCoalesce},
        ${aiCoalesce},
-       p.updated_by, p.updated_at
+       p.updated_by, p.updated_at,
+       ol.live_dates
      FROM inventory i
      LEFT JOIN photoshoot_tracker p ON p.property_id = i.property_id
+     LEFT JOIN (
+       SELECT property_id, json_object_agg(ota, live_date::text) AS live_dates
+       FROM ota_listing
+       WHERE live_date IS NOT NULL
+       GROUP BY property_id
+     ) ol ON ol.property_id = i.property_id
      WHERE i.fh_status = ANY($1)
      ORDER BY i.city, i.property_name`,
     [fhStatuses]

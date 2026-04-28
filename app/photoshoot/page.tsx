@@ -34,6 +34,21 @@ const AI_FIELDS: { key: string; label: string }[] = [
   { key: "ai_gmb",        label: "GMB"         },
 ];
 
+// Maps photoshoot field key → ota_listing.ota name (for live_date join)
+const FIELD_TO_OTA: Record<string, string> = {
+  ota_gommt:      "GoMMT",
+  ota_booking:    "Booking.com",
+  ota_agoda:      "Agoda",
+  ota_expedia:    "Expedia",
+  ota_cleartrip:  "Cleartrip",
+  ota_yatra:      "Yatra",
+  ota_ixigo:      "Ixigo",
+  ota_akbar:      "Akbar",
+  ota_easemytrip: "EaseMyTrip",
+  ota_indigo:     "Indigo",
+  ota_gmb:        "GMB",
+};
+
 const BULK_FIELD_OPTS: { key: string; label: string; group: string; opts: string[] | null }[] = [
   { key: "photoshoot_status", label: "Photoshoot Status", group: "General",         opts: ["Shoot Done","Shoot Pending"] },
   { key: "remarks",           label: "Remarks",           group: "General",         opts: null },
@@ -78,7 +93,8 @@ interface PhotoRow {
   shoot_source:      string | null;
   ai_editing_done:   string;
   updated_by:        string | null;
-  [k: string]: string | null;
+  live_dates:        Record<string, string> | null;
+  [k: string]: string | null | Record<string, string>;
 }
 
 // ── OtaDropdown — OUTSIDE component so React never remounts it ─────────────────
@@ -240,6 +256,8 @@ export default function PhotoshootPage() {
   const [savingKeys,   setSavingKeys]   = useState<Record<string, boolean>>({});
   const [editCell,     setEditCell]     = useState<{ id: string; field: string } | null>(null);
   const [page,         setPage]         = useState(0);
+  const [summaryOpen,  setSummaryOpen]  = useState(false);
+  const [summaryTab,   setSummaryTab]   = useState<"ota"|"tat">("ota");
   const [bulkOpen,     setBulkOpen]     = useState(false);
   const [bulkIds,      setBulkIds]      = useState("");
   const [bulkField,    setBulkField]    = useState("photoshoot_status");
@@ -305,6 +323,60 @@ export default function PhotoshootPage() {
     return c;
   }, [rows]);
 
+  // ── OTA-wise status summary (all rows, not filtered) ──────────────────────
+  const otaSummary = useMemo(() => OTA_FIELDS.map(f => {
+    const total   = rows.length;
+    const pUpdated = rows.filter(r => (r[f.key] as string) === "Updated").length;
+    const aKey     = "ai_" + f.key.slice(4); // ota_gommt → ai_gommt
+    const aUpdated = rows.filter(r => (r[aKey] as string) === "Updated").length;
+    return { label: f.label, pUpdated, pPending: total - pUpdated, aUpdated, aPending: total - aUpdated, total };
+  }), [rows]);
+
+  // ── TAT summary: days from shoot_date to OTA live_date ────────────────────
+  // TAT = ota_live_date − shoot_date (signed)
+  // +ve → OTA went live X days AFTER shoot (healthy lead time)
+  // −ve → OTA went live BEFORE shoot (no photos at launch)
+  const tatSummary = useMemo(() => {
+    const today = Date.now();
+    return OTA_FIELDS.map(f => {
+      const otaName  = FIELD_TO_OTA[f.key];
+      const shootDone = rows.filter(r => r.photoshoot_status === "Shoot Done");
+      const withData  = shootDone.filter(r => r.shoot_date && r.live_dates?.[otaName]);
+      const tats = withData.map(r => {
+        const shoot = new Date(r.shoot_date as string).getTime();
+        const live  = new Date((r.live_dates as Record<string,string>)[otaName]).getTime();
+        return Math.round((live - shoot) / 86400000);
+      });
+      const avg = tats.length ? Math.round(tats.reduce((a, b) => a + b, 0) / tats.length) : null;
+
+      // For pending rows: days waiting since effective start = max(shoot_date, ota_live_date)
+      const pendingRows = shootDone.filter(r =>
+        (r[f.key] as string) !== "Updated" && r.shoot_date && r.live_dates?.[otaName]
+      );
+      const pendingDays = pendingRows.map(r => {
+        const shoot = new Date(r.shoot_date as string).getTime();
+        const live  = new Date((r.live_dates as Record<string,string>)[otaName]).getTime();
+        return Math.round((today - Math.max(shoot, live)) / 86400000);
+      }).filter(d => d >= 0);
+      const avgPending = pendingDays.length
+        ? Math.round(pendingDays.reduce((a, b) => a + b, 0) / pendingDays.length) : null;
+
+      return {
+        label:       f.label,
+        eligible:    tats.length,
+        noData:      shootDone.length - tats.length,
+        avg,
+        late:        tats.filter(t => t < 0).length,
+        d0_30:       tats.filter(t => t >= 0 && t < 30).length,
+        d30_60:      tats.filter(t => t >= 30 && t < 60).length,
+        d60_90:      tats.filter(t => t >= 60 && t < 90).length,
+        d90p:        tats.filter(t => t >= 90).length,
+        pendingCount: pendingDays.length,
+        avgPending,
+      };
+    });
+  }, [rows]);
+
   const bulkParsedIds = useMemo(() => [...new Set(bulkIds.trim().split(/\s+/).filter(Boolean))], [bulkIds]);
   const bulkFieldCfg  = BULK_FIELD_OPTS.find(f => f.key === bulkField)!;
 
@@ -360,7 +432,7 @@ export default function PhotoshootPage() {
       <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* Summary tiles */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           {[
             { key: "all",           label: "Total",         val: counts.total,                   bg: "#F1F5F9", text: "#374151", border: "#E2E8F0" },
             { key: "Shoot Done",    label: "Shoot Done",    val: counts["Shoot Done"]    ?? 0, ...STATUS_STYLE["Shoot Done"]    },
@@ -372,6 +444,10 @@ export default function PhotoshootPage() {
               <div style={{ fontSize: 10, fontWeight: 700, color: tile.text, marginTop: 2 }}>{tile.label}</div>
             </div>
           ))}
+          <button onClick={() => setSummaryOpen(o => !o)}
+            style={{ marginLeft: 8, padding: "10px 18px", borderRadius: 10, border: `2px solid ${summaryOpen ? "#6366F1" : "#E2E8F0"}`, background: summaryOpen ? "#EEF2FF" : "#fff", color: summaryOpen ? "#4F46E5" : "#374151", fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
+            📊 {summaryOpen ? "Hide Summary" : "OTA & TAT Summary"}
+          </button>
         </div>
 
         {/* Filter bar */}
@@ -398,6 +474,120 @@ export default function PhotoshootPage() {
             {loading ? "Loading…" : `${filtered.length} properties`}
           </div>
         </div>
+
+        {/* ── Summary Panel ──────────────────────────────────────────────── */}
+        {summaryOpen && !loading && (
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            {/* Tabs */}
+            <div style={{ display: "flex", borderBottom: "2px solid #E2E8F0", background: "#F8FAFC" }}>
+              {(["ota","tat"] as const).map(t => (
+                <button key={t} onClick={() => setSummaryTab(t)}
+                  style={{ padding: "10px 22px", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, background: "transparent",
+                    color: summaryTab === t ? "#4F46E5" : "#64748B",
+                    borderBottom: summaryTab === t ? "2px solid #4F46E5" : "2px solid transparent",
+                    marginBottom: -2 }}>
+                  {t === "ota" ? "📷 OTA Status" : "⏱ TAT Analysis"}
+                </button>
+              ))}
+            </div>
+
+            {/* OTA Status tab */}
+            {summaryTab === "ota" && (
+              <div style={{ padding: "18px 20px" }}>
+                <div style={{ fontSize: 11, color: "#64748B", marginBottom: 14 }}>
+                  Across all {rows.length} properties · Photoshoot upload & AI image upload status per OTA
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                  {otaSummary.map(o => {
+                    const pPct = o.total > 0 ? Math.round((o.pUpdated / o.total) * 100) : 0;
+                    const aPct = o.total > 0 ? Math.round((o.aUpdated / o.total) * 100) : 0;
+                    return (
+                      <div key={o.label} style={{ border: "1px solid #E2E8F0", borderRadius: 10, padding: "12px 14px", background: "#FAFAFA" }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#0F172A", marginBottom: 10 }}>{o.label}</div>
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B", marginBottom: 3 }}>
+                            <span>📷 Photoshoot</span>
+                            <span style={{ fontWeight: 700, color: pPct === 100 ? "#16A34A" : "#374151" }}>{o.pUpdated}/{o.total}</span>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 3, background: "#E2E8F0", overflow: "hidden" }}>
+                            <div style={{ width: `${pPct}%`, height: "100%", background: pPct === 100 ? "#16A34A" : "#6366F1", borderRadius: 3, transition: "width 0.4s" }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748B", marginBottom: 3 }}>
+                            <span>🤖 AI Images</span>
+                            <span style={{ fontWeight: 700, color: aPct === 100 ? "#16A34A" : "#374151" }}>{o.aUpdated}/{o.total}</span>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 3, background: "#E2E8F0", overflow: "hidden" }}>
+                            <div style={{ width: `${aPct}%`, height: "100%", background: aPct === 100 ? "#16A34A" : "#059669", borderRadius: 3, transition: "width 0.4s" }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAT Analysis tab */}
+            {summaryTab === "tat" && (
+              <div style={{ padding: "18px 20px", overflowX: "auto" }}>
+                <div style={{ fontSize: 11, color: "#64748B", marginBottom: 6 }}>
+                  TAT = OTA live date − shoot date &nbsp;·&nbsp;
+                  <span style={{ color: "#DC2626", fontWeight: 700 }}>Late</span>: OTA went live before shoot (no photos at launch) &nbsp;·&nbsp;
+                  <span style={{ color: "#D97706", fontWeight: 700 }}>Pending days</span>: days since both shoot & OTA were ready, still not uploaded
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 800 }}>
+                  <thead>
+                    <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
+                      {["OTA","Data Pts","Avg TAT","Late (<0d)","0–30 d","30–60 d","60–90 d","90+ d","No Data","Pending Upload","Avg Wait"].map(h => (
+                        <th key={h} style={{ padding: "8px 12px", textAlign: h === "OTA" ? "left" : "center", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", borderRight: "1px solid #F1F5F9" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tatSummary.map((t, i) => {
+                      const avgColor = t.avg === null ? "#94A3B8" : t.avg < 0 ? "#DC2626" : t.avg < 30 ? "#16A34A" : t.avg < 60 ? "#D97706" : "#7C3AED";
+                      return (
+                        <tr key={t.label} style={{ background: i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0F172A", whiteSpace: "nowrap" }}>{t.label}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", color: "#374151" }}>{t.eligible}</td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: avgColor }}>
+                            {t.avg !== null ? `${t.avg}d` : "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                            {t.late > 0
+                              ? <span style={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 11 }}>{t.late}</span>
+                              : <span style={{ color: "#CBD5E1" }}>—</span>}
+                          </td>
+                          {[t.d0_30, t.d30_60, t.d60_90, t.d90p].map((v, j) => (
+                            <td key={j} style={{ padding: "8px 12px", textAlign: "center", color: v > 0 ? "#374151" : "#CBD5E1" }}>
+                              {v > 0 ? v : "—"}
+                            </td>
+                          ))}
+                          <td style={{ padding: "8px 12px", textAlign: "center", color: t.noData > 0 ? "#94A3B8" : "#CBD5E1" }}>
+                            {t.noData > 0 ? t.noData : "—"}
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                            {t.pendingCount > 0
+                              ? <span style={{ background: "#FEF3C7", color: "#D97706", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 11 }}>{t.pendingCount}</span>
+                              : <span style={{ color: "#CBD5E1" }}>—</span>}
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center", fontWeight: 700, color: t.avgPending === null ? "#CBD5E1" : t.avgPending > 60 ? "#DC2626" : t.avgPending > 30 ? "#D97706" : "#16A34A" }}>
+                            {t.avgPending !== null ? `${t.avgPending}d` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 10, fontSize: 10, color: "#94A3B8" }}>
+                  TAT data requires shoot date + OTA live date in the listing system. "Pending Upload" = shoot done, OTA live, but images not yet marked Updated — Avg Wait = days since both conditions were met.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bulk Update Panel */}
         {bulkOpen && (
