@@ -55,6 +55,14 @@ const BULK_FIELD_OPTS: { key: string; label: string; group: string; opts: string
 
 const STATUSES = ["Shoot Done", "Shoot Pending"];
 
+const TAT_BUCKETS = [
+  { label: "1–30 d",  min: 0,  max: 30       },
+  { label: "31–60 d", min: 31, max: 60       },
+  { label: "61–90 d", min: 61, max: 90       },
+  { label: "91+ d",   min: 91, max: Infinity },
+  { label: "No Date", min: -1, max: -1       },
+];
+
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string }> = {
   "Shoot Done":    { bg: "#DCFCE7", text: "#16A34A", border: "#86EFAC" },
   "Shoot Pending": { bg: "#FEF3C7", text: "#D97706", border: "#FDE68A" },
@@ -314,38 +322,55 @@ export default function PhotoshootPage() {
     return { label: f.label, total, pUpdated, pExcept, pPending, aUpdated, aPending };
   }), [rows]);
 
-  // ── TAT summary ─────────────────────────────────────────────────────────────
-  const tatSummary = useMemo(() => {
-    const today = Date.now();
-    return OTA_FIELDS.map(f => {
-      const otaName   = FIELD_TO_OTA[f.key];
-      const shootDone = rows.filter(r => r.photoshoot_status === "Shoot Done");
-      const withData  = shootDone.filter(r => r.shoot_date && r.live_dates?.[otaName]);
-      const tats      = withData.map(r => Math.round(
-        (new Date((r.live_dates as Record<string,string>)[otaName]).getTime() - new Date(r.shoot_date as string).getTime()) / 86400000
-      ));
-      const avg = tats.length ? Math.round(tats.reduce((a, b) => a + b, 0) / tats.length) : null;
+  // ── Table 1: Month-wise OTA pendencies (FH live date, shoot done only) ──────
+  const monthlyPendency = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    for (const r of rows) {
+      if (r.photoshoot_status !== "Shoot Done" || !r.fh_live_date) continue;
+      const d    = new Date(r.fh_live_date as string);
+      const key  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!map.has(key)) map.set(key, {});
+      const entry = map.get(key)!;
+      for (const f of OTA_FIELDS) {
+        const val = (r[f.key] as string) ?? "Pending";
+        if (val === "Pending") entry[f.key] = (entry[f.key] ?? 0) + 1;
+      }
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, counts]) => {
+        const [yr, mo] = key.split("-");
+        const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        const total = OTA_FIELDS.reduce((s, f) => s + (counts[f.key] ?? 0), 0);
+        return { label, counts, total };
+      })
+      .filter(m => m.total > 0);
+  }, [rows]);
 
-      const pendingRows = shootDone.filter(r =>
-        (r[f.key] as string) !== "Updated" && r.shoot_date && r.live_dates?.[otaName]
-      );
-      const pendingDays = pendingRows.map(r => {
-        const shoot = new Date(r.shoot_date as string).getTime();
-        const live  = new Date((r.live_dates as Record<string,string>)[otaName]).getTime();
-        return Math.round((today - Math.max(shoot, live)) / 86400000);
-      }).filter(d => d >= 0);
-      const avgPending = pendingDays.length ? Math.round(pendingDays.reduce((a, b) => a + b, 0) / pendingDays.length) : null;
-
-      return {
-        label: f.label, eligible: tats.length, noData: shootDone.length - tats.length, avg,
-        late:   tats.filter(t => t < 0).length,
-        d0_30:  tats.filter(t => t >= 0  && t < 30).length,
-        d30_60: tats.filter(t => t >= 30 && t < 60).length,
-        d60_90: tats.filter(t => t >= 60 && t < 90).length,
-        d90p:   tats.filter(t => t >= 90).length,
-        pendingCount: pendingDays.length, avgPending,
-      };
-    });
+  // ── Table 2: TAT bucket × OTA (pending cases only) ───────────────────────────
+  // TAT = today − max(shoot_date, ota_live_date)  [days since both conditions met]
+  const tatBucketData = useMemo(() => {
+    const today   = Date.now();
+    const buckets = TAT_BUCKETS.map(b => ({ ...b, counts: {} as Record<string, number>, total: 0 }));
+    for (const r of rows) {
+      if (r.photoshoot_status !== "Shoot Done") continue;
+      for (const f of OTA_FIELDS) {
+        const val = (r[f.key] as string) ?? "Pending";
+        if (val !== "Pending") continue;
+        const shootMs = r.shoot_date ? new Date(r.shoot_date as string).getTime() : null;
+        const liveMs  = r.live_dates?.[FIELD_TO_OTA[f.key]]
+          ? new Date((r.live_dates as Record<string, string>)[FIELD_TO_OTA[f.key]]).getTime()
+          : null;
+        let tat: number | null = null;
+        if (shootMs !== null && liveMs !== null) tat = Math.round((today - Math.max(shootMs, liveMs)) / 86400000);
+        else if (shootMs !== null)               tat = Math.round((today - shootMs) / 86400000);
+        const bucket = tat === null
+          ? buckets.find(b => b.label === "No Date")!
+          : buckets.find(b => b.min !== -1 && tat! >= b.min && tat! <= b.max)!;
+        if (bucket) { bucket.counts[f.key] = (bucket.counts[f.key] ?? 0) + 1; bucket.total++; }
+      }
+    }
+    return buckets.filter(b => b.total > 0);
   }, [rows]);
 
   const bulkParsedIds = useMemo(() => [...new Set(bulkIds.trim().split(/\s+/).filter(Boolean))], [bulkIds]);
@@ -667,49 +692,145 @@ export default function PhotoshootPage() {
 
         {/* ════════════════════ TAT ANALYSIS TAB ════════════════════ */}
         {mainTab === "tat" && (
-          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", padding: "20px", overflowX: "auto" }}>
-            <div style={{ fontSize: 11, color: "#64748B", marginBottom: 8 }}>
-              <strong>TAT = OTA live date − shoot date</strong> &nbsp;·&nbsp;
-              <span style={{ color: "#DC2626", fontWeight: 700 }}>Late</span>: OTA went live before shoot (no photos at launch) &nbsp;·&nbsp;
-              <span style={{ color: "#D97706", fontWeight: 700 }}>Pending Wait</span>: days waiting since shoot & OTA both ready, images still not uploaded
-            </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 860 }}>
-              <thead>
-                <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
-                  {["OTA","Data Pts","Avg TAT","Late (<0d)","0–30 d","30–60 d","60–90 d","90+ d","No Data","Pending Upload","Avg Wait"].map(h => (
-                    <th key={h} style={{ padding: "9px 12px", textAlign: h === "OTA" ? "left" : "center", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", borderRight: "1px solid #F1F5F9" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tatSummary.map((t, i) => {
-                  const avgColor = t.avg === null ? "#94A3B8" : t.avg < 0 ? "#DC2626" : t.avg < 30 ? "#16A34A" : t.avg < 60 ? "#D97706" : "#7C3AED";
-                  return (
-                    <tr key={t.label} style={{ background: i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
-                      <td style={{ padding: "9px 12px", fontWeight: 700, color: "#0F172A", whiteSpace: "nowrap" }}>{t.label}</td>
-                      <td style={{ padding: "9px 12px", textAlign: "center", color: "#374151" }}>{t.eligible}</td>
-                      <td style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, color: avgColor }}>{t.avg !== null ? `${t.avg}d` : "—"}</td>
-                      <td style={{ padding: "9px 12px", textAlign: "center" }}>
-                        {t.late > 0 ? <span style={{ background: "#FEE2E2", color: "#DC2626", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 11 }}>{t.late}</span> : <span style={{ color: "#CBD5E1" }}>—</span>}
-                      </td>
-                      {[t.d0_30, t.d30_60, t.d60_90, t.d90p].map((v, j) => (
-                        <td key={j} style={{ padding: "9px 12px", textAlign: "center", color: v > 0 ? "#374151" : "#CBD5E1" }}>{v > 0 ? v : "—"}</td>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* ── Table 1: Month-wise pendencies ── */}
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "baseline", gap: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>📅 Month-wise OTA Pendencies</div>
+                <div style={{ fontSize: 11, color: "#64748B" }}>by FH live date · shoot done · pending uploads only</div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 700 }}>
+                  <thead>
+                    <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
+                      <th style={{ ...TH_BASE, minWidth: 90 }}>FH Live Month</th>
+                      {OTA_FIELDS.map(f => (
+                        <th key={f.key} style={{ ...TH_BASE, textAlign: "center", background: "#F5F3FF", color: "#6D28D9", borderRight: "1px solid #EDE9FE" }}>{f.label}</th>
                       ))}
-                      <td style={{ padding: "9px 12px", textAlign: "center", color: t.noData > 0 ? "#94A3B8" : "#CBD5E1" }}>{t.noData > 0 ? t.noData : "—"}</td>
-                      <td style={{ padding: "9px 12px", textAlign: "center" }}>
-                        {t.pendingCount > 0 ? <span style={{ background: "#FEF3C7", color: "#D97706", borderRadius: 6, padding: "2px 8px", fontWeight: 700, fontSize: 11 }}>{t.pendingCount}</span> : <span style={{ color: "#CBD5E1" }}>—</span>}
-                      </td>
-                      <td style={{ padding: "9px 12px", textAlign: "center", fontWeight: 700, color: t.avgPending === null ? "#CBD5E1" : t.avgPending > 60 ? "#DC2626" : t.avgPending > 30 ? "#D97706" : "#16A34A" }}>
-                        {t.avgPending !== null ? `${t.avgPending}d` : "—"}
-                      </td>
+                      <th style={{ ...TH_BASE, textAlign: "center", borderRight: "none", color: "#374151", fontWeight: 800 }}>Total</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div style={{ marginTop: 10, fontSize: 10, color: "#94A3B8" }}>
-              TAT requires shoot date + OTA live date from listing system. "Pending Upload" = shoot done, OTA live, images still Pending — Avg Wait uses max(shoot date, OTA live date) as start.
+                  </thead>
+                  <tbody>
+                    {monthlyPendency.length === 0 ? (
+                      <tr><td colSpan={13} style={{ padding: 28, textAlign: "center", color: "#9CA3AF" }}>No pending cases found</td></tr>
+                    ) : monthlyPendency.map((m, i) => (
+                      <tr key={m.label} style={{ background: i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{m.label}</td>
+                        {OTA_FIELDS.map(f => {
+                          const v = m.counts[f.key] ?? 0;
+                          return (
+                            <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: i % 2 === 0 ? "#FDFCFF" : "#FAF9FF", borderRight: "1px solid #EDE9FE" }}>
+                              {v > 0 ? <span style={{ fontWeight: 700, color: "#6D28D9" }}>{v}</span> : <span style={{ color: "#E2E8F0" }}>—</span>}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: m.total > 0 ? "#374151" : "#CBD5E1" }}>
+                          {m.total > 0 ? m.total : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Totals row */}
+                    {monthlyPendency.length > 1 && (() => {
+                      const totals: Record<string, number> = {};
+                      let grand = 0;
+                      for (const m of monthlyPendency) {
+                        for (const f of OTA_FIELDS) { totals[f.key] = (totals[f.key] ?? 0) + (m.counts[f.key] ?? 0); }
+                        grand += m.total;
+                      }
+                      return (
+                        <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: 800, color: "#374151" }}>Total</td>
+                          {OTA_FIELDS.map(f => (
+                            <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#6D28D9", borderRight: "1px solid #EDE9FE" }}>
+                              {totals[f.key] > 0 ? totals[f.key] : "—"}
+                            </td>
+                          ))}
+                          <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#0F172A" }}>{grand}</td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* ── Table 2: TAT bucket × OTA ── */}
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "baseline", gap: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>⏱ Pending Upload TAT</div>
+                <div style={{ fontSize: 11, color: "#64748B" }}>
+                  TAT = today − max(shoot date, OTA live date) · shoot done · upload still pending
+                </div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 700 }}>
+                  <thead>
+                    <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
+                      <th style={{ ...TH_BASE, minWidth: 80 }}>TAT Range</th>
+                      {OTA_FIELDS.map(f => (
+                        <th key={f.key} style={{ ...TH_BASE, textAlign: "center", background: "#F5F3FF", color: "#6D28D9", borderRight: "1px solid #EDE9FE" }}>{f.label}</th>
+                      ))}
+                      <th style={{ ...TH_BASE, textAlign: "center", borderRight: "none", color: "#374151", fontWeight: 800 }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tatBucketData.length === 0 ? (
+                      <tr><td colSpan={13} style={{ padding: 28, textAlign: "center", color: "#9CA3AF" }}>No pending cases found</td></tr>
+                    ) : tatBucketData.map((b, i) => {
+                      const isNoDate  = b.label === "No Date";
+                      const isUrgent  = b.label === "91+ d";
+                      const rowBg     = i % 2 === 0 ? "#fff" : "#FAFAFA";
+                      return (
+                        <tr key={b.label} style={{ background: isUrgent ? "#FFF7ED" : rowBg, borderBottom: "1px solid #F1F5F9" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: 700, whiteSpace: "nowrap", color: isNoDate ? "#94A3B8" : isUrgent ? "#C2410C" : "#374151" }}>
+                            {b.label}
+                          </td>
+                          {OTA_FIELDS.map(f => {
+                            const v = b.counts[f.key] ?? 0;
+                            const cellColor = isUrgent && v > 0 ? "#DC2626" : v > 0 ? "#6D28D9" : undefined;
+                            return (
+                              <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: isUrgent ? "#FFF7ED" : i % 2 === 0 ? "#FDFCFF" : "#FAF9FF", borderRight: "1px solid #EDE9FE" }}>
+                                {v > 0
+                                  ? <span style={{ fontWeight: 700, color: cellColor }}>{v}</span>
+                                  : <span style={{ color: "#E2E8F0" }}>—</span>}
+                              </td>
+                            );
+                          })}
+                          <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: isUrgent ? "#C2410C" : isNoDate ? "#94A3B8" : "#374151" }}>
+                            {b.total > 0 ? b.total : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Totals row */}
+                    {tatBucketData.length > 0 && (() => {
+                      const totals: Record<string, number> = {};
+                      let grand = 0;
+                      for (const b of tatBucketData) {
+                        for (const f of OTA_FIELDS) { totals[f.key] = (totals[f.key] ?? 0) + (b.counts[f.key] ?? 0); }
+                        grand += b.total;
+                      }
+                      return (
+                        <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: 800, color: "#374151" }}>Total</td>
+                          {OTA_FIELDS.map(f => (
+                            <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#6D28D9", borderRight: "1px solid #EDE9FE" }}>
+                              {totals[f.key] > 0 ? totals[f.key] : "—"}
+                            </td>
+                          ))}
+                          <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#0F172A" }}>{grand}</td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ padding: "8px 18px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", fontSize: 10, color: "#94A3B8" }}>
+                If only shoot date is available (no OTA live date), TAT = today − shoot date. "No Date" = no shoot date recorded.
+              </div>
+            </div>
+
           </div>
         )}
 
