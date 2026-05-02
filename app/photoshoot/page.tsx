@@ -324,11 +324,15 @@ export default function PhotoshootPage() {
 
   // ── Table 1: Month-wise OTA pendencies (FH live date, shoot done only) ──────
   const monthlyPendency = useMemo(() => {
-    const map = new Map<string, Record<string, number>>();
+    const now        = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const map        = new Map<string, Record<string, number>>();
+    map.set(currentKey, {}); // always include current month
+
     for (const r of rows) {
       if (r.photoshoot_status !== "Shoot Done" || !r.fh_live_date) continue;
-      const d    = new Date(r.fh_live_date as string);
-      const key  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const d   = new Date(r.fh_live_date as string);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!map.has(key)) map.set(key, {});
       const entry = map.get(key)!;
       for (const f of OTA_FIELDS) {
@@ -337,14 +341,14 @@ export default function PhotoshootPage() {
       }
     }
     return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => b.localeCompare(a))                        // most recent first
       .map(([key, counts]) => {
         const [yr, mo] = key.split("-");
-        const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-        const total = OTA_FIELDS.reduce((s, f) => s + (counts[f.key] ?? 0), 0);
-        return { label, counts, total };
+        const label    = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        const total    = OTA_FIELDS.reduce((s, f) => s + (counts[f.key] ?? 0), 0);
+        return { label, counts, total, isCurrent: key === currentKey };
       })
-      .filter(m => m.total > 0);
+      .filter(m => m.total > 0 || m.isCurrent);                      // keep all months with pending + always current
   }, [rows]);
 
   // ── Table 2: TAT bucket × OTA (pending cases only) ───────────────────────────
@@ -715,8 +719,10 @@ export default function PhotoshootPage() {
                     {monthlyPendency.length === 0 ? (
                       <tr><td colSpan={13} style={{ padding: 28, textAlign: "center", color: "#9CA3AF" }}>No pending cases found</td></tr>
                     ) : monthlyPendency.map((m, i) => (
-                      <tr key={m.label} style={{ background: i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
-                        <td style={{ padding: "8px 12px", fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{m.label}</td>
+                      <tr key={m.label} style={{ background: m.isCurrent ? "#EEF2FF" : i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: 700, color: m.isCurrent ? "#4F46E5" : "#374151", whiteSpace: "nowrap" }}>
+                          {m.label}{m.isCurrent && <span style={{ fontSize: 9, fontWeight: 700, background: "#C7D2FE", color: "#4338CA", borderRadius: 4, padding: "1px 5px", marginLeft: 6 }}>current</span>}
+                        </td>
                         {OTA_FIELDS.map(f => {
                           const v = m.counts[f.key] ?? 0;
                           return (
