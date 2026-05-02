@@ -47,12 +47,15 @@ export async function POST(req: Request) {
   for (const row of form1.rows) {
     const pid = clean(row[2]);
     if (!pid) continue;
-    const link      = clean(row[3]);
+    const rawLink   = clean(row[3]);
+    const validLink = rawLink?.startsWith("http") ? rawLink : null;
     const shootDate = parseShootDate(row[0]);
+    const existing  = formMap.get(pid);
+    // Preserve an existing valid link if this row has none
     formMap.set(pid, {
-      link:      link?.startsWith("http") ? link : null,
-      shootDate,
-    }); // last row wins (most recent submission)
+      link:      validLink ?? existing?.link ?? null,
+      shootDate: shootDate ?? existing?.shootDate ?? null,
+    });
   }
 
   // ── Vendor Edited link: col A (idx 0) = FH ID, col D (idx 3) = Edited Link, col M (idx 12) = Date
@@ -60,9 +63,12 @@ export async function POST(req: Request) {
   for (const row of vendor.rows) {
     const pid  = clean(row[0]);
     if (!pid) continue;
-    const link      = clean(row[3]);
+    const rawLink   = clean(row[3]);
+    const validLink = rawLink?.startsWith("http") ? rawLink : null;
     const shootDate = parseShootDate(row[12]);
-    vendorMap.set(pid, { link: link?.startsWith("http") ? link : null, shootDate });
+    const existing  = vendorMap.get(pid);
+    // Preserve an existing valid link if this row has none
+    vendorMap.set(pid, { link: validLink ?? existing?.link ?? null, shootDate: shootDate ?? existing?.shootDate ?? null });
   }
 
   // ── Classify every inventory property ─────────────────────────────────────
