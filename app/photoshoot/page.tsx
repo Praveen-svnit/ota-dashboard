@@ -99,16 +99,28 @@ type MainTab = "table" | "ota" | "tat" | "dod";
 
 // ── OtaDropdown ── module-level so React never re-mounts it ───────────────────
 
+const OTA_NOT_LIVE_STYLE = { bg: "#FFF7ED", text: "#C2410C", border: "#FED7AA" };
+
 interface DropdownProps {
   propertyId: string;
   field:      string;
   value:      string;
   opts:       readonly string[];
   saving:     boolean;
+  isLive?:    boolean;  // undefined = not an OTA-gated field (AI editing)
   onSave:     (id: string, field: string, val: string) => void;
 }
 
-const OtaDropdown = React.memo(function OtaDropdown({ propertyId, field, value, opts, saving, onSave }: DropdownProps) {
+const OtaDropdown = React.memo(function OtaDropdown({ propertyId, field, value, opts, saving, isLive, onSave }: DropdownProps) {
+  // When OTA is not live yet and upload isn't already done, show a read-only badge
+  if (isLive === false && value !== "Updated" && value !== "Photoshoot Exception") {
+    return (
+      <span style={{ padding: "3px 7px", borderRadius: 6, border: `1.5px solid ${OTA_NOT_LIVE_STYLE.border}`, background: OTA_NOT_LIVE_STYLE.bg, color: OTA_NOT_LIVE_STYLE.text, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap", display: "inline-block" }}>
+        OTA Not Live
+      </span>
+    );
+  }
+
   const style = value === "Updated"             ? UPDATED_STYLE
     : value === "Photoshoot Exception"          ? EXCEPTION_STYLE
     : value === "Yes"                           ? YES_STYLE
@@ -134,12 +146,15 @@ interface RowProps {
 }
 
 const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEditCell, savingKeys, onSave }: RowProps) {
-  const ss   = STATUS_STYLE[row.photoshoot_status] ?? STATUS_STYLE["Shoot Pending"];
-  const fs   = FH_STATUS_STYLE[row.fh_status] ?? { bg: "#F1F5F9", text: "#64748B" };
-  const even = rowIndex % 2 === 0;
-  const base = even ? "#fff" : "#FAFAFA";
+  const ss        = STATUS_STYLE[row.photoshoot_status] ?? STATUS_STYLE["Shoot Pending"];
+  const fs        = FH_STATUS_STYLE[row.fh_status] ?? { bg: "#F1F5F9", text: "#64748B" };
+  const even      = rowIndex % 2 === 0;
+  const base      = even ? "#fff" : "#FAFAFA";
   const td: React.CSSProperties = { padding: "6px 10px", background: base, borderRight: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" };
-  const sv = (f: string) => !!savingKeys[`${row.property_id}:${f}`];
+  const sv        = (f: string) => !!savingKeys[`${row.property_id}:${f}`];
+  const liveDates = row.live_dates as Record<string, string> | null;
+  // Returns true only if that OTA has a live date for this property
+  const otaIsLive = (otaLabel: string) => !!(liveDates?.[otaLabel]);
 
   return (
     <tr>
@@ -158,16 +173,34 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
       </td>
 
       {/* Shoot Link */}
-      <td style={{ ...td, maxWidth: 160 }}>
+      <td style={{ ...td, maxWidth: 180 }}>
         {row.shoot_link
           ? (() => {
-              const link = row.shoot_link as string;
+              const link  = row.shoot_link as string;
               const isUnc = link.startsWith("\\\\") || link.startsWith("//");
-              const href  = isUnc ? "file:////" + link.replace(/^[\\\/]+/, "").replace(/\\/g, "/") : link;
+              if (isUnc) {
+                // Convert \\server\path → file:////server/path with encoded spaces
+                const path = link.replace(/^[\\\/]+/, "").replace(/\\/g, "/");
+                const href = "file:////" + path.split("/").map(s => encodeURIComponent(s)).join("/");
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      title={link}
+                      style={{ fontSize: 10, fontWeight: 600, color: "#0369A1", textDecoration: "none", background: "#E0F2FE", borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>
+                      📁 View
+                    </a>
+                    <span onClick={() => navigator.clipboard?.writeText(link)}
+                      title="Copy path to clipboard — paste in Windows Explorer address bar"
+                      style={{ fontSize: 10, cursor: "pointer", color: "#94A3B8", padding: "2px 5px", borderRadius: 4, background: "#F1F5F9", whiteSpace: "nowrap" }}>
+                      📋
+                    </span>
+                  </div>
+                );
+              }
               return (
-                <a href={href} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: 10, fontWeight: 600, color: isUnc ? "#0369A1" : "#4F46E5", textDecoration: "none", background: isUnc ? "#E0F2FE" : "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block", whiteSpace: "nowrap" }}>
-                  {isUnc ? "📁 View" : "🔗 View"}
+                <a href={link} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 10, fontWeight: 600, color: "#4F46E5", textDecoration: "none", background: "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block", whiteSpace: "nowrap" }}>
+                  🔗 View
                 </a>
               );
             })()
@@ -185,19 +218,19 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
       {/* OTA Photoshoot */}
       {OTA_FIELDS.map((f, idx) => (
         <td key={f.key} style={{ ...td, background: even ? "#FDFCFF" : "#FAF9FF", borderRight: idx === OTA_FIELDS.length - 1 ? "2px solid #C7D2FE" : "1px solid #EDE9FE" }}>
-          <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={OTA_PHOTO_OPTS} saving={sv(f.key)} onSave={onSave} />
+          <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={OTA_PHOTO_OPTS} saving={sv(f.key)} isLive={otaIsLive(FIELD_TO_OTA[f.key])} onSave={onSave} />
         </td>
       ))}
 
-      {/* AI Editing Done */}
+      {/* AI Editing Done — not OTA-gated, no isLive */}
       <td style={{ ...td, background: even ? "#F0F9FF" : "#E8F5FE", borderRight: "2px solid #BAE6FD" }}>
         <OtaDropdown propertyId={row.property_id} field="ai_editing_done" value={(row.ai_editing_done as string) ?? "No"} opts={AI_EDIT_OPTS} saving={sv("ai_editing_done")} onSave={onSave} />
       </td>
 
-      {/* AI Image */}
+      {/* AI Image — gated by same OTA live date */}
       {AI_FIELDS.map((f, idx) => (
         <td key={f.key} style={{ ...td, background: even ? "#F9FFFE" : "#F2FDF9", borderRight: idx === AI_FIELDS.length - 1 ? "2px solid #6EE7B7" : "1px solid #BBF7D0" }}>
-          <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={AI_IMG_OPTS} saving={sv(f.key)} onSave={onSave} />
+          <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={AI_IMG_OPTS} saving={sv(f.key)} isLive={otaIsLive(FIELD_TO_OTA["ota_" + f.key.slice(3)])} onSave={onSave} />
         </td>
       ))}
 
