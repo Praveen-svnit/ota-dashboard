@@ -545,18 +545,11 @@ export default function PhotoshootPage() {
         {/* ════════════════════ TABLE TAB ════════════════════ */}
         {mainTab === "table" && (
           <>
-            {/* Filter row 1: search + count */}
+            {/* Filters + search — single row */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search property ID, name, city…"
-                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", width: 260 }} />
-              <div style={{ marginLeft: "auto", fontSize: 11, color: "#94A3B8" }}>
-                {loading ? "Loading…" : `${filtered.length} of ${rows.length} properties`}
-              </div>
-            </div>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search ID, name, city…"
+                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", width: 210 }} />
 
-            {/* Filter row 2: cascading type → OTA → value */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              {/* Step 1: type */}
               <select value={filterType} onChange={e => { setFilterType(e.target.value as "all"|"photoshoot"|"ai"); setFilterOta(""); setFilterValue(""); }}
                 style={{ padding: "7px 12px", border: `1px solid ${filterType !== "all" ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterType !== "all" ? "#F5F3FF" : "#fff", color: filterType !== "all" ? "#6D28D9" : "#374151", fontWeight: filterType !== "all" ? 700 : 400 }}>
                 <option value="all">All</option>
@@ -564,7 +557,6 @@ export default function PhotoshootPage() {
                 <option value="ai">🤖 AI Images</option>
               </select>
 
-              {/* Step 2: OTA (shown once type is selected) */}
               {filterType !== "all" && (
                 <select value={filterOta} onChange={e => { setFilterOta(e.target.value); setFilterValue(e.target.value && filterType === "photoshoot" ? "OTA Not Live" : ""); }}
                   style={{ padding: "7px 12px", border: `1px solid ${filterOta ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterOta ? "#F5F3FF" : "#fff", color: filterOta ? "#6D28D9" : "#374151", fontWeight: filterOta ? 700 : 400 }}>
@@ -573,7 +565,6 @@ export default function PhotoshootPage() {
                 </select>
               )}
 
-              {/* Step 3: value (shown once OTA is selected) */}
               {filterType !== "all" && filterOta && (
                 <select value={filterValue} onChange={e => setFilterValue(e.target.value)}
                   style={{ padding: "7px 12px", border: `1px solid ${filterValue ? "#4F46E5" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterValue ? "#EEF2FF" : "#fff", color: filterValue ? "#4F46E5" : "#374151", fontWeight: filterValue ? 700 : 400 }}>
@@ -588,9 +579,13 @@ export default function PhotoshootPage() {
               {hasActiveFilter && (
                 <button onClick={() => { setSearch(""); setStatusFilter("all"); setCityFilter("all"); setFilterType("all"); setFilterOta(""); setFilterValue(""); }}
                   style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 12, cursor: "pointer" }}>
-                  Clear all filters
+                  Clear
                 </button>
               )}
+
+              <div style={{ marginLeft: "auto", fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap" }}>
+                {loading ? "Loading…" : `${filtered.length} of ${rows.length}`}
+              </div>
             </div>
 
             {/* Bulk Update Panel */}
