@@ -76,6 +76,10 @@ const TH_BASE: React.CSSProperties = {
   whiteSpace: "nowrap", borderRight: "1px solid #E2E8F0",
 };
 
+// Frozen column widths (must match sticky left offsets)
+const COL_ID_W   = 88;
+const COL_NAME_W = 155;
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface PhotoRow {
@@ -156,10 +160,14 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
   // Returns true only if that OTA has a live date for this property
   const otaIsLive = (otaLabel: string) => !!(liveDates?.[otaLabel]);
 
+  const stickyTd = (left: number, extra?: React.CSSProperties): React.CSSProperties => ({
+    ...td, position: "sticky", left, zIndex: 1, boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)", ...extra,
+  });
+
   return (
     <tr>
-      <td style={{ ...td, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>{row.property_id}</td>
-      <td style={{ ...td, color: "#475569", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.property_name}>{row.property_name}</td>
+      <td style={stickyTd(0, { fontWeight: 700, color: "#374151", whiteSpace: "nowrap", width: COL_ID_W, minWidth: COL_ID_W })}>{row.property_id}</td>
+      <td style={stickyTd(COL_ID_W, { color: "#475569", width: COL_NAME_W, minWidth: COL_NAME_W, maxWidth: COL_NAME_W, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" })} title={row.property_name}>{row.property_name}</td>
       <td style={{ ...td, color: "#475569", whiteSpace: "nowrap" }}>{row.city}</td>
       <td style={td}><span style={{ fontSize: 10, fontWeight: 700, background: fs.bg, color: fs.text, borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap" }}>{row.fh_status}</span></td>
       <td style={{ ...td, color: "#64748B", whiteSpace: "nowrap" }}>{row.fh_live_date ? new Date(row.fh_live_date).toLocaleDateString("en-IN") : "—"}</td>
@@ -476,7 +484,7 @@ export default function PhotoshootPage() {
 
   // ── Tab labels ───────────────────────────────────────────────────────────────
   const TABS: { key: MainTab; label: string }[] = [
-    { key: "table", label: "📋 Table" },
+    { key: "table", label: "📋 Photoshoot Tracker" },
     { key: "ota",   label: "📊 OTA Status" },
     { key: "tat",   label: "⏱ TAT Analysis" },
     { key: "dod",   label: "📈 DoD Tracker" },
@@ -509,17 +517,17 @@ export default function PhotoshootPage() {
 
       <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* Status tiles */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {/* Status tiles — compact inline pills */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {[
             { key: "all",           label: "Total",         val: counts.total,                   bg: "#F1F5F9", text: "#374151", border: "#E2E8F0" },
             { key: "Shoot Done",    label: "Shoot Done",    val: counts["Shoot Done"]    ?? 0, ...STATUS_STYLE["Shoot Done"]    },
             { key: "Shoot Pending", label: "Shoot Pending", val: counts["Shoot Pending"] ?? 0, ...STATUS_STYLE["Shoot Pending"] },
           ].map(tile => (
             <div key={tile.key} onClick={() => { setStatusFilter(tile.key === statusFilter ? "all" : tile.key); setMainTab("table"); }}
-              style={{ background: tile.bg, border: `2px solid ${statusFilter === tile.key ? tile.text : (tile.border ?? tile.text + "40")}`, borderRadius: 10, padding: "12px 18px", cursor: "pointer", minWidth: 100, boxShadow: statusFilter === tile.key ? `0 0 0 3px ${tile.text}20` : "none", transition: "all 0.15s" }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: tile.text }}>{tile.val}</div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: tile.text, marginTop: 2 }}>{tile.label}</div>
+              style={{ display: "flex", alignItems: "center", gap: 6, background: tile.bg, border: `2px solid ${statusFilter === tile.key ? tile.text : (tile.border ?? tile.text + "40")}`, borderRadius: 20, padding: "5px 14px", cursor: "pointer", boxShadow: statusFilter === tile.key ? `0 0 0 3px ${tile.text}20` : "none", transition: "all 0.15s" }}>
+              <span style={{ fontSize: 15, fontWeight: 900, color: tile.text }}>{tile.val}</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: tile.text }}>{tile.label}</span>
             </div>
           ))}
         </div>
@@ -537,20 +545,10 @@ export default function PhotoshootPage() {
         {/* ════════════════════ TABLE TAB ════════════════════ */}
         {mainTab === "table" && (
           <>
-            {/* Filter row 1: search + city + status */}
+            {/* Filter row 1: search + count */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search property ID, name, city…"
-                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", width: 240 }} />
-              <select value={cityFilter} onChange={e => setCityFilter(e.target.value)}
-                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", background: "#fff", color: "#374151" }}>
-                <option value="all">All Cities</option>
-                {cities.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", background: "#fff", color: "#374151" }}>
-                <option value="all">All Shoot Status</option>
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+                style={{ padding: "7px 12px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12, outline: "none", width: 260 }} />
               <div style={{ marginLeft: "auto", fontSize: 11, color: "#94A3B8" }}>
                 {loading ? "Loading…" : `${filtered.length} of ${rows.length} properties`}
               </div>
@@ -669,8 +667,8 @@ export default function PhotoshootPage() {
                       <th colSpan={1}  style={{ ...TH_BASE, background: "#EEF2FF", color: "#64748B", borderRight: "none" }}>Meta</th>
                     </tr>
                     <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
-                      <th style={TH_BASE}>Property ID</th>
-                      <th style={TH_BASE}>Property Name</th>
+                      <th style={{ ...TH_BASE, position: "sticky", left: 0, zIndex: 3, background: "#F8FAFC", width: COL_ID_W, minWidth: COL_ID_W, boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}>Property ID</th>
+                      <th style={{ ...TH_BASE, position: "sticky", left: COL_ID_W, zIndex: 3, background: "#F8FAFC", width: COL_NAME_W, minWidth: COL_NAME_W, boxShadow: "2px 0 4px -2px rgba(0,0,0,0.08)" }}>Property Name</th>
                       <th style={TH_BASE}>City</th>
                       <th style={TH_BASE}>FH Status</th>
                       <th style={TH_BASE}>FH Live Date</th>
