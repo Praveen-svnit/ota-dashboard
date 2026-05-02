@@ -158,8 +158,11 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
       </td>
 
       {/* Shoot Link */}
-      <td style={{ ...td, whiteSpace: "nowrap" }}>
-        {row.shoot_link ? <a href={row.shoot_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 600, color: "#4F46E5", textDecoration: "none", background: "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block" }}>🔗 View</a>
+      <td style={{ ...td, maxWidth: 160 }}>
+        {row.shoot_link
+          ? (row.shoot_link as string).startsWith("http")
+            ? <a href={row.shoot_link as string} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 600, color: "#4F46E5", textDecoration: "none", background: "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block" }}>🔗 View</a>
+            : <span title={row.shoot_link as string} onClick={() => navigator.clipboard?.writeText(row.shoot_link as string)} style={{ fontSize: 9, color: "#64748B", background: "#F1F5F9", borderRadius: 4, padding: "2px 5px", cursor: "copy", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📁 {row.shoot_link}</span>
           : <span style={{ color: "#CBD5E1", fontSize: 10 }}>—</span>}
       </td>
 
@@ -227,6 +230,8 @@ export default function PhotoshootPage() {
   const [bulkApplying,   setBulkApplying]   = useState(false);
   const [bulkResult,     setBulkResult]     = useState<{ updated: number } | null>(null);
   const [bulkError,      setBulkError]      = useState("");
+  const [drillIds,       setDrillIds]       = useState<Set<string> | null>(null);
+  const [drillLabel,     setDrillLabel]     = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -262,6 +267,7 @@ export default function PhotoshootPage() {
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return rows.filter(r => {
+      if (drillIds !== null && !drillIds.has(r.property_id)) return false;
       if (statusFilter !== "all" && r.photoshoot_status !== statusFilter) return false;
       if (cityFilter   !== "all" && r.city !== cityFilter)                return false;
       if (s && !r.property_id.toLowerCase().includes(s) &&
@@ -288,12 +294,12 @@ export default function PhotoshootPage() {
 
       return true;
     });
-  }, [rows, statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter]);
+  }, [rows, statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter, drillIds]);
 
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const visibleRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  useEffect(() => { setPage(0); }, [statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter]);
+  useEffect(() => { setPage(0); }, [statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter, drillIds]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { total: rows.length };
@@ -319,37 +325,46 @@ export default function PhotoshootPage() {
   const monthlyPendency = useMemo(() => {
     const now        = new Date();
     const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const map        = new Map<string, Record<string, number>>();
-    map.set(currentKey, {}); // always include current month
+    const counts     = new Map<string, Record<string, number>>();
+    const ids        = new Map<string, Record<string, string[]>>();  // monthKey → otaKey → propertyIds
+    counts.set(currentKey, {}); ids.set(currentKey, {});
 
     for (const r of rows) {
       if (r.photoshoot_status !== "Shoot Done" || !r.fh_live_date) continue;
       const d   = new Date(r.fh_live_date as string);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (!map.has(key)) map.set(key, {});
-      const entry = map.get(key)!;
+      if (!counts.has(key)) { counts.set(key, {}); ids.set(key, {}); }
+      const cEntry = counts.get(key)!;
+      const iEntry = ids.get(key)!;
       for (const f of OTA_FIELDS) {
         const val = (r[f.key] as string) ?? "Pending";
-        if (val === "Pending") entry[f.key] = (entry[f.key] ?? 0) + 1;
+        if (val === "Pending") {
+          cEntry[f.key] = (cEntry[f.key] ?? 0) + 1;
+          if (!iEntry[f.key]) iEntry[f.key] = [];
+          iEntry[f.key].push(r.property_id);
+        }
       }
     }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => b.localeCompare(a))                        // most recent first
-      .map(([key, counts]) => {
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, cEntry]) => {
         const [yr, mo] = key.split("-");
         const label    = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-        const total    = OTA_FIELDS.reduce((s, f) => s + (counts[f.key] ?? 0), 0);
-        return { label, counts, total, isCurrent: key === currentKey };
+        const total    = OTA_FIELDS.reduce((s, f) => s + (cEntry[f.key] ?? 0), 0);
+        const iEntry   = ids.get(key) ?? {};
+        const allIds   = [...new Set(Object.values(iEntry).flat())];
+        return { label, counts: cEntry, total, isCurrent: key === currentKey, ids: iEntry, allIds };
       })
-      .filter(m => m.total > 0 || m.isCurrent);                      // keep all months with pending + always current
+      .filter(m => m.total > 0 || m.isCurrent);
   }, [rows]);
 
   // ── DoD Tracker: day-by-day pending cases (days 1–30 only) ──────────────────
   // TAT = today − max(shoot_date, ota_live_date); only 1–30 day range shown
   const tatBucketData = useMemo(() => {
-    const today  = Date.now();
-    const dayMap: Record<number, Record<string, number>> = {};
-    for (let d = 1; d <= 30; d++) dayMap[d] = {};
+    const today   = Date.now();
+    const dayMap:  Record<number, Record<string, number>>   = {};
+    const idMap:   Record<number, Record<string, string[]>> = {};
+    for (let d = 1; d <= 30; d++) { dayMap[d] = {}; idMap[d] = {}; }
 
     for (const r of rows) {
       if (r.photoshoot_status !== "Shoot Done") continue;
@@ -365,14 +380,18 @@ export default function PhotoshootPage() {
         else if (shootMs !== null)               tat = Math.round((today - shootMs) / 86400000);
         if (tat === null || tat < 1 || tat > 30) continue;
         dayMap[tat][f.key] = (dayMap[tat][f.key] ?? 0) + 1;
+        if (!idMap[tat][f.key]) idMap[tat][f.key] = [];
+        idMap[tat][f.key].push(r.property_id);
       }
     }
 
     return Array.from({ length: 30 }, (_, i) => {
       const day    = i + 1;
       const counts = dayMap[day];
+      const ids    = idMap[day];
       const total  = OTA_FIELDS.reduce((s, f) => s + (counts[f.key] ?? 0), 0);
-      return { day, counts, total };
+      const allIds = [...new Set(Object.values(ids).flat())];
+      return { day, counts, total, ids, allIds };
     }).filter(d => d.total > 0);
   }, [rows]);
 
@@ -398,6 +417,13 @@ export default function PhotoshootPage() {
       setBulkResult(data); load();
     } catch (e) { setBulkError((e as Error).message); }
     finally { setBulkApplying(false); }
+  }
+
+  function drillTo(ids: string[], label: string) {
+    setDrillIds(new Set(ids));
+    setDrillLabel(label);
+    setMainTab("table");
+    setPage(0);
   }
 
   const totalCols = 9 + 11 + 1 + 11 + 1;
@@ -559,6 +585,18 @@ export default function PhotoshootPage() {
                     {bulkError  && <div style={{ fontSize: 11, color: "#DC2626" }}>⚠ {bulkError}</div>}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Drill-down banner */}
+            {drillIds !== null && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", background: "#EEF2FF", borderRadius: 8, border: "1px solid #C7D2FE" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#4F46E5" }}>🔍 Drill: {drillLabel}</span>
+                <span style={{ fontSize: 11, color: "#6366F1" }}>({drillIds.size} properties)</span>
+                <button onClick={() => { setDrillIds(null); setDrillLabel(""); }}
+                  style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: 6, border: "1px solid #C7D2FE", background: "#fff", color: "#4F46E5", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  × Clear drill
+                </button>
               </div>
             )}
 
@@ -736,14 +774,19 @@ export default function PhotoshootPage() {
                         </td>
                         {OTA_FIELDS.map(f => {
                           const v = m.counts[f.key] ?? 0;
+                          const drillIds = m.ids[f.key] ?? [];
                           return (
                             <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: i % 2 === 0 ? "#FDFCFF" : "#FAF9FF", borderRight: "1px solid #EDE9FE" }}>
-                              {v > 0 ? <span style={{ fontWeight: 700, color: "#6D28D9" }}>{v}</span> : <span style={{ color: "#E2E8F0" }}>—</span>}
+                              {v > 0
+                                ? <span onClick={() => drillTo(drillIds, `${m.label} · ${f.label} Pending`)} style={{ fontWeight: 700, color: "#6D28D9", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{v}</span>
+                                : <span style={{ color: "#E2E8F0" }}>—</span>}
                             </td>
                           );
                         })}
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: m.total > 0 ? "#374151" : "#CBD5E1" }}>
-                          {m.total > 0 ? m.total : "—"}
+                          {m.total > 0
+                            ? <span onClick={() => drillTo(m.allIds, `${m.label} · Any OTA Pending`)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{m.total}</span>
+                            : "—"}
                         </td>
                       </tr>
                     ))}
@@ -808,15 +851,21 @@ export default function PhotoshootPage() {
                           {b.day}
                         </td>
                         {OTA_FIELDS.map(f => {
-                          const v = b.counts[f.key] ?? 0;
+                          const v    = b.counts[f.key] ?? 0;
+                          const fIds = b.ids[f.key] ?? [];
+                          const clr  = urgency === "high" ? "#DC2626" : urgency === "med" ? "#B45309" : "#6D28D9";
                           return (
                             <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: urgency === "high" ? "#FFF7ED" : urgency === "med" ? "#FFFBEB" : i % 2 === 0 ? "#FDFCFF" : "#FAF9FF", borderRight: "1px solid #EDE9FE" }}>
-                              {v > 0 ? <span style={{ fontWeight: 700, color: urgency === "high" ? "#DC2626" : urgency === "med" ? "#B45309" : "#6D28D9" }}>{v}</span> : <span style={{ color: "#E2E8F0" }}>—</span>}
+                              {v > 0
+                                ? <span onClick={() => drillTo(fIds, `Day ${b.day} · ${f.label} Pending`)} style={{ fontWeight: 700, color: clr, cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{v}</span>
+                                : <span style={{ color: "#E2E8F0" }}>—</span>}
                             </td>
                           );
                         })}
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: dayColor }}>
-                          {b.total > 0 ? b.total : "—"}
+                          {b.total > 0
+                            ? <span onClick={() => drillTo(b.allIds, `Day ${b.day} · Any OTA Pending`)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{b.total}</span>
+                            : "—"}
                         </td>
                       </tr>
                     );

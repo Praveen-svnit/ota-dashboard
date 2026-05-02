@@ -48,12 +48,11 @@ export async function POST(req: Request) {
     const pid = clean(row[2]);
     if (!pid) continue;
     const rawLink   = clean(row[3]);
-    const validLink = rawLink?.startsWith("http") ? rawLink : null;
     const shootDate = parseShootDate(row[0]);
     const existing  = formMap.get(pid);
-    // Preserve an existing valid link if this row has none
+    // Preserve an existing link if this row has none (handles re-submissions with empty link)
     formMap.set(pid, {
-      link:      validLink ?? existing?.link ?? null,
+      link:      rawLink ?? existing?.link ?? null,
       shootDate: shootDate ?? existing?.shootDate ?? null,
     });
   }
@@ -64,11 +63,10 @@ export async function POST(req: Request) {
     const pid  = clean(row[0]);
     if (!pid) continue;
     const rawLink   = clean(row[3]);
-    const validLink = rawLink?.startsWith("http") ? rawLink : null;
     const shootDate = parseShootDate(row[12]);
     const existing  = vendorMap.get(pid);
-    // Preserve an existing valid link if this row has none
-    vendorMap.set(pid, { link: validLink ?? existing?.link ?? null, shootDate: shootDate ?? existing?.shootDate ?? null });
+    // Preserve an existing link if this row has none
+    vendorMap.set(pid, { link: rawLink ?? existing?.link ?? null, shootDate: shootDate ?? existing?.shootDate ?? null });
   }
 
   // ── Classify every inventory property ─────────────────────────────────────
