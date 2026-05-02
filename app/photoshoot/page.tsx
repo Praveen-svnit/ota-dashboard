@@ -160,9 +160,17 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
       {/* Shoot Link */}
       <td style={{ ...td, maxWidth: 160 }}>
         {row.shoot_link
-          ? (row.shoot_link as string).startsWith("http")
-            ? <a href={row.shoot_link as string} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, fontWeight: 600, color: "#4F46E5", textDecoration: "none", background: "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block" }}>🔗 View</a>
-            : <span title={row.shoot_link as string} onClick={() => navigator.clipboard?.writeText(row.shoot_link as string)} style={{ fontSize: 9, color: "#64748B", background: "#F1F5F9", borderRadius: 4, padding: "2px 5px", cursor: "copy", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📁 {row.shoot_link}</span>
+          ? (() => {
+              const link = row.shoot_link as string;
+              const isUnc = link.startsWith("\\\\") || link.startsWith("//");
+              const href  = isUnc ? "file:////" + link.replace(/^[\\\/]+/, "").replace(/\\/g, "/") : link;
+              return (
+                <a href={href} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 10, fontWeight: 600, color: isUnc ? "#0369A1" : "#4F46E5", textDecoration: "none", background: isUnc ? "#E0F2FE" : "#EEF2FF", borderRadius: 6, padding: "2px 7px", display: "inline-block", whiteSpace: "nowrap" }}>
+                  {isUnc ? "📁 View" : "🔗 View"}
+                </a>
+              );
+            })()
           : <span style={{ color: "#CBD5E1", fontSize: 10 }}>—</span>}
       </td>
 
@@ -217,9 +225,9 @@ export default function PhotoshootPage() {
   const [search,         setSearch]         = useState("");
   const [statusFilter,   setStatusFilter]   = useState("all");
   const [cityFilter,     setCityFilter]     = useState("all");
-  const [otaPhotoFilter, setOtaPhotoFilter] = useState("all");
-  const [aiEditFilter,   setAiEditFilter]   = useState("all");
-  const [aiImageFilter,  setAiImageFilter]  = useState("all");
+  const [filterType,     setFilterType]     = useState<"all" | "photoshoot" | "ai">("all");
+  const [filterOta,      setFilterOta]      = useState("");   // OTA suffix, e.g. "gommt"
+  const [filterValue,    setFilterValue]    = useState("");
   const [savingKeys,     setSavingKeys]     = useState<Record<string, boolean>>({});
   const [editCell,       setEditCell]       = useState<{ id: string; field: string } | null>(null);
   const [page,           setPage]           = useState(0);
@@ -266,7 +274,7 @@ export default function PhotoshootPage() {
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
-    return rows.filter(r => {
+    const result = rows.filter(r => {
       if (drillIds !== null && !drillIds.has(r.property_id)) return false;
       if (statusFilter !== "all" && r.photoshoot_status !== statusFilter) return false;
       if (cityFilter   !== "all" && r.city !== cityFilter)                return false;
@@ -274,32 +282,33 @@ export default function PhotoshootPage() {
                !r.property_name.toLowerCase().includes(s) &&
                !(r.city ?? "").toLowerCase().includes(s))                return false;
 
-      // OTA photoshoot filter
-      if (otaPhotoFilter === "any_pending")
-        { if (!OTA_FIELDS.some(f => !r[f.key] || r[f.key] === "Pending")) return false; }
-      else if (otaPhotoFilter === "all_updated")
-        { if (!OTA_FIELDS.every(f => r[f.key] === "Updated")) return false; }
-      else if (otaPhotoFilter === "any_exception")
-        { if (!OTA_FIELDS.some(f => r[f.key] === "Photoshoot Exception")) return false; }
-
-      // AI edit filter
-      if (aiEditFilter === "yes" && r.ai_editing_done !== "Yes") return false;
-      if (aiEditFilter === "no"  && r.ai_editing_done !== "No")  return false;
-
-      // AI image filter
-      if (aiImageFilter === "any_pending")
-        { if (!AI_FIELDS.some(f => !r[f.key] || r[f.key] === "Pending")) return false; }
-      else if (aiImageFilter === "all_updated")
-        { if (!AI_FIELDS.every(f => r[f.key] === "Updated")) return false; }
+      // Cascading filter: type → OTA → value
+      if (filterType !== "all" && filterOta && filterValue) {
+        const fieldKey  = `${filterType === "photoshoot" ? "ota" : "ai"}_${filterOta}`;
+        const val       = (r[fieldKey] as string) ?? "Pending";
+        const otaLabel  = OTA_FIELDS.find(f => f.key === `ota_${filterOta}`)?.label ?? "";
+        const otaIsLive = !!(r.live_dates as Record<string, string> | null)?.[otaLabel];
+        if (filterValue === "Updated"      && val !== "Updated")              return false;
+        if (filterValue === "Not Updated"  && (val === "Updated" || val === "Photoshoot Exception")) return false;
+        if (filterValue === "Exception"    && val !== "Photoshoot Exception") return false;
+        if (filterValue === "OTA Not Live" && otaIsLive)                      return false;
+      }
 
       return true;
     });
-  }, [rows, statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter, drillIds]);
+    // Sort by FH ID highest → lowest
+    result.sort((a, b) => {
+      const aNum = parseInt(a.property_id.replace(/\D/g, "")) || 0;
+      const bNum = parseInt(b.property_id.replace(/\D/g, "")) || 0;
+      return bNum - aNum;
+    });
+    return result;
+  }, [rows, statusFilter, cityFilter, search, filterType, filterOta, filterValue, drillIds]);
 
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const visibleRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  useEffect(() => { setPage(0); }, [statusFilter, cityFilter, search, otaPhotoFilter, aiEditFilter, aiImageFilter, drillIds]);
+  useEffect(() => { setPage(0); }, [statusFilter, cityFilter, search, filterType, filterOta, filterValue, drillIds]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { total: rows.length };
@@ -307,7 +316,7 @@ export default function PhotoshootPage() {
     return c;
   }, [rows]);
 
-  const hasActiveFilter = search || statusFilter !== "all" || cityFilter !== "all" || otaPhotoFilter !== "all" || aiEditFilter !== "all" || aiImageFilter !== "all";
+  const hasActiveFilter = search || statusFilter !== "all" || cityFilter !== "all" || filterType !== "all";
 
   // ── OTA summary ─────────────────────────────────────────────────────────────
   const otaSummary = useMemo(() => OTA_FIELDS.map(f => {
@@ -442,7 +451,7 @@ export default function PhotoshootPage() {
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Photoshoot Update</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>Photoshoot Tracker</div>
           <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>Track photoshoot & OTA image upload status · synced from Google Sheets</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -510,29 +519,39 @@ export default function PhotoshootPage() {
               </div>
             </div>
 
-            {/* Filter row 2: OTA photo + AI edit + AI image */}
+            {/* Filter row 2: cascading type → OTA → value */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <select value={otaPhotoFilter} onChange={e => setOtaPhotoFilter(e.target.value)}
-                style={{ padding: "7px 12px", border: `1px solid ${otaPhotoFilter !== "all" ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: otaPhotoFilter !== "all" ? "#F5F3FF" : "#fff", color: otaPhotoFilter !== "all" ? "#6D28D9" : "#374151", fontWeight: otaPhotoFilter !== "all" ? 700 : 400 }}>
-                <option value="all">📷 All OTA Photoshoot</option>
-                <option value="any_pending">📷 Has Any Pending</option>
-                <option value="all_updated">📷 All Updated</option>
-                <option value="any_exception">📷 Has Any Exception</option>
+              {/* Step 1: type */}
+              <select value={filterType} onChange={e => { setFilterType(e.target.value as "all"|"photoshoot"|"ai"); setFilterOta(""); setFilterValue(""); }}
+                style={{ padding: "7px 12px", border: `1px solid ${filterType !== "all" ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterType !== "all" ? "#F5F3FF" : "#fff", color: filterType !== "all" ? "#6D28D9" : "#374151", fontWeight: filterType !== "all" ? 700 : 400 }}>
+                <option value="all">All</option>
+                <option value="photoshoot">📷 Photoshoot</option>
+                <option value="ai">🤖 AI Images</option>
               </select>
-              <select value={aiEditFilter} onChange={e => setAiEditFilter(e.target.value)}
-                style={{ padding: "7px 12px", border: `1px solid ${aiEditFilter !== "all" ? "#0369A1" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: aiEditFilter !== "all" ? "#F0F9FF" : "#fff", color: aiEditFilter !== "all" ? "#0369A1" : "#374151", fontWeight: aiEditFilter !== "all" ? 700 : 400 }}>
-                <option value="all">🎨 AI Editing: All</option>
-                <option value="yes">🎨 AI Editing: Done</option>
-                <option value="no">🎨 AI Editing: Pending</option>
-              </select>
-              <select value={aiImageFilter} onChange={e => setAiImageFilter(e.target.value)}
-                style={{ padding: "7px 12px", border: `1px solid ${aiImageFilter !== "all" ? "#15803D" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: aiImageFilter !== "all" ? "#F0FDF4" : "#fff", color: aiImageFilter !== "all" ? "#15803D" : "#374151", fontWeight: aiImageFilter !== "all" ? 700 : 400 }}>
-                <option value="all">🤖 All AI Images</option>
-                <option value="any_pending">🤖 Has Any AI Pending</option>
-                <option value="all_updated">🤖 All AI Updated</option>
-              </select>
+
+              {/* Step 2: OTA (shown once type is selected) */}
+              {filterType !== "all" && (
+                <select value={filterOta} onChange={e => { setFilterOta(e.target.value); setFilterValue(""); }}
+                  style={{ padding: "7px 12px", border: `1px solid ${filterOta ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterOta ? "#F5F3FF" : "#fff", color: filterOta ? "#6D28D9" : "#374151", fontWeight: filterOta ? 700 : 400 }}>
+                  <option value="">All OTAs</option>
+                  {OTA_FIELDS.map(f => <option key={f.key} value={f.key.slice(4)}>{f.label}</option>)}
+                </select>
+              )}
+
+              {/* Step 3: value (shown once OTA is selected) */}
+              {filterType !== "all" && filterOta && (
+                <select value={filterValue} onChange={e => setFilterValue(e.target.value)}
+                  style={{ padding: "7px 12px", border: `1px solid ${filterValue ? "#4F46E5" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterValue ? "#EEF2FF" : "#fff", color: filterValue ? "#4F46E5" : "#374151", fontWeight: filterValue ? 700 : 400 }}>
+                  <option value="">Any Status</option>
+                  <option value="Updated">✓ Updated</option>
+                  <option value="Not Updated">🕐 Not Updated</option>
+                  {filterType === "photoshoot" && <option value="Exception">⚠ Exception</option>}
+                  {filterType === "photoshoot" && <option value="OTA Not Live">🔴 OTA Not Live</option>}
+                </select>
+              )}
+
               {hasActiveFilter && (
-                <button onClick={() => { setSearch(""); setStatusFilter("all"); setCityFilter("all"); setOtaPhotoFilter("all"); setAiEditFilter("all"); setAiImageFilter("all"); }}
+                <button onClick={() => { setSearch(""); setStatusFilter("all"); setCityFilter("all"); setFilterType("all"); setFilterOta(""); setFilterValue(""); }}
                   style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 12, cursor: "pointer" }}>
                   Clear all filters
                 </button>
