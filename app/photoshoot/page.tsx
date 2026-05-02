@@ -263,13 +263,22 @@ export default function PhotoshootPage() {
   }
 
   const saveField = useCallback(async (propertyId: string, field: string, value: string) => {
-    setSavingKeys(s => ({ ...s, [`${propertyId}:${field}`]: true }));
-    await fetch("/api/photoshoot/update", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ property_id: propertyId, field, value }),
-    });
-    setSavingKeys(s => ({ ...s, [`${propertyId}:${field}`]: false }));
-    setRows(prev => prev.map(r => r.property_id === propertyId ? { ...r, [field]: value || null } : r));
+    const key = `${propertyId}:${field}`;
+    setSavingKeys(s => ({ ...s, [key]: true }));
+    try {
+      const res = await fetch("/api/photoshoot/update", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_id: propertyId, field, value }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setRows(prev => prev.map(r =>
+        r.property_id === propertyId ? { ...r, [field]: value === "" ? null : value } : r
+      ));
+    } catch {
+      // silently revert — UI stays at old value because we didn't update rows
+    } finally {
+      setSavingKeys(s => ({ ...s, [key]: false }));
+    }
   }, []);
 
   const filtered = useMemo(() => {
@@ -531,7 +540,7 @@ export default function PhotoshootPage() {
 
               {/* Step 2: OTA (shown once type is selected) */}
               {filterType !== "all" && (
-                <select value={filterOta} onChange={e => { setFilterOta(e.target.value); setFilterValue(""); }}
+                <select value={filterOta} onChange={e => { setFilterOta(e.target.value); setFilterValue(e.target.value && filterType === "photoshoot" ? "OTA Not Live" : ""); }}
                   style={{ padding: "7px 12px", border: `1px solid ${filterOta ? "#6D28D9" : "#E2E8F0"}`, borderRadius: 8, fontSize: 12, outline: "none", background: filterOta ? "#F5F3FF" : "#fff", color: filterOta ? "#6D28D9" : "#374151", fontWeight: filterOta ? 700 : 400 }}>
                   <option value="">All OTAs</option>
                   {OTA_FIELDS.map(f => <option key={f.key} value={f.key.slice(4)}>{f.label}</option>)}
@@ -740,19 +749,18 @@ export default function PhotoshootPage() {
                     const pUp  = otaSummary.reduce((s, o) => s + o.pUpdated, 0);
                     const pEx  = otaSummary.reduce((s, o) => s + o.pExcept, 0);
                     const pPen = otaSummary.reduce((s, o) => s + o.pPending, 0);
-                    const pTot = otaSummary.reduce((s, o) => s + o.total, 0);
                     const aUp  = otaSummary.reduce((s, o) => s + o.aUpdated, 0);
                     const aPen = otaSummary.reduce((s, o) => s + o.aPending, 0);
                     return (
                       <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
-                        <td style={{ padding: "8px 12px", fontWeight: 800, color: "#374151" }}>Total</td>
+                        <td style={{ padding: "8px 12px", fontWeight: 800, color: "#374151" }}>Grand Total</td>
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#16A34A", borderRight: "1px solid #BBF7D0" }}>{pUp}</td>
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: pEx > 0 ? "#DC2626" : "#CBD5E1", borderRight: "1px solid #FECACA" }}>{pEx > 0 ? pEx : "—"}</td>
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#6D28D9", borderRight: "2px solid #C7D2FE" }}>{pPen}</td>
-                        <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#0F172A", borderRight: "2px solid #C7D2FE" }}>{pTot}</td>
+                        <td style={{ padding: "8px 10px", textAlign: "center", color: "#94A3B8", borderRight: "2px solid #C7D2FE" }}>—</td>
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#059669", borderRight: "1px solid #BBF7D0" }}>{aUp}</td>
                         <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#6D28D9", borderRight: "1px solid #EDE9FE" }}>{aPen}</td>
-                        <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#0F172A", borderRight: "none" }}>{pTot}</td>
+                        <td style={{ padding: "8px 10px", textAlign: "center", color: "#94A3B8", borderRight: "none" }}>—</td>
                       </tr>
                     );
                   })()}
@@ -792,12 +800,12 @@ export default function PhotoshootPage() {
                           {m.label}{m.isCurrent && <span style={{ fontSize: 9, fontWeight: 700, background: "#C7D2FE", color: "#4338CA", borderRadius: 4, padding: "1px 5px", marginLeft: 6 }}>current</span>}
                         </td>
                         {OTA_FIELDS.map(f => {
-                          const v = m.counts[f.key] ?? 0;
-                          const drillIds = m.ids[f.key] ?? [];
+                          const v       = m.counts[f.key] ?? 0;
+                          const cellIds = m.ids[f.key] ?? [];
                           return (
                             <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: i % 2 === 0 ? "#FDFCFF" : "#FAF9FF", borderRight: "1px solid #EDE9FE" }}>
                               {v > 0
-                                ? <span onClick={() => drillTo(drillIds, `${m.label} · ${f.label} Pending`)} style={{ fontWeight: 700, color: "#6D28D9", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{v}</span>
+                                ? <span onClick={() => drillTo(cellIds, `${m.label} · ${f.label} Pending`)} style={{ fontWeight: 700, color: "#6D28D9", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{v}</span>
                                 : <span style={{ color: "#E2E8F0" }}>—</span>}
                             </td>
                           );
@@ -889,7 +897,7 @@ export default function PhotoshootPage() {
                       </tr>
                     );
                   })}
-                  {tatBucketData.length > 0 && (() => {
+                  {tatBucketData.length > 1 && (() => {
                     const totals: Record<string, number> = {};
                     let grand = 0;
                     for (const b of tatBucketData) {
