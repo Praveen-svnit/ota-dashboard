@@ -175,18 +175,12 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
       </td>
 
       {/* Shoot Date */}
-      <td style={td}>
+      <td style={{ ...td, borderRight: "2px solid #C7D2FE" }}>
         {editCell?.id === row.property_id && editCell.field === "shoot_date"
           ? <input type="date" defaultValue={(row.shoot_date ?? "").slice(0, 10)} autoFocus onBlur={e => { setEditCell(null); onSave(row.property_id, "shoot_date", e.target.value); }} style={{ padding: "2px 5px", border: "1.5px solid #A5B4FC", borderRadius: 6, fontSize: 10, outline: "none" }} />
           : <div onClick={() => setEditCell({ id: row.property_id, field: "shoot_date" })} style={{ padding: "2px 6px", borderRadius: 6, cursor: "pointer", color: row.shoot_date ? "#374151" : "#CBD5E1", whiteSpace: "nowrap", minWidth: 70 }}>{row.shoot_date ? new Date(row.shoot_date).toLocaleDateString("en-IN") : "—"}</div>}
       </td>
 
-      {/* Remarks */}
-      <td style={{ ...td, borderRight: "2px solid #C7D2FE", minWidth: 130 }}>
-        {editCell?.id === row.property_id && editCell.field === "remarks"
-          ? <input type="text" defaultValue={row.remarks ?? ""} autoFocus onBlur={e => { setEditCell(null); onSave(row.property_id, "remarks", e.target.value); }} style={{ padding: "2px 6px", border: "1.5px solid #A5B4FC", borderRadius: 6, fontSize: 10, outline: "none", width: 120 }} />
-          : <div onClick={() => setEditCell({ id: row.property_id, field: "remarks" })} style={{ padding: "2px 6px", borderRadius: 6, cursor: "pointer", color: row.remarks ? "#374151" : "#CBD5E1", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.remarks ?? "Click to edit"}>{row.remarks || "—"}</div>}
-      </td>
 
       {/* OTA Photoshoot */}
       {OTA_FIELDS.map((f, idx) => (
@@ -355,6 +349,8 @@ export default function PhotoshootPage() {
       const cEntry = counts.get(key)!;
       const iEntry = ids.get(key)!;
       for (const f of OTA_FIELDS) {
+        const otaIsLive = !!(r.live_dates as Record<string, string> | null)?.[FIELD_TO_OTA[f.key]];
+        if (!otaIsLive) continue; // skip OTA not live yet
         const val = (r[f.key] as string) ?? "Pending";
         if (val === "Pending") {
           cEntry[f.key] = (cEntry[f.key] ?? 0) + 1;
@@ -389,14 +385,13 @@ export default function PhotoshootPage() {
       for (const f of OTA_FIELDS) {
         const val = (r[f.key] as string) ?? "Pending";
         if (val !== "Pending") continue;
+        const liveDateStr = (r.live_dates as Record<string, string> | null)?.[FIELD_TO_OTA[f.key]];
+        if (!liveDateStr) continue; // skip OTA not live yet
         const shootMs = r.shoot_date ? new Date(r.shoot_date as string).getTime() : null;
-        const liveMs  = r.live_dates?.[FIELD_TO_OTA[f.key]]
-          ? new Date((r.live_dates as Record<string, string>)[FIELD_TO_OTA[f.key]]).getTime()
-          : null;
-        let tat: number | null = null;
-        if (shootMs !== null && liveMs !== null) tat = Math.round((today - Math.max(shootMs, liveMs)) / 86400000);
-        else if (shootMs !== null)               tat = Math.round((today - shootMs) / 86400000);
-        if (tat === null || tat < 1 || tat > 30) continue;
+        if (shootMs === null) continue; // no shoot date, can't compute TAT
+        const liveMs = new Date(liveDateStr).getTime();
+        const tat    = Math.round((today - Math.max(shootMs, liveMs)) / 86400000);
+        if (tat < 1 || tat > 30) continue;
         dayMap[tat][f.key] = (dayMap[tat][f.key] ?? 0) + 1;
         if (!idMap[tat][f.key]) idMap[tat][f.key] = [];
         idMap[tat][f.key].push(r.property_id);
@@ -444,7 +439,7 @@ export default function PhotoshootPage() {
     setPage(0);
   }
 
-  const totalCols = 9 + 11 + 1 + 11 + 1;
+  const totalCols = 8 + 11 + 1 + 11 + 1;
 
   // ── Tab labels ───────────────────────────────────────────────────────────────
   const TABS: { key: MainTab; label: string }[] = [
@@ -634,7 +629,7 @@ export default function PhotoshootPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: "#EEF2FF", borderBottom: "1px solid #C7D2FE" }}>
-                      <th colSpan={9}  style={{ padding: "6px 10px", textAlign: "left",   fontSize: 10, fontWeight: 800, color: "#374151", letterSpacing: "0.05em", whiteSpace: "nowrap", borderRight: "2px solid #C7D2FE" }}>Property Info</th>
+                      <th colSpan={8}  style={{ padding: "6px 10px", textAlign: "left",   fontSize: 10, fontWeight: 800, color: "#374151", letterSpacing: "0.05em", whiteSpace: "nowrap", borderRight: "2px solid #C7D2FE" }}>Property Info</th>
                       <th colSpan={11} style={{ padding: "6px 10px", textAlign: "center", fontSize: 10, fontWeight: 800, color: "#4F46E5", letterSpacing: "0.05em", whiteSpace: "nowrap", borderRight: "2px solid #C7D2FE", background: "#EDE9FE" }}>📷 Photoshoot OTA Update</th>
                       <th colSpan={1}  style={{ padding: "6px 10px", textAlign: "center", fontSize: 10, fontWeight: 800, color: "#0891B2", letterSpacing: "0.05em", whiteSpace: "nowrap", borderRight: "2px solid #BAE6FD", background: "#E0F2FE" }}>AI Editing</th>
                       <th colSpan={11} style={{ padding: "6px 10px", textAlign: "center", fontSize: 10, fontWeight: 800, color: "#059669", letterSpacing: "0.05em", whiteSpace: "nowrap", borderRight: "2px solid #6EE7B7", background: "#D1FAE5" }}>🤖 AI Image OTA Update</th>
@@ -648,8 +643,7 @@ export default function PhotoshootPage() {
                       <th style={TH_BASE}>FH Live Date</th>
                       <th style={TH_BASE}>Shoot Status</th>
                       <th style={TH_BASE}>Shoot Link</th>
-                      <th style={TH_BASE}>Shoot Date</th>
-                      <th style={{ ...TH_BASE, borderRight: "2px solid #C7D2FE" }}>Remarks</th>
+                      <th style={{ ...TH_BASE, borderRight: "2px solid #C7D2FE" }}>Shoot Date</th>
                       {OTA_FIELDS.map((f, i) => (
                         <th key={f.key} style={{ ...TH_BASE, background: "#F5F3FF", color: "#6D28D9", borderRight: i === OTA_FIELDS.length - 1 ? "2px solid #C7D2FE" : "1px solid #EDE9FE" }}>{f.label}</th>
                       ))}
