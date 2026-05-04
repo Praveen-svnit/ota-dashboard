@@ -47,7 +47,6 @@ const AI_EDIT_OPTS   = ["No", "Yes"] as const;
 
 const BULK_FIELD_OPTS: { key: string; label: string; group: string; opts: string[] | null }[] = [
   { key: "photoshoot_status", label: "Photoshoot Status", group: "General",        opts: ["Shoot Done","Shoot Pending"] },
-  { key: "remarks",           label: "Remarks",           group: "General",        opts: null },
   ...OTA_FIELDS.map(f => ({ key: f.key, label: f.label, group: "Photoshoot OTA", opts: [...OTA_PHOTO_OPTS] })),
   { key: "ai_editing_done",   label: "AI Editing Done",   group: "AI Editing",     opts: [...AI_EDIT_OPTS] },
   ...AI_FIELDS.map(f  => ({ key: f.key, label: f.label, group: "AI Image OTA",   opts: [...AI_IMG_OPTS] })),
@@ -251,7 +250,6 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
 
 export default function PhotoshootPage() {
   const [rows,           setRows]           = useState<PhotoRow[]>([]);
-  const [cities,         setCities]         = useState<string[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [syncing,        setSyncing]        = useState(false);
   const [syncResult,     setSyncResult]     = useState<{ shootDone: number; shootPending: number; synced: number } | null>(null);
@@ -259,7 +257,6 @@ export default function PhotoshootPage() {
   const [mainTab,        setMainTab]        = useState<MainTab>("table");
   const [search,         setSearch]         = useState("");
   const [statusFilter,   setStatusFilter]   = useState("all");
-  const [cityFilter,     setCityFilter]     = useState("all");
   const [filterType,     setFilterType]     = useState<"all" | "photoshoot" | "ai">("all");
   const [filterOta,      setFilterOta]      = useState("");   // OTA suffix, e.g. "gommt"
   const [filterValue,    setFilterValue]    = useState("");
@@ -280,7 +277,7 @@ export default function PhotoshootPage() {
     setLoading(true);
     fetch("/api/photoshoot")
       .then(r => r.json())
-      .then(d => { setRows(d.rows ?? []); setCities(d.cities ?? []); })
+      .then(d => { setRows(d.rows ?? []); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -321,7 +318,6 @@ export default function PhotoshootPage() {
     const result = rows.filter(r => {
       if (drillIds !== null && !drillIds.has(r.property_id)) return false;
       if (statusFilter !== "all" && r.photoshoot_status !== statusFilter) return false;
-      if (cityFilter   !== "all" && r.city !== cityFilter)                return false;
       if (s && !r.property_id.toLowerCase().includes(s) &&
                !r.property_name.toLowerCase().includes(s) &&
                !(r.city ?? "").toLowerCase().includes(s))                return false;
@@ -347,12 +343,12 @@ export default function PhotoshootPage() {
       return bNum - aNum;
     });
     return result;
-  }, [rows, statusFilter, cityFilter, search, filterType, filterOta, filterValue, drillIds]);
+  }, [rows, statusFilter, search, filterType, filterOta, filterValue, drillIds]);
 
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const visibleRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  useEffect(() => { setPage(0); }, [statusFilter, cityFilter, search, filterType, filterOta, filterValue, drillIds]);
+  useEffect(() => { setPage(0); }, [statusFilter, search, filterType, filterOta, filterValue, drillIds]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { total: rows.length };
@@ -360,17 +356,24 @@ export default function PhotoshootPage() {
     return c;
   }, [rows]);
 
-  const hasActiveFilter = search || statusFilter !== "all" || cityFilter !== "all" || filterType !== "all";
+  const hasActiveFilter = search || statusFilter !== "all" || filterType !== "all";
 
   // ── OTA summary ─────────────────────────────────────────────────────────────
   const otaSummary = useMemo(() => OTA_FIELDS.map(f => {
+    const otaLabel  = FIELD_TO_OTA[f.key];
     const total     = rows.length;
     const pUpdated  = rows.filter(r => (r[f.key] as string) === "Updated").length;
     const pExcept   = rows.filter(r => (r[f.key] as string) === "Photoshoot Exception").length;
-    const pPending  = total - pUpdated - pExcept;
+    const pPending  = rows.filter(r => {
+      const live = !!(r.live_dates as Record<string, string> | null)?.[otaLabel];
+      return live && ((r[f.key] as string) ?? "Pending") === "Pending";
+    }).length;
     const aKey      = "ai_" + f.key.slice(4);
     const aUpdated  = rows.filter(r => (r[aKey] as string) === "Updated").length;
-    const aPending  = total - aUpdated;
+    const aPending  = rows.filter(r => {
+      const live = !!(r.live_dates as Record<string, string> | null)?.[otaLabel];
+      return live && ((r[aKey] as string) ?? "Pending") === "Pending";
+    }).length;
     return { label: f.label, total, pUpdated, pExcept, pPending, aUpdated, aPending };
   }), [rows]);
 
@@ -577,7 +580,7 @@ export default function PhotoshootPage() {
               )}
 
               {hasActiveFilter && (
-                <button onClick={() => { setSearch(""); setStatusFilter("all"); setCityFilter("all"); setFilterType("all"); setFilterOta(""); setFilterValue(""); }}
+                <button onClick={() => { setSearch(""); setStatusFilter("all"); setFilterType("all"); setFilterOta(""); setFilterValue(""); }}
                   style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 12, cursor: "pointer" }}>
                   Clear
                 </button>
