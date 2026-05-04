@@ -384,7 +384,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
 
-  const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("live");
+  const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("listing");
 
   // Status Config tab state
   const [scConfig,        setScConfig]        = useState<OtaStatusConfig | null>(null);
@@ -614,12 +614,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
     setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo("");
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-    setPropTab("live");
+    setPropTab("listing");
     setMetricsAgg({}); setMetricsProps([]);
     setOvvExpanded(true); setOvvTab("status");
     setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal(""); setLcError("");
     setScConfig(null); setScStatusMap({}); setScOtaStatuses([]);
     load();
+    loadLc(["Live","SoldOut"]);
     // Load OTA status config + actual OTA statuses from DB (used by listing creation + config tab)
     setScLoading(true);
     Promise.all([
@@ -823,9 +824,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       {/* Tab Strip */}
       <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", display: "flex", overflow: "hidden", marginBottom: 14 }}>
         {([
+          { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined },
           { key: "notlive", label: "Not Live",         count: nlData?.total   },
           { key: "live",    label: "Live",             count: liveData?.total  },
-          { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined },
           { key: "config",  label: "Status Config",    count: undefined        },
         ] as { key: "live"|"notlive"|"listing"|"config"; label: string; count: number|undefined }[]).map(tab => {
           const active = propTab === tab.key;
@@ -1355,7 +1356,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         </>
       )}
 
-      {/* Properties Card */}
+      {/* Properties Card — only for Listing Creation and Status Config */}
+      {(propTab === "listing" || propTab === "config") && (
       <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(15,23,42,0.08)" }}>
 
         {/* Filter bar — Not Live */}
@@ -2467,6 +2469,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
