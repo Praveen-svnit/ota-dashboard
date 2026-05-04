@@ -785,7 +785,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   if (!otaName || !OTA_COLORS[otaName]) return null;
 
   return (
-    <div style={{ padding: "18px 22px", background: T.pageBg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 28px", background: T.pageBg, minHeight: "100vh" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .nl-row:hover > td { background: #F8FAFD !important; }
@@ -802,36 +802,49 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         .ss-clickable-num:hover { opacity: 0.8; }
       `}</style>
 
-      {/* Header + Tab Strip */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 3, height: 22, background: otaColor, borderRadius: 2 }} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: T.textPri }}>OTA Detail · listing analytics</span>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {([
-            { key: "live",    label: "Live",             count: liveData?.total, color: T.live,    bg: T.liveL   },
-            { key: "notlive", label: "Not Live",         count: nlData?.total,   color: T.notLive, bg: T.notLiveL },
-            { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined, color: "#7C3AED", bg: "#EDE9FE" },
-            { key: "config",  label: "Status Config",    count: undefined,       color: "#0EA5E9", bg: "#E0F2FE" },
-          ] as { key: "live"|"notlive"|"listing"|"config"; label: string; count: number|undefined; color: string; bg: string }[]).map(tab => {
-            const active = propTab === tab.key;
-            return (
-              <button key={tab.key} onClick={() => {
-                  setPropTab(tab.key);
-                  if (tab.key === "listing" && !lcLoaded) loadLc();
-                  if (tab.key === "config" && scConfig) setScStatusMap(scConfig.statusSubStatusMap ?? {});
-                }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 16px", fontSize: 11, fontWeight: 700,
-                  borderRadius: 999, border: `1px solid ${active ? tab.color : T.cardBdr}`,
-                  background: active ? tab.color : "#FFFFFF", color: active ? "#FFFFFF" : T.textSec,
-                  cursor: "pointer", transition: "all 0.13s" }}>
-                {tab.label}
-                {tab.count != null && <span style={{ fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 99, background: active ? "rgba(255,255,255,0.25)" : tab.bg, color: active ? "#FFFFFF" : tab.color }}>{tab.count.toLocaleString()}</span>}
-              </button>
-            );
-          })}
-        </div>
+      {/* KPI Pills */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+        {[
+          { label: "Total",         value: total,                            text: "#475569", bg: "#F1F5F9", border: "#E2E8F0" },
+          { label: "Live %",        value: livePct.toFixed(1) + "%",         text: livePct >= 90 ? "#16A34A" : livePct >= 70 ? "#B45309" : livePct >= 40 ? "#C2410C" : "#DC2626", bg: "#F8FAFC", border: "#E2E8F0", isStr: true },
+          { label: "Live",          value: live,                             text: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
+          { label: "Exception",     value: exception,                        text: "#B45309", bg: "#FEF3C7", border: "#FDE68A" },
+          { label: "In Process",    value: inProcess,                        text: "#1D4ED8", bg: "#DBEAFE", border: "#93C5FD" },
+          { label: "TAT Exhausted", value: tatExhausted,                     text: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
+          { label: "Avg TAT",       value: tatStat ? `${tatStat.avgTat}d` : "—", text: "#6366F1", bg: "#EEF2FF", border: "#A5B4FC", isStr: true },
+        ].map(({ label, value, text, bg, border, isStr }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, background: bg, border: `2px solid ${border}`, borderRadius: 20, padding: "5px 14px" }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: text }}>{isStr ? value : (value as number).toLocaleString()}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: text }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Tab Strip */}
+      <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", display: "flex", overflow: "hidden", marginBottom: 14 }}>
+        {([
+          { key: "notlive", label: "Not Live",         count: nlData?.total   },
+          { key: "live",    label: "Live",             count: liveData?.total  },
+          { key: "listing", label: "Listing Creation", count: lcLoaded ? lcRows.length : undefined },
+          { key: "config",  label: "Status Config",    count: undefined        },
+        ] as { key: "live"|"notlive"|"listing"|"config"; label: string; count: number|undefined }[]).map(tab => {
+          const active = propTab === tab.key;
+          return (
+            <button key={tab.key} onClick={() => {
+                setPropTab(tab.key);
+                if (tab.key === "listing" && !lcLoaded) loadLc();
+                if (tab.key === "config" && scConfig) setScStatusMap(scConfig.statusSubStatusMap ?? {});
+              }}
+              style={{ flex: 1, padding: "11px 0", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                background: active ? "#EEF2FF" : "transparent",
+                color: active ? "#4F46E5" : "#64748B",
+                borderBottom: active ? "3px solid #4F46E5" : "3px solid transparent",
+                transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {tab.label}
+              {tab.count != null && <span style={{ fontSize: 10, fontWeight: 800, padding: "1px 7px", borderRadius: 99, background: active ? "#C7D2FE" : "#E2E8F0", color: active ? "#4338CA" : "#64748B" }}>{tab.count.toLocaleString()}</span>}
+            </button>
+          );
+        })}
       </div>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}

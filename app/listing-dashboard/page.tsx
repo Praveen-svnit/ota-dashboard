@@ -202,25 +202,29 @@ function ListingDashboardInner() {
   }, []);
 
   return (
-    <div style={{ padding: "22px 24px", background: "linear-gradient(180deg, #F7FAFD 0%, #EEF4FA 100%)", minHeight: "100vh" }}>
+    <div style={{ minHeight: "100vh", background: "#F8FAFC", fontFamily: "'Segoe UI', Arial, sans-serif" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .trow:hover > td { background: #F5FBFA !important; }
         .srow:hover > td { background: #F3F8FD !important; }
       `}</style>
 
-      {/* ── Header — shown only on Overview ── */}
-      {selectedOta === "Overview" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, padding: "14px 18px", background: "linear-gradient(135deg, #FFFFFF 0%, #F4FAF8 54%, #EEF5FB 100%)", border: `1px solid ${T.cardBdr}`, borderRadius: 18, boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)" }}>
-          <div style={{ width: 4, height: 28, background: "linear-gradient(180deg, #0F766E 0%, #0891B2 100%)", borderRadius: 999 }} />
-          <div style={{ fontSize: 18, fontWeight: 800, color: T.textPri, letterSpacing: "-0.02em" }}>Listing Dashboard</div>
+      {/* White header bar */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>
+            {selectedOta === "Overview" ? "Listing Dashboard" : selectedOta === "GMB" ? "Google My Business" : selectedOta}
+          </div>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+            {selectedOta === "Overview" ? "OTA listing status · all channels" : "OTA listing analytics & creation"}
+          </div>
         </div>
-      )}
+      </div>
 
       {selectedOta === "GMB" ? (
         <GmbTab />
       ) : selectedOta === "Overview" ? (
-        <>
+        <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
 
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
       {error   && <div style={{ padding: "8px 14px", background: T.notLiveL, border: `1px solid #FECACA`, borderRadius: 8, fontSize: 11, color: T.notLive, marginBottom: 14 }}>⚠ {error}</div>}
@@ -238,20 +242,20 @@ function ListingDashboardInner() {
 
         return (
           <>
-          {/* ── KPI Cards ── */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+          {/* ── KPI Pills ── */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             {[
-              { label: "Live",          value: data.stats.live,               accent: "#16A34A" },
-              { label: "Sold Out",      value: data.stats.soldOut,            accent: "#DC2626" },
-              { label: "Total",         value: data.stats.total,              accent: "#475569" },
+              { label: "Live",      value: data.stats.live,               text: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
+              { label: "Sold Out",  value: data.stats.soldOut,            text: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
+              { label: "Total",     value: data.stats.total,              text: "#475569", bg: "#F1F5F9", border: "#E2E8F0" },
               { label: `Onboarded · ${new Date().toLocaleString("en-IN", { month: "short", year: "2-digit" })}`,
-                                        value: data.stats.onboardedThisMonth, accent: "#0F766E" },
-              { label: "MTD Listings",  value: data.stats.mtdListings,        accent: "#5D87FF" },
-              { label: "Live %",        value: `${grandPct.toFixed(1)}%`,     accent: liveColor(grandPct).text, isStr: true },
-            ].map(({ label, value, accent, isStr }) => (
-              <div key={label} style={{ ...kpi, flex: "1 1 110px", minWidth: 100 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: "#94A3B8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1 }}>{isStr ? value : (value as number).toLocaleString()}</div>
+                                    value: data.stats.onboardedThisMonth, text: "#0F766E", bg: "#CCFBF1", border: "#6EE7B7" },
+              { label: "MTD Listings", value: data.stats.mtdListings,    text: "#4F46E5", bg: "#EEF2FF", border: "#A5B4FC" },
+              { label: "Live %",    value: `${grandPct.toFixed(1)}%`,    text: liveColor(grandPct).text, bg: "#F8FAFC", border: liveColor(grandPct).text + "50", isStr: true },
+            ].map(({ label, value, text, bg, border, isStr }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, background: bg, border: `2px solid ${border}`, borderRadius: 20, padding: "5px 14px" }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: text }}>{isStr ? value : (value as number).toLocaleString()}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: text }}>{label}</span>
               </div>
             ))}
           </div>
@@ -1047,7 +1051,7 @@ function ListingDashboardInner() {
         );
       })()}
 
-        </>
+        </div>
       ) : (
         <OtaDetailView otaName={selectedOta} />
       )}
