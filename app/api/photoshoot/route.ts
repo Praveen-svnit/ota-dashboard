@@ -43,13 +43,14 @@ export async function GET(req: Request) {
        ${otaCoalesce},
        ${aiCoalesce},
        p.updated_by, p.updated_at,
-       ol.live_dates
+       ol.live_dates, ol.ota_ids
      FROM inventory i
      LEFT JOIN photoshoot_tracker p ON p.property_id = i.property_id
      LEFT JOIN (
-       SELECT property_id, json_object_agg(ota, live_date::text) AS live_dates
+       SELECT property_id,
+         json_object_agg(ota, live_date::text) FILTER (WHERE live_date IS NOT NULL) AS live_dates,
+         json_object_agg(ota, ota_id)          FILTER (WHERE ota_id IS NOT NULL AND ota_id <> '') AS ota_ids
        FROM ota_listing
-       WHERE live_date IS NOT NULL
        GROUP BY property_id
      ) ol ON ol.property_id = i.property_id
      WHERE i.fh_status = ANY($1)

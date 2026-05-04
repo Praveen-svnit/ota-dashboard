@@ -94,11 +94,13 @@ interface PhotoRow {
   shoot_source:      string | null;
   ai_editing_done:   string;
   updated_by:        string | null;
+  updated_at:        string | null;
   live_dates:        Record<string, string> | null;
+  ota_ids:           Record<string, string> | null;
   [k: string]: string | null | Record<string, string>;
 }
 
-type MainTab = "table" | "ota" | "tat" | "dod";
+type MainTab = "table" | "ota" | "tat" | "dod" | "perf";
 
 // ── OtaDropdown ── module-level so React never re-mounts it ───────────────────
 
@@ -156,7 +158,7 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
   const td: React.CSSProperties = { padding: "6px 10px", background: base, borderRight: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" };
   const sv        = (f: string) => !!savingKeys[`${row.property_id}:${f}`];
   const liveDates = row.live_dates as Record<string, string> | null;
-  // Returns true only if that OTA has a live date for this property
+  const otaIds    = row.ota_ids    as Record<string, string> | null;
   const otaIsLive = (otaLabel: string) => !!(liveDates?.[otaLabel]);
 
   const stickyTd = (left: number, extra?: React.CSSProperties): React.CSSProperties => ({
@@ -223,11 +225,16 @@ const TableRow = React.memo(function TableRow({ row, rowIndex, editCell, setEdit
 
 
       {/* OTA Photoshoot */}
-      {OTA_FIELDS.map((f, idx) => (
-        <td key={f.key} style={{ ...td, background: even ? "#FDFCFF" : "#FAF9FF", borderRight: idx === OTA_FIELDS.length - 1 ? "2px solid #C7D2FE" : "1px solid #EDE9FE" }}>
-          <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={OTA_PHOTO_OPTS} saving={sv(f.key)} isLive={otaIsLive(FIELD_TO_OTA[f.key])} onSave={onSave} />
-        </td>
-      ))}
+      {OTA_FIELDS.map((f, idx) => {
+        const otaLabel = FIELD_TO_OTA[f.key];
+        const otaId    = otaIds?.[otaLabel];
+        return (
+          <td key={f.key} style={{ ...td, background: even ? "#FDFCFF" : "#FAF9FF", borderRight: idx === OTA_FIELDS.length - 1 ? "2px solid #C7D2FE" : "1px solid #EDE9FE" }}>
+            <OtaDropdown propertyId={row.property_id} field={f.key} value={(row[f.key] as string) ?? "Pending"} opts={OTA_PHOTO_OPTS} saving={sv(f.key)} isLive={otaIsLive(otaLabel)} onSave={onSave} />
+            {otaId && <div style={{ fontSize: 9, color: "#94A3B8", marginTop: 2, fontFamily: "monospace", letterSpacing: "0.02em" }}>{otaId}</div>}
+          </td>
+        );
+      })}
 
       {/* AI Editing Done — not OTA-gated, no isLive */}
       <td style={{ ...td, background: even ? "#F0F9FF" : "#E8F5FE", borderRight: "2px solid #BAE6FD" }}>
@@ -452,6 +459,34 @@ export default function PhotoshootPage() {
     }).filter(d => d.total > 0);
   }, [rows]);
 
+  // ── Daily Performance: per-day count of OTA uploads marked "Updated" ────────
+  const dailyPerf = useMemo(() => {
+    const dateMap: Record<string, Record<string, string[]>> = {}; // date → otaKey → propertyIds
+    for (const r of rows) {
+      if (!r.updated_at) continue;
+      const date = (r.updated_at as string).slice(0, 10);
+      if (!dateMap[date]) dateMap[date] = {};
+      const dEntry = dateMap[date];
+      for (const f of OTA_FIELDS) {
+        if ((r[f.key] as string) === "Updated") {
+          if (!dEntry[f.key]) dEntry[f.key] = [];
+          dEntry[f.key].push(r.property_id);
+        }
+      }
+    }
+    return Object.entries(dateMap)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 60)
+      .map(([date, otaMap]) => {
+        const [yr, mo, dy] = date.split("-");
+        const label  = new Date(Number(yr), Number(mo) - 1, Number(dy)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        const allIds = [...new Set(Object.values(otaMap).flat())];
+        const total  = Object.values(otaMap).reduce((s, ids) => s + ids.length, 0);
+        return { date, label, otaMap, allIds, total };
+      })
+      .filter(d => d.total > 0);
+  }, [rows]);
+
   const bulkParsedIds = useMemo(() => [...new Set(bulkIds.trim().split(/\s+/).filter(Boolean))], [bulkIds]);
   const bulkFieldCfg  = BULK_FIELD_OPTS.find(f => f.key === bulkField)!;
 
@@ -491,6 +526,7 @@ export default function PhotoshootPage() {
     { key: "ota",   label: "📊 OTA Status" },
     { key: "tat",   label: "⏱ TAT Analysis" },
     { key: "dod",   label: "📈 DoD Tracker" },
+    { key: "perf",  label: "🗓 Daily Performance" },
   ];
 
   return (
@@ -944,6 +980,79 @@ export default function PhotoshootPage() {
             </div>
             <div style={{ padding: "8px 18px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", fontSize: 10, color: "#94A3B8" }}>
               Day = days since max(shoot date, OTA live date). Only shows days 1–30 with pending uploads. 🟠 8–14 d · 🔴 15–21 d · 🟥 22–30 d
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════ DAILY PERFORMANCE TAB ════════════════════ */}
+        {mainTab === "perf" && (
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "baseline", gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>🗓 Daily Performance</div>
+              <div style={{ fontSize: 11, color: "#64748B" }}>OTA uploads marked Updated per day · click numbers to drill into properties</div>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 700 }}>
+                <thead>
+                  <tr style={{ background: "#F8FAFC", borderBottom: "2px solid #E2E8F0" }}>
+                    <th style={{ ...TH_BASE, minWidth: 110 }}>Date</th>
+                    {OTA_FIELDS.map(f => (
+                      <th key={f.key} style={{ ...TH_BASE, textAlign: "center", background: "#F0FDF4", color: "#15803D", borderRight: "1px solid #BBF7D0" }}>{f.label}</th>
+                    ))}
+                    <th style={{ ...TH_BASE, textAlign: "center", borderRight: "none", color: "#374151", fontWeight: 800 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyPerf.length === 0 ? (
+                    <tr><td colSpan={13} style={{ padding: 28, textAlign: "center", color: "#9CA3AF" }}>No updated cases found</td></tr>
+                  ) : dailyPerf.map((d, i) => (
+                    <tr key={d.date} style={{ background: i === 0 ? "#F0FDF4" : i % 2 === 0 ? "#fff" : "#FAFAFA", borderBottom: "1px solid #F1F5F9" }}>
+                      <td style={{ padding: "8px 12px", fontWeight: 700, color: i === 0 ? "#15803D" : "#374151", whiteSpace: "nowrap" }}>
+                        {d.label}
+                        {i === 0 && <span style={{ fontSize: 9, fontWeight: 700, background: "#DCFCE7", color: "#15803D", borderRadius: 4, padding: "1px 5px", marginLeft: 6 }}>latest</span>}
+                      </td>
+                      {OTA_FIELDS.map(f => {
+                        const ids = d.otaMap[f.key] ?? [];
+                        const v   = ids.length;
+                        return (
+                          <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", background: i % 2 === 0 ? "#F7FEF9" : "#F0FDF4", borderRight: "1px solid #BBF7D0" }}>
+                            {v > 0
+                              ? <span onClick={() => drillTo(ids, `${d.label} · ${f.label} Updated`)} style={{ fontWeight: 700, color: "#16A34A", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{v}</span>
+                              : <span style={{ color: "#E2E8F0" }}>—</span>}
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: i === 0 ? "#15803D" : "#374151" }}>
+                        {d.total > 0
+                          ? <span onClick={() => drillTo(d.allIds, `${d.label} · Any OTA Updated`)} style={{ cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted" }}>{d.total}</span>
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {dailyPerf.length > 1 && (() => {
+                    const totals: Record<string, number> = {};
+                    let grand = 0;
+                    for (const d of dailyPerf) {
+                      for (const f of OTA_FIELDS) { totals[f.key] = (totals[f.key] ?? 0) + (d.otaMap[f.key]?.length ?? 0); }
+                      grand += d.total;
+                    }
+                    return (
+                      <tr style={{ background: "#F1F5F9", borderTop: "2px solid #E2E8F0" }}>
+                        <td style={{ padding: "8px 12px", fontWeight: 800, color: "#374151" }}>Total</td>
+                        {OTA_FIELDS.map(f => (
+                          <td key={f.key} style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#16A34A", borderRight: "1px solid #BBF7D0" }}>
+                            {totals[f.key] > 0 ? totals[f.key] : "—"}
+                          </td>
+                        ))}
+                        <td style={{ padding: "8px 10px", textAlign: "center", fontWeight: 800, color: "#0F172A" }}>{grand}</td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "8px 18px", background: "#F8FAFC", borderTop: "1px solid #E2E8F0", fontSize: 10, color: "#94A3B8" }}>
+              Grouped by last-modified date of each property. Total = sum of OTA upload counts across all OTAs.
             </div>
           </div>
         )}
