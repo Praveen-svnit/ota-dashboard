@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { InternSheetView } from "@/components/crm/InternSheetView";
 
 /* ─── OTA config ─────────────────────────────────────────────── */
 const OTA_COLORS: Record<string, string> = {
@@ -327,6 +328,7 @@ function SearchInput({ placeholder, value, onChange }: {
 /* ─── Page ───────────────────────────────────────────────────── */
 export default function ListingsPage() {
   const router = useRouter();
+  const [viewMode, setViewMode]     = useState<"cards" | "sheet">("cards");
   const [properties, setProperties] = useState<Property[]>([]);
   const [fetchedAt, setFetchedAt]   = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -397,6 +399,24 @@ export default function ListingsPage() {
     cursor: "pointer", outline: "none",
   };
 
+  if (viewMode === "sheet") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+        <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "0 16px", display: "flex", alignItems: "center", gap: 10, height: 44, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>Property Tracker</span>
+          <div style={{ width: 1, height: 18, background: "#E2E8F0" }} />
+          <div style={{ display: "flex", gap: 0, borderRadius: 7, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <button onClick={() => setViewMode("cards")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", background: "#fff", color: "#64748B" }}>🃏 Cards</button>
+            <button onClick={() => setViewMode("sheet")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", background: "#4F46E5", color: "#fff" }}>📋 Sheet</button>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <InternSheetView />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "20px 24px", background: T.pageBg, minHeight: "100vh" }}>
 
@@ -412,6 +432,10 @@ export default function ListingsPage() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {fetchedAt && <span style={{ fontSize: 10, color: T.textMut }}>Updated {fmtTs(fetchedAt)}</span>}
+          <div style={{ display: "flex", gap: 0, borderRadius: 7, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+            <button onClick={() => setViewMode("cards")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", background: "#4F46E5", color: "#fff" }}>🃏 Cards</button>
+            <button onClick={() => setViewMode("sheet")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 700, border: "none", cursor: "pointer", background: "#fff", color: "#64748B" }}>📋 Sheet</button>
+          </div>
         </div>
       </div>
 
