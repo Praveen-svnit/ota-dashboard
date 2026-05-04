@@ -329,7 +329,7 @@ export default function PhotoshootPage() {
         const otaLabel  = OTA_FIELDS.find(f => f.key === `ota_${filterOta}`)?.label ?? "";
         const otaIsLive = !!(r.live_dates as Record<string, string> | null)?.[otaLabel];
         if (filterValue === "Updated"      && val !== "Updated")              return false;
-        if (filterValue === "Not Updated"  && (val === "Updated" || val === "Photoshoot Exception")) return false;
+        if (filterValue === "Not Updated"  && (val === "Updated" || val === "Photoshoot Exception" || !otaIsLive)) return false;
         if (filterValue === "Exception"    && val !== "Photoshoot Exception") return false;
         if (filterValue === "OTA Not Live" && otaIsLive)                      return false;
       }
