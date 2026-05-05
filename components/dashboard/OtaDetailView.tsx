@@ -895,6 +895,13 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           { key: "tatExhausted",   label: "TAT Exhausted",       color: "#B42318", dot: "#F97066", bg: "#FFE4E6", val: tatExhausted2 },
         ] as const;
 
+        const ovvActiveKey: string | null =
+          propTab === "live" ? "live" :
+          propTab === "notlive" && nlCat ? nlCat : null;
+        const ovvActiveSs: string[] =
+          propTab === "live" ? liveSss :
+          propTab === "notlive" ? nlSss : [];
+
         const subStatusEntries2 = Object.entries(dashData.pivot[otaName] ?? {})
           .filter(([, v]) => v > 0)
           .sort((a, b) => b[1] - a[1]);
@@ -955,28 +962,40 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {STATUS_TILES.map(t => {
                       const isLive = t.key === "live";
+                      const isActive = ovvActiveKey === t.key;
                       return (
                         <div key={t.key}
                           onClick={() => {
                             if (isLive) {
-                              setPropTab("live");
-                              setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
-                              setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                              loadLive(1, "", [], [], "", "", "", "", "");
+                              if (isActive) {
+                                // toggle off — already on live tab, nothing to clear
+                              } else {
+                                setPropTab("live");
+                                setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
+                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                                loadLive(1, "", [], [], "", "", "", "", "");
+                                setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                              }
                             } else {
-                              setPropTab("notlive");
-                              goToCategory(t.key);
+                              if (propTab === "notlive" && nlCat === t.key) {
+                                setNlCat(""); loadNl(1, "", "", nlSss);
+                              } else {
+                                setPropTab("notlive");
+                                goToCategory(t.key);
+                                setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                              }
                             }
-                            setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
                           }}
                           className="kpi-tile"
                           style={{
                             display: "flex", alignItems: "center", gap: 6,
-                            background: t.bg, border: `2px solid ${t.dot}`,
+                            background: isActive ? t.dot : t.bg,
+                            border: `2px solid ${t.dot}`,
                             borderRadius: 20, padding: "5px 14px", cursor: "pointer",
+                            boxShadow: isActive ? `0 2px 8px ${t.dot}50` : "none",
                           }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: t.color }}>{t.val.toLocaleString()}</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: t.color }}>{t.label}</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: isActive ? "#fff" : t.color }}>{t.val.toLocaleString()}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "#fff" : t.color }}>{t.label}</span>
                         </div>
                       );
                     })}
@@ -1000,11 +1019,11 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           const statusCounts: Record<string, number> = {};
                           for (const r of lcRows) {
                             const st = r.status?.trim() || "Blank";
-                            if (st.toLowerCase() === "live") continue;
                             statusCounts[st] = (statusCounts[st] ?? 0) + 1;
                           }
                           const entries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
                           const STATUS_COLORS_LC: Record<string, { color: string; dot: string; bg: string }> = {
+                            "Live":                 { color: "#166534", dot: "#22C55E", bg: "#DCFCE7" },
                             "New":                  { color: "#0F172A", dot: "#64748B", bg: "#F1F5F9" },
                             "Shell Created":        { color: "#1D4ED8", dot: "#3B82F6", bg: "#DBEAFE" },
                             "Not Live":             { color: "#DC2626", dot: "#F87171", bg: "#FEE2E2" },
@@ -1050,33 +1069,45 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     {subStatusEntries2.map(([ss, cnt]) => {
                       const sc = getSSColor(ss);
                       const isLiveSs = ss.toLowerCase() === "live";
+                      const isActiveSs = ovvActiveSs.includes(ss);
                       return (
                         <div key={ss}
                           onClick={() => {
                             if (propTab === "listing") {
-                              setLcOvvFilter({ label: ss, field: "subStatus", values: [ss] });
+                              setLcOvvFilter(isActiveSs ? null : { label: ss, field: "subStatus", values: [ss] });
                             } else {
                               if (isLiveSs) {
-                                setPropTab("live");
-                                setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
-                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                                loadLive(1, "", [ss], [], "", "", "", "", "");
+                                if (propTab === "live" && liveSss.includes(ss)) {
+                                  setLiveSss([]); loadLive(1, "", [], [], "", "", "", "", "");
+                                } else {
+                                  setPropTab("live");
+                                  setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
+                                  setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
+                                  loadLive(1, "", [ss], [], "", "", "", "", "");
+                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                                }
                               } else {
-                                setPropTab("notlive");
-                                setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
-                                loadNl(1, "", "", [ss], "");
+                                if (propTab === "notlive" && nlSss.includes(ss)) {
+                                  setNlSss([]); loadNl(1, "", nlCat, [], "");
+                                } else {
+                                  setPropTab("notlive");
+                                  setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
+                                  loadNl(1, "", "", [ss], "");
+                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+                                }
                               }
                             }
-                            setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
                           }}
                           className="kpi-tile"
                           style={{
                             display: "flex", alignItems: "center", gap: 6,
-                            background: sc.bg, border: `2px solid ${sc.text}`,
+                            background: isActiveSs ? sc.text : sc.bg,
+                            border: `2px solid ${sc.text}`,
                             borderRadius: 20, padding: "5px 14px", cursor: "pointer",
+                            boxShadow: isActiveSs ? `0 2px 8px ${sc.text}50` : "none",
                           }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: sc.text }}>{cnt.toLocaleString()}</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: sc.text }}>{ss}</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: isActiveSs ? "#fff" : sc.text }}>{cnt.toLocaleString()}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: isActiveSs ? "#fff" : sc.text }}>{ss}</span>
                         </div>
                       );
                     })}
@@ -1459,6 +1490,25 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         )}
 
         {/* Not Live table */}
+        {propTab === "notlive" && nlData && (nlCat || nlSss.length > 0) && (() => {
+          const CAT_LABEL: Record<string,string> = {
+            live: "Live", exception: "Exception", readyToGoLive: "Ready to Go Live",
+            inProcess: "Listing In Progress", tatExhausted: "TAT Exhausted",
+          };
+          const filterLabel = nlCat ? (CAT_LABEL[nlCat] ?? nlCat) : nlSss[0];
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px", padding: "6px 14px",
+              background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, fontSize: 12 }}>
+              <span style={{ fontWeight: 700, color: "#1D4ED8" }}>{filterLabel}</span>
+              <span style={{ color: "#475569" }}>· {nlData.total.toLocaleString()} properties</span>
+              <button onClick={() => { setNlCat(""); setNlSss([]); loadNl(1, "", "", []); }}
+                style={{ marginLeft: "auto", padding: "2px 10px", fontSize: 11, fontWeight: 700,
+                  background: "#fff", border: "1px solid #BFDBFE", borderRadius: 999, cursor: "pointer", color: "#1D4ED8" }}>
+                × Clear
+              </button>
+            </div>
+          );
+        })()}
         {propTab === "notlive" && (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
@@ -1552,6 +1602,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         )}
 
         {/* Live properties table */}
+        {propTab === "live" && liveData && liveSss.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 8px", padding: "6px 14px",
+            background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 8, fontSize: 12 }}>
+            <span style={{ fontWeight: 700, color: "#16A34A" }}>{liveSss[0]}</span>
+            <span style={{ color: "#475569" }}>· {liveData.total.toLocaleString()} properties</span>
+            <button onClick={() => { setLiveSss([]); loadLive(1, liveSearch, [], liveFhStatus, liveStatus, liveFhDateFrom, liveFhDateTo, liveOtaDateFrom, liveOtaDateTo); }}
+              style={{ marginLeft: "auto", padding: "2px 10px", fontSize: 11, fontWeight: 700,
+                background: "#fff", border: "1px solid #86EFAC", borderRadius: 999, cursor: "pointer", color: "#16A34A" }}>
+              × Clear
+            </button>
+          </div>
+        )}
         {propTab === "live" && (
           <div>
             <div style={{ overflowX: "auto" }}>
