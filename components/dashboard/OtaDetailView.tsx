@@ -383,6 +383,9 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
   const [rnsMonthly, setRnsMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
   const [revMonthly, setRevMonthly] = useState<Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }>>({});
+  // Lazy-load guards: store the otaName they were fetched for so a stale fetch from a previous OTA is ignored
+  const [ovrLoaded,  setOvrLoaded]  = useState("");
+  const [rnsLoaded,  setRnsLoaded]  = useState("");
 
   const [propTab,   setPropTab]   = useState<"notlive" | "live" | "listing" | "config">("listing");
 
@@ -580,10 +583,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       .then(d => { if (d.error) setError(d.error); else setDashData(d); })
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
+  }
+
+  function loadOverdue(name: string) {
     fetch("/api/overdue-listings")
       .then(r => r.json())
-      .then(d => { setOvrLive(d.rows ?? []); setOvrNotLive(d.notLiveRows ?? []); })
+      .then(d => { setOvrLive(d.rows ?? []); setOvrNotLive(d.notLiveRows ?? []); setOvrLoaded(name); })
       .catch(() => {});
+  }
+
+  function loadRnsData(name: string) {
     fetch("/api/dashboard-data")
       .then(r => r.json())
       .then(d => {
@@ -591,25 +600,27 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           const map = (src ?? {}) as Record<string, Record<string, { cmMTD: number; cmTotal?: number; lmMTD?: number; lmTotal?: number }>>;
           const result: Record<string, { cmMTD: number; cmTotal: number; lmMTD: number; lmTotal: number }> = {};
           for (const [mk, otas] of Object.entries(map)) {
-            const entry = otas[otaName];
+            const entry = otas[name];
             if (entry) result[mk] = { cmMTD: entry.cmMTD ?? 0, cmTotal: entry.cmTotal ?? entry.cmMTD ?? 0, lmMTD: entry.lmMTD ?? 0, lmTotal: entry.lmTotal ?? 0 };
           }
           return result;
         };
         setRnsMonthly(extract(d.rnsLiveMonthly));
         setRevMonthly(extract(d.revLiveMonthly));
+        setRnsLoaded(name);
       })
       .catch(() => {});
-    loadNl(1, "", "", []);
-    loadLive(1, "");
-    fetch(`/api/ota-metrics-summary?ota=${encodeURIComponent(otaName)}`)
+  }
+
+  function loadMetrics(name: string) {
+    fetch(`/api/ota-metrics-summary?ota=${encodeURIComponent(name)}`)
       .then(r => r.json())
       .then(d => { setMetricsAgg(d.agg ?? {}); setMetricsProps(d.properties ?? []); })
       .catch(() => {});
   }
 
   useEffect(() => {
-    setDashData(null); setOvrLive([]); setOvrNotLive([]);
+    setDashData(null); setOvrLive([]); setOvrNotLive([]); setOvrLoaded(""); setRnsLoaded("");
     setRnsMonthly({}); setRevMonthly({}); setNlData(null); setLiveData(null);
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
     setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo("");
@@ -636,21 +647,21 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   }, [otaName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function goToCategory(cat: string) {
+    setPropTab("notlive");
     setNlCat(cat); setNlSearch(""); setNlSss([]); setNlFhMonth("");
     loadNl(1, "", cat, [], "");
-    setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
   }
 
   function goToMonth(month: string) {
+    setPropTab("notlive");
     setNlFhMonth(month); setNlSearch(""); setNlCat(""); setNlSss([]);
     loadNl(1, "", "", [], month);
-    setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
   }
 
   function goToSss(subs: string[]) {
+    setPropTab("notlive");
     setNlSss(subs); setNlSearch(""); setNlCat(""); setNlFhMonth("");
     loadNl(1, "", "", subs, "");
-    setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
   }
 
   // Live TAT month-wise data
@@ -835,6 +846,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                 setPropTab(tab.key);
                 if (tab.key === "listing" && !lcLoaded) loadLc();
                 if (tab.key === "config" && scConfig) setScStatusMap(scConfig.statusSubStatusMap ?? {});
+                if (tab.key === "notlive") {
+                  if (!nlData) loadNl(1, "", "", []);
+                  if (ovrLoaded !== otaName) loadOverdue(otaName);
+                }
+                if (tab.key === "live") {
+                  if (!liveData) loadLive(1, "");
+                  if (ovrLoaded !== otaName) loadOverdue(otaName);
+                  if (rnsLoaded !== otaName) loadRnsData(otaName);
+                  if (!Object.keys(metricsAgg).length) loadMetrics(otaName);
+                }
               }}
               style={{ flex: 1, padding: "11px 0", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
                 background: active ? "#EEF2FF" : "transparent",

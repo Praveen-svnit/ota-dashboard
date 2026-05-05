@@ -36,9 +36,6 @@ export async function GET(req: Request) {
 
   const sql = getSql();
 
-  // Ensure batch_number column exists (safe to run repeatedly)
-  await sql`ALTER TABLE ota_listing ADD COLUMN IF NOT EXISTS batch_number TEXT`;
-
   const conditions: string[] = [];
   const params: unknown[] = [];
   const p = () => params.length;

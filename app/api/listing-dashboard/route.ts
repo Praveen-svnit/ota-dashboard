@@ -30,7 +30,15 @@ const COL_ORDER = [
   "Blank",
 ];
 
+// 5-minute in-memory cache — same data for all users/OTAs
+let _cache: { data: unknown; at: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000;
+
 export async function GET() {
+  if (_cache && Date.now() - _cache.at < CACHE_TTL) {
+    return Response.json(_cache.data);
+  }
+
   try {
     const sql = getSql();
 
@@ -212,7 +220,7 @@ export async function GET() {
       tatExhausted: Number(r.tatExhausted),
     }));
 
-    return Response.json({
+    const payload = {
       pivot,
       columns,
       otas,
@@ -223,7 +231,9 @@ export async function GET() {
       tatSubStatusList,
       tatStats,
       ssStatusPivot,
-    });
+    };
+    _cache = { data: payload, at: Date.now() };
+    return Response.json(payload);
 
   } catch (err) {
     return Response.json({ error: (err as Error).message }, { status: 500 });
