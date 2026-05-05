@@ -971,28 +971,22 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           }}
                           className="kpi-tile"
                           style={{
-                            display: "inline-flex", alignItems: "center", gap: 10,
-                            background: t.bg, padding: "10px 16px", borderRadius: 10,
-                            border: `1px solid ${t.dot}30`, minWidth: 120, flex: "1 1 120px",
-                            cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 6,
+                            background: t.bg, border: `2px solid ${t.dot}`,
+                            borderRadius: 20, padding: "5px 14px", cursor: "pointer",
                           }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: t.dot, flexShrink: 0 }} />
-                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: t.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{t.label}</span>
-                            <span style={{ fontSize: 20, fontWeight: 900, color: t.color, lineHeight: 1.1 }}>{t.val.toLocaleString()}</span>
-                          </div>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: t.color }}>{t.val.toLocaleString()}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: t.color }}>{t.label}</span>
                         </div>
                       );
                     })}
                     <div style={{
-                      display: "inline-flex", alignItems: "center", gap: 10,
-                      background: "#F8FAFC", padding: "10px 16px", borderRadius: 10,
-                      border: "1px solid #E2E8F0", minWidth: 100, flex: "1 1 100px",
+                      display: "flex", alignItems: "center", gap: 6,
+                      background: "#F1F5F9", border: `2px solid ${livePctColor}`,
+                      borderRadius: 20, padding: "5px 14px",
                     }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em" }}>Live %</span>
-                        <span style={{ fontSize: 20, fontWeight: 900, color: livePctColor, lineHeight: 1.1 }}>{livePct2}%</span>
-                      </div>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: livePctColor }}>{livePct2}%</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: livePctColor }}>Live %</span>
                     </div>
                   </div>
                 )}
@@ -1034,18 +1028,14 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 }}
                                 className="kpi-tile"
                                 style={{
-                                  display: "inline-flex", alignItems: "center", gap: 10,
+                                  display: "flex", alignItems: "center", gap: 6,
                                   background: isActive ? c.dot : c.bg,
-                                  padding: "10px 16px", borderRadius: 10,
-                                  border: `1px solid ${c.dot}${isActive ? "ff" : "40"}`,
-                                  minWidth: 110, flex: "0 1 auto", cursor: "pointer",
+                                  border: `2px solid ${c.dot}`,
+                                  borderRadius: 20, padding: "5px 14px", cursor: "pointer",
                                   boxShadow: isActive ? `0 4px 12px ${c.dot}40` : "none",
                                 }}>
-                                <span style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? "#fff" : c.dot, flexShrink: 0 }} />
-                                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                  <span style={{ fontSize: 9, fontWeight: 700, color: isActive ? "#fff" : c.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{st}</span>
-                                  <span style={{ fontSize: 20, fontWeight: 900, color: isActive ? "#fff" : c.color, lineHeight: 1.1 }}>{cnt}</span>
-                                </div>
+                                <span style={{ fontSize: 15, fontWeight: 900, color: isActive ? "#fff" : c.color }}>{cnt}</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "#fff" : c.color }}>{st}</span>
                               </div>
                             );
                           });
@@ -1081,16 +1071,12 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                           }}
                           className="kpi-tile"
                           style={{
-                            display: "inline-flex", alignItems: "center", gap: 10,
-                            background: sc.bg, padding: "10px 16px", borderRadius: 10,
-                            border: `1px solid ${sc.text}30`, minWidth: 110, flex: "0 1 auto",
-                            cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 6,
+                            background: sc.bg, border: `2px solid ${sc.text}`,
+                            borderRadius: 20, padding: "5px 14px", cursor: "pointer",
                           }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: sc.text, flexShrink: 0 }} />
-                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: sc.text, textTransform: "uppercase", letterSpacing: "0.06em" }}>{ss}</span>
-                            <span style={{ fontSize: 20, fontWeight: 900, color: sc.text, lineHeight: 1.1 }}>{cnt.toLocaleString()}</span>
-                          </div>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: sc.text }}>{cnt.toLocaleString()}</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: sc.text }}>{ss}</span>
                         </div>
                       );
                     })}
