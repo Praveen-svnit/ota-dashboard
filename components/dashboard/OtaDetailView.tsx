@@ -526,7 +526,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
       .then(d => {
-        // Normalize sub_status labels same as Listing Creation and Not Live tabs
+        if (d.error) return;
         if (d.rows) d.rows = d.rows.map((r: NLRow) => ({ ...r, subStatus: normalizeSs(r.subStatus) }));
         setLiveData(d); setLivePage(page);
       })
@@ -550,7 +550,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     if (otaTo)           p.set("otaTo", otaTo);
     fetch(`/api/listing-dashboard/not-live?${p}`)
       .then(r => r.json())
-      .then(d => { setNlData(d); setNlPage(page); })
+      .then(d => { if (!d.error) { setNlData(d); } setNlPage(page); })
       .catch(() => {})
       .finally(() => setNlLoading(false));
   }
@@ -619,7 +619,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
 
   useEffect(() => {
     setDashData(null); setOvrLive([]); setOvrNotLive([]); setOvrLoaded(""); setRnsLoaded("");
-    setRnsMonthly({}); setRevMonthly({}); setNlData(null); setLiveData(null);
+    setRnsMonthly({}); setRevMonthly({}); setNlData(null); setLiveData(null); setNlLoading(true); setLiveLoading(true);
     setNlCat(""); setNlSearch(""); setNlSss([]); setNlFhMonth(""); setSsActiveGroup(null);
     setNlFhStatus([]); setNlStatus(""); setNlFhDateFrom(""); setNlFhDateTo(""); setNlOtaDateFrom(""); setNlOtaDateTo("");
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
@@ -629,6 +629,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setScConfig(null); setScStatusMap({}); setScOtaStatuses([]);
     load();
     loadLc(["Live","SoldOut"]);
+    loadNl(1, "", "", []);
+    loadLive(1, "");
     // Load OTA status config + actual OTA statuses from DB (used by listing creation + config tab)
     setScLoading(true);
     Promise.all([
@@ -1347,7 +1349,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     </tr>
                   );
                 })}
-                {!nlLoading && (nlData?.rows.length === 0) && <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No records match</td></tr>}
+                {!nlLoading && (nlData?.rows?.length === 0) && <tr><td colSpan={9} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No records match</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1443,7 +1445,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                     </tr>
                     );
                   })}
-                  {!liveLoading && (liveData?.rows.length === 0) && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No live properties found</td></tr>}
+                  {!liveLoading && (liveData?.rows?.length === 0) && <tr><td colSpan={7} style={{ textAlign: "center", padding: 40, color: T.textMut, fontSize: 12 }}>No live properties found</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -2221,7 +2223,8 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                         <tr style={{ background: "#F8FAFC" }}>
                           <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: T.textSec, borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap", minWidth: 180 }}>OTA Status</th>
                           <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#5B21B6", borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>Preset Sub-status</th>
-                          <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#0369A1", borderBottom: "2px solid #E2E8F0", whiteSpace: "nowrap" }}>PostSet Sub-status</th>
+                          <th style={{ padding: "8px 14px", textAlign: "left", fontWeight: 700, color: "#0369A1", borderBottom: "2px solid #E2E8F0", borderRight: "1px solid #E2E8F0", whiteSpace: "nowrap" }}>PostSet Sub-status</th>
+                          <th style={{ padding: "8px 14px", borderBottom: "2px solid #E2E8F0", width: 44 }}></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2275,11 +2278,19 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                                 </td>
                               );
                             })}
+                            <td style={{ padding: "6px 10px", textAlign: "center", borderLeft: "1px solid #E2E8F0" }}>
+                              <button
+                                onClick={() => setScStatusMap(prev => { const n = { ...prev }; delete n[status]; return n; })}
+                                title={`Delete "${status}"`}
+                                style={{ padding: "3px 8px", fontSize: 11, borderRadius: 6, border: "1px solid #FECACA", background: "#FEF2F2", color: "#DC2626", cursor: "pointer", fontWeight: 700 }}>
+                                ✕
+                              </button>
+                            </td>
                           </tr>
                         ))}
                         {/* Add new OTA status row */}
                         <tr style={{ background: "#F0FDF4" }}>
-                          <td colSpan={3} style={{ padding: "6px 10px" }}>
+                          <td colSpan={4} style={{ padding: "6px 10px" }}>
                             {scAddingStatus ? (
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <input autoFocus value={scNewStatus} onChange={e => setScNewStatus(e.target.value)}
