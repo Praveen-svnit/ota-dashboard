@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const page   = Math.max(1, parseInt(sp.get("page") ?? "1",  10));
     const size   = Math.min(100, parseInt(sp.get("size") ?? "50", 10));
     const search     = (sp.get("search")    ?? "").trim();
-    const category   = (sp.get("category")  ?? "").trim(); // "inProcess" | "tatExhausted" | ""
+    const category   = (sp.get("category")  ?? "").trim(); // "inProcess" | "tatExhausted" | "exception" | "readyToGoLive" | "live" | ""
     const otaList    = (sp.get("otas")  ?? "").split(",").map(s => s.trim()).filter(Boolean);
     const sssList    = (sp.get("sss")   ?? "").split(",").map(s => s.trim()).filter(Boolean);
     const fhMonth    = (sp.get("fhMonth") ?? "").trim();
@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
       conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'live'", "p.fh_status IN ('Live','SoldOut')"];
     } else if (category === "exception") {
       conditions = ["LOWER(COALESCE(o.sub_status,'')) = 'exception'", "p.fh_status IN ('Live','SoldOut')"];
+    } else if (category === "readyToGoLive") {
+      conditions = ["LOWER(COALESCE(o.status,'')) = 'ready to go live'", "p.fh_status IN ('Live','SoldOut')"];
     } else if (category === "all") {
       conditions = ["p.fh_status IN ('Live','SoldOut')"];
     } else {

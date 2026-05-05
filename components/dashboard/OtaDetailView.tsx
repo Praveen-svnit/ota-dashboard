@@ -470,8 +470,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   const [liveSortBy,  setLiveSortBy]  = useState<NLSortKey>("liveDate");
   const [liveSortDir, setLiveSortDir] = useState<"asc" | "desc">("desc");
   const [livePage,    setLivePage]    = useState(1);
-  const [ovvExpanded, setOvvExpanded] = useState(true);
-  const [ovvTab,      setOvvTab]      = useState<"status" | "substatus">("status");
 
   const nlSortedRows = useMemo(() => {
     if (!nlData?.rows) return [];
@@ -627,7 +625,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus(""); setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
     setPropTab("listing");
     setMetricsAgg({}); setMetricsProps([]);
-    setOvvExpanded(true); setOvvTab("status");
     setLcRows([]); setLcLoaded(false); setLcDirty({}); setLcSelected(new Set()); setLcSearch(""); setLcStatusFilter("all"); setLcFhStatus(["Live","SoldOut"]); setLcOvvFilter(null); setLcEditCell(null); setLcCbFilterKey(""); setLcCbFilterVal(""); setLcError("");
     setScConfig(null); setScStatusMap({}); setScOtaStatuses([]);
     load();
@@ -763,14 +760,16 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
     });
   }, [liveMonthData, nlMonthData]);
 
-  const catRow       = dashData?.categories.find(r => r.ota === otaName);
-  const live         = catRow?.live          ?? 0;
-  const exception    = catRow?.exception     ?? 0;
-  const inProcess    = catRow?.inProcess     ?? 0;
-  const tatExhausted = catRow?.tatExhausted  ?? 0;
-  const total        = live + exception + inProcess + tatExhausted;
-  const livePct      = total > 0 ? ((live + exception) / total) * 100 : 0;
-  const tatStat      = dashData?.tatStats[otaName];
+  const catRow        = dashData?.categories.find(r => r.ota === otaName);
+  const live          = catRow?.live          ?? 0;
+  const exception     = catRow?.exception     ?? 0;
+  const readyToGoLive = catRow?.readyToGoLive ?? 0;
+  const inProcess     = catRow?.inProcess     ?? 0;
+  const tatExhausted  = catRow?.tatExhausted  ?? 0;
+  const total         = live + exception + readyToGoLive + inProcess + tatExhausted;
+  const livePct       = total > 0 ? ((live + exception) / total) * 100 : 0;
+  const livePctColor  = livePct >= 90 ? "#16A34A" : livePct >= 70 ? "#B45309" : livePct >= 40 ? "#C2410C" : "#DC2626";
+  const tatStat       = dashData?.tatStats[otaName];
 
   const KPI_TILES = [
     { label: "Total",         value: total,                     color: T.orange,  bg: T.orangeL,  cat: "all"          },
@@ -797,7 +796,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
   if (!otaName || !OTA_COLORS[otaName]) return null;
 
   return (
-    <div style={{ padding: "20px 28px", background: T.pageBg, minHeight: "100vh" }}>
+    <div style={{ background: T.pageBg, minHeight: "100vh" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         .nl-row:hover > td { background: #F8FAFD !important; }
@@ -814,23 +813,41 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
         .ss-clickable-num:hover { opacity: 0.8; }
       `}</style>
 
-      {/* KPI Pills */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-        {[
-          { label: "Total",         value: total,                            text: "#475569", bg: "#F1F5F9", border: "#E2E8F0" },
-          { label: "Live %",        value: livePct.toFixed(1) + "%",         text: livePct >= 90 ? "#16A34A" : livePct >= 70 ? "#B45309" : livePct >= 40 ? "#C2410C" : "#DC2626", bg: "#F8FAFC", border: "#E2E8F0", isStr: true },
-          { label: "Live",          value: live,                             text: "#16A34A", bg: "#DCFCE7", border: "#86EFAC" },
-          { label: "Exception",     value: exception,                        text: "#B45309", bg: "#FEF3C7", border: "#FDE68A" },
-          { label: "In Process",    value: inProcess,                        text: "#1D4ED8", bg: "#DBEAFE", border: "#93C5FD" },
-          { label: "TAT Exhausted", value: tatExhausted,                     text: "#DC2626", bg: "#FEE2E2", border: "#FECACA" },
-          { label: "Avg TAT",       value: tatStat ? `${tatStat.avgTat}d` : "—", text: "#6366F1", bg: "#EEF2FF", border: "#A5B4FC", isStr: true },
-        ].map(({ label, value, text, bg, border, isStr }) => (
-          <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, background: bg, border: `2px solid ${border}`, borderRadius: 20, padding: "5px 14px" }}>
-            <span style={{ fontSize: 15, fontWeight: 900, color: text }}>{isStr ? value : (value as number).toLocaleString()}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: text }}>{label}</span>
+      {/* ── Merged header: OTA name + KPI pills ── */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", overflow: "hidden" }}>
+        <div style={{ height: 4, background: otaColor }} />
+        <div style={{ padding: "10px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>{otaName}</div>
+            <div style={{ fontSize: 11, color: "#64748B", marginTop: 1 }}>
+              OTA listing analytics & creation{catRow ? ` · ${total.toLocaleString()} listings` : ""}
+            </div>
           </div>
-        ))}
+          {catRow ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              {([
+                { label: "Live",        value: live,                                  text: "#166534", bg: "#DCFCE7", border: "#86EFAC" },
+                { label: "Exception",   value: exception,                             text: "#9A6700", bg: "#FEF9C3", border: "#FDE68A" },
+                { label: "RGL",         value: readyToGoLive,                         text: "#0F766E", bg: "#CCFBF1", border: "#6EE7B7" },
+                { label: "In Progress", value: inProcess,                             text: "#155E75", bg: "#CFFAFE", border: "#67E8F9" },
+                { label: "TAT",         value: tatExhausted,                          text: "#B42318", bg: "#FFE4E6", border: "#FECACA" },
+                { label: "Live %",      value: livePct.toFixed(1) + "%",              text: livePctColor, bg: "#F8FAFC", border: livePctColor + "50", isStr: true },
+                { label: "Avg TAT",     value: tatStat ? `${tatStat.avgTat}d` : "—",  text: "#6366F1",   bg: "#EEF2FF", border: "#A5B4FC", isStr: true },
+              ] as { label: string; value: number | string; text: string; bg: string; border: string; isStr?: boolean }[]).map(({ label, value, text, bg, border, isStr }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, background: bg, border: `1.5px solid ${border}`, borderRadius: 14, padding: "3px 10px" }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: text }}>{isStr ? value : (value as number).toLocaleString()}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: text }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: "#94A3B8" }}>Loading…</span>
+          )}
+        </div>
       </div>
+
+      {/* ── Page content ── */}
+      <div style={{ padding: "16px 28px" }}>
 
       {/* Tab Strip */}
       <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #E2E8F0", display: "flex", overflow: "hidden", marginBottom: 14 }}>
@@ -872,253 +889,6 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       {loading && <div style={{ textAlign: "center", padding: 60, color: T.textMut, fontSize: 12 }}><span style={{ display: "inline-block", animation: "spin 1s linear infinite", marginRight: 6 }}>⟳</span>Loading…</div>}
       {error   && <div style={{ padding: "8px 14px", background: T.notLiveL, border: "1px solid #FECACA", borderRadius: 8, fontSize: 11, color: T.notLive, marginBottom: 14 }}>⚠ {error}</div>}
 
-      {/* ── Overview Breakdown ──────────────────────────────────────────── */}
-      {dashData && dashData.categories?.length > 0 && (() => {
-        const catRow2  = dashData.categories.find(r => r.ota === otaName);
-        if (!catRow2) return null;
-
-        const live2         = catRow2.live ?? 0;
-        const exception2    = catRow2.exception ?? 0;
-        const readyToGoLive2= catRow2.readyToGoLive ?? 0;
-        const inProcess2    = catRow2.inProcess ?? 0;
-        const tatExhausted2 = catRow2.tatExhausted ?? 0;
-        const grandTot2     = live2 + exception2 + readyToGoLive2 + inProcess2 + tatExhausted2;
-        const livePct2      = grandTot2 > 0 ? ((live2 + exception2) / grandTot2 * 100).toFixed(1) : "0.0";
-        const livePctNum    = parseFloat(livePct2);
-        const livePctColor  = livePctNum >= 90 ? "#16A34A" : livePctNum >= 70 ? "#B45309" : livePctNum >= 40 ? "#C2410C" : "#DC2626";
-
-        const STATUS_TILES = [
-          { key: "live",           label: "Live",                color: "#166534", dot: "#22C55E", bg: "#DCFCE7", val: live2         },
-          { key: "exception",      label: "Exception",           color: "#9A6700", dot: "#EAB308", bg: "#FEF9C3", val: exception2    },
-          { key: "readyToGoLive",  label: "Ready to Go Live",    color: "#0F766E", dot: "#10B981", bg: "#CCFBF1", val: readyToGoLive2},
-          { key: "inProcess",      label: "Listing In Progress", color: "#155E75", dot: "#06B6D4", bg: "#CFFAFE", val: inProcess2    },
-          { key: "tatExhausted",   label: "TAT Exhausted",       color: "#B42318", dot: "#F97066", bg: "#FFE4E6", val: tatExhausted2 },
-        ] as const;
-
-        const ovvActiveKey: string | null =
-          propTab === "live" ? "live" :
-          propTab === "notlive" && nlCat ? nlCat : null;
-        const ovvActiveSs: string[] =
-          propTab === "live" ? liveSss :
-          propTab === "notlive" ? nlSss : [];
-
-        const subStatusEntries2 = Object.entries(dashData.pivot[otaName] ?? {})
-          .filter(([, v]) => v > 0)
-          .sort((a, b) => b[1] - a[1]);
-
-        return (
-          <div style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 16 }}>
-            {/* Collapsible header */}
-            <div onClick={() => setOvvExpanded(v => !v)} style={{
-              height: 4, background: otaColor,
-            }} />
-            <div onClick={() => setOvvExpanded(v => !v)} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "12px 18px", cursor: "pointer", userSelect: "none",
-              borderBottom: ovvExpanded ? "1px solid #F1F5F9" : "none",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: "#0F172A" }}>Overview</span>
-                <span style={{ fontSize: 10, color: "#94A3B8" }}>{grandTot2.toLocaleString()} listings</span>
-                {propTab !== "listing" && (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                    background: live2 > 0 ? "#DCFCE7" : "#F1F5F9",
-                    color: live2 > 0 ? "#166534" : "#64748B",
-                    padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700,
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: live2 > 0 ? "#22C55E" : "#9CA3AF" }} />
-                    {livePct2}% live
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{ovvExpanded ? "▾" : "▸"}</span>
-            </div>
-
-            {ovvExpanded && (
-              <div style={{ padding: "0 18px 16px 18px" }}>
-
-                {/* Tab strip */}
-                <div style={{ display: "flex", gap: 2, background: "#F1F5F9", borderRadius: 8, padding: 3, marginBottom: 14, width: "fit-content" }}>
-                  {(["status", "substatus"] as const).map(tab => {
-                    const active = ovvTab === tab;
-                    return (
-                      <button key={tab} onClick={() => setOvvTab(tab)} style={{
-                        padding: "5px 16px", fontSize: 11, fontWeight: 700, borderRadius: 6,
-                        border: "none", cursor: "pointer", fontFamily: "inherit",
-                        background: active ? "#FFFFFF" : "transparent",
-                        color: active ? "#0F172A" : "#94A3B8",
-                        boxShadow: active ? "0 1px 3px rgba(15,23,42,0.10)" : "none",
-                        transition: "all 0.12s",
-                      }}>
-                        {tab === "status" ? "Status" : "Sub-status"}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Status tiles */}
-                {ovvTab === "status" && propTab !== "listing" && (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {STATUS_TILES.map(t => {
-                      const isLive = t.key === "live";
-                      const isActive = ovvActiveKey === t.key;
-                      return (
-                        <div key={t.key}
-                          onClick={() => {
-                            if (isLive) {
-                              if (isActive) {
-                                // toggle off — already on live tab, nothing to clear
-                              } else {
-                                setPropTab("live");
-                                setLiveSearch(""); setLiveSss([]); setLiveFhStatus([]); setLiveStatus("");
-                                setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                                loadLive(1, "", [], [], "", "", "", "", "");
-                                setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-                              }
-                            } else {
-                              if (propTab === "notlive" && nlCat === t.key) {
-                                setNlCat(""); loadNl(1, "", "", nlSss);
-                              } else {
-                                setPropTab("notlive");
-                                goToCategory(t.key);
-                                setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-                              }
-                            }
-                          }}
-                          className="kpi-tile"
-                          style={{
-                            display: "flex", alignItems: "center", gap: 6,
-                            background: isActive ? t.dot : t.bg,
-                            border: `2px solid ${t.dot}`,
-                            borderRadius: 20, padding: "5px 14px", cursor: "pointer",
-                            boxShadow: isActive ? `0 2px 8px ${t.dot}50` : "none",
-                          }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: isActive ? "#fff" : t.color }}>{t.val.toLocaleString()}</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "#fff" : t.color }}>{t.label}</span>
-                        </div>
-                      );
-                    })}
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      background: "#F1F5F9", border: `2px solid ${livePctColor}`,
-                      borderRadius: 20, padding: "5px 14px",
-                    }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: livePctColor }}>{livePct2}%</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: livePctColor }}>Live %</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Listing Creation — dynamic status tiles from actual data */}
-                {ovvTab === "status" && propTab === "listing" && (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {!lcLoaded
-                      ? <span style={{ fontSize: 11, color: "#94A3B8" }}>Load Listing Creation tab to see status breakdown</span>
-                      : (() => {
-                          const statusCounts: Record<string, number> = {};
-                          for (const r of lcRows) {
-                            const st = r.status?.trim() || "Blank";
-                            statusCounts[st] = (statusCounts[st] ?? 0) + 1;
-                          }
-                          const entries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
-                          const STATUS_COLORS_LC: Record<string, { color: string; dot: string; bg: string }> = {
-                            "Live":                 { color: "#166534", dot: "#22C55E", bg: "#DCFCE7" },
-                            "New":                  { color: "#0F172A", dot: "#64748B", bg: "#F1F5F9" },
-                            "Shell Created":        { color: "#1D4ED8", dot: "#3B82F6", bg: "#DBEAFE" },
-                            "Not Live":             { color: "#DC2626", dot: "#F87171", bg: "#FEE2E2" },
-                            "Ready to Go Live":     { color: "#0F766E", dot: "#14B8A6", bg: "#CCFBF1" },
-                            "Content in Progress":  { color: "#6D28D9", dot: "#A78BFA", bg: "#EDE9FE" },
-                            "Listing in Progress":  { color: "#155E75", dot: "#06B6D4", bg: "#CFFAFE" },
-                            "Pending":              { color: "#B45309", dot: "#F59E0B", bg: "#FEF3C7" },
-                            "Soldout":              { color: "#B45309", dot: "#F97316", bg: "#FFEDD5" },
-                            "Closed":               { color: "#475569", dot: "#94A3B8", bg: "#F1F5F9" },
-                            "Blank":                { color: "#94A3B8", dot: "#CBD5E1", bg: "#F8FAFC" },
-                          };
-                          const activeFilter = lcOvvFilter?.field === "status" ? lcOvvFilter.values[0] : null;
-                          return entries.map(([st, cnt]) => {
-                            const c = STATUS_COLORS_LC[st] ?? { color: "#475569", dot: "#94A3B8", bg: "#F1F5F9" };
-                            const isActive = activeFilter === st;
-                            return (
-                              <div key={st}
-                                onClick={() => {
-                                  setLcOvvFilter(isActive ? null : { label: st, field: "status", values: [st] });
-                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-                                }}
-                                className="kpi-tile"
-                                style={{
-                                  display: "flex", alignItems: "center", gap: 6,
-                                  background: isActive ? c.dot : c.bg,
-                                  border: `2px solid ${c.dot}`,
-                                  borderRadius: 20, padding: "5px 14px", cursor: "pointer",
-                                  boxShadow: isActive ? `0 4px 12px ${c.dot}40` : "none",
-                                }}>
-                                <span style={{ fontSize: 15, fontWeight: 900, color: isActive ? "#fff" : c.color }}>{cnt}</span>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "#fff" : c.color }}>{st}</span>
-                              </div>
-                            );
-                          });
-                        })()
-                    }
-                  </div>
-                )}
-
-                {/* Sub-status tiles */}
-                {ovvTab === "substatus" && subStatusEntries2.length > 0 && (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {subStatusEntries2.map(([ss, cnt]) => {
-                      const sc = getSSColor(ss);
-                      const isLiveSs = ss.toLowerCase() === "live";
-                      const isActiveSs = ovvActiveSs.includes(ss);
-                      return (
-                        <div key={ss}
-                          onClick={() => {
-                            if (propTab === "listing") {
-                              setLcOvvFilter(isActiveSs ? null : { label: ss, field: "subStatus", values: [ss] });
-                            } else {
-                              if (isLiveSs) {
-                                if (propTab === "live" && liveSss.includes(ss)) {
-                                  setLiveSss([]); loadLive(1, "", [], [], "", "", "", "", "");
-                                } else {
-                                  setPropTab("live");
-                                  setLiveSss([ss]); setLiveSearch(""); setLiveFhStatus([]); setLiveStatus("");
-                                  setLiveFhDateFrom(""); setLiveFhDateTo(""); setLiveOtaDateFrom(""); setLiveOtaDateTo("");
-                                  loadLive(1, "", [ss], [], "", "", "", "", "");
-                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-                                }
-                              } else {
-                                if (propTab === "notlive" && nlSss.includes(ss)) {
-                                  setNlSss([]); loadNl(1, "", nlCat, [], "");
-                                } else {
-                                  setPropTab("notlive");
-                                  setNlSss([ss]); setNlSearch(""); setNlCat(""); setNlFhMonth("");
-                                  loadNl(1, "", "", [ss], "");
-                                  setTimeout(() => document.getElementById("prop-section")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-                                }
-                              }
-                            }
-                          }}
-                          className="kpi-tile"
-                          style={{
-                            display: "flex", alignItems: "center", gap: 6,
-                            background: isActiveSs ? sc.text : sc.bg,
-                            border: `2px solid ${sc.text}`,
-                            borderRadius: 20, padding: "5px 14px", cursor: "pointer",
-                            boxShadow: isActiveSs ? `0 2px 8px ${sc.text}50` : "none",
-                          }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: isActiveSs ? "#fff" : sc.text }}>{cnt.toLocaleString()}</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: isActiveSs ? "#fff" : sc.text }}>{ss}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {dashData && propTab === "notlive" && (
         <>
@@ -1395,25 +1165,20 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
       )}
 
       {/* Properties Card — only for Listing Creation and Status Config */}
-      {(propTab === "listing" || propTab === "config") && (
       <div id="prop-section" style={{ background: "#FFFFFF", border: `1px solid ${T.cardBdr}`, borderRadius: 18, overflow: "hidden", boxShadow: "0 4px 24px rgba(15,23,42,0.08)" }}>
 
         {/* Filter bar — Not Live */}
         {propTab === "notlive" && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "10px 16px", borderBottom: `1px solid ${T.cardBdr}`, background: "linear-gradient(180deg,#FFF9F5 0%,#FFF4EE 100%)", flexWrap: "wrap", gap: 8 }}>
-            {([
-              { val: "",             label: "All" },
-              { val: "inProcess",    label: "In Process" },
-              { val: "tatExhausted", label: "TAT Exhausted" },
-            ] as const).map(btn => (
-              <button key={btn.val} onClick={() => { setNlCat(btn.val); loadNl(1, nlSearch, btn.val, nlSss); }}
-                style={{ padding: "4px 10px", fontSize: 10, fontWeight: 700, borderRadius: 999, cursor: "pointer",
-                  border: `1px solid ${nlCategory === btn.val ? T.orange : T.cardBdr}`,
-                  background: nlCategory === btn.val ? T.orangeL : "#FFFFFF",
-                  color: nlCategory === btn.val ? T.orange : T.textSec }}>
-                {btn.label}
-              </button>
-            ))}
+            <select value={nlCategory} onChange={e => { setNlCat(e.target.value); loadNl(1, nlSearch, e.target.value, nlSss); }}
+              style={{ padding: "5px 9px", fontSize: 11, border: `1px solid ${nlCategory ? T.orange : T.cardBdr}`, borderRadius: 6,
+                outline: "none", background: nlCategory ? T.orangeL : "#FFF", color: nlCategory ? T.orange : T.textPri, cursor: "pointer", fontWeight: nlCategory ? 700 : 400 }}>
+              <option value="">All Categories</option>
+              <option value="exception">Exception</option>
+              <option value="readyToGoLive">Ready to Go Live</option>
+              <option value="inProcess">In Progress</option>
+              <option value="tatExhausted">TAT Exhausted</option>
+            </select>
             <CheckboxDropdown label="FH Status" options={["Live","SoldOut","Churned"]} selected={nlFhStatus}
               onChange={v => { setNlFhStatus(v); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, v, nlStatus, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }} />
             <input value={nlStatus} onChange={e => { setNlStatus(e.target.value); loadNl(1, nlSearch, nlCategory, nlSss, nlFhMonth, nlFhStatus, e.target.value, nlFhDateFrom, nlFhDateTo, nlOtaDateFrom, nlOtaDateTo); }}
@@ -1876,13 +1641,18 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
                   <input value={lcSearch} onChange={e => setLcSearch(e.target.value)} placeholder="Search name / city…"
                     style={{ padding: "6px 10px 6px 26px", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 11, outline: "none", background: "#F8FAFC", width: 200 }} />
                 </div>
-                {/* Active overview filter badge */}
-                {lcOvvFilter && (
-                  <div style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:20, background:"#EDE9FE", border:"1px solid #7C3AED40", fontSize:10, fontWeight:700, color:"#6D28D9" }}>
-                    <span>⬡ {lcOvvFilter.label}</span>
-                    <button onClick={() => setLcOvvFilter(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"#7C3AED", fontSize:12, lineHeight:1, padding:0 }}>×</button>
-                  </div>
-                )}
+                {/* Status dropdown filter */}
+                <select
+                  value={lcOvvFilter?.field === "status" ? lcOvvFilter.values[0] : ""}
+                  onChange={e => setLcOvvFilter(e.target.value ? { label: e.target.value, field: "status", values: [e.target.value] } : null)}
+                  style={{ padding: "6px 10px", border: `1px solid ${lcOvvFilter?.field === "status" ? "#7C3AED" : "#E2E8F0"}`, borderRadius: 8, fontSize: 11,
+                    background: lcOvvFilter?.field === "status" ? "#EDE9FE" : "#F8FAFC",
+                    color: lcOvvFilter?.field === "status" ? "#6D28D9" : "#374151", outline: "none", cursor: "pointer" }}>
+                  <option value="">All Statuses</option>
+                  {[...new Set(lcRows.map(r => r.status?.trim() || "Blank"))].sort().map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
                 {/* Live / Not Live toggle */}
                 <div style={{ display: "flex", borderRadius: 8, border: "1px solid #E2E8F0", overflow: "hidden", flexShrink: 0 }}>
                   {(["notlive", "all", "live"] as const).map((v, i) => {
@@ -2538,7 +2308,7 @@ export default function OtaDetailView({ otaName }: { otaName: string }) {
           </div>
         )}
       </div>
-      )}
+      </div>{/* end page content padding */}
     </div>
   );
 }

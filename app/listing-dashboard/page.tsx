@@ -209,17 +209,19 @@ function ListingDashboardInner() {
         .srow:hover > td { background: #F3F8FD !important; }
       `}</style>
 
-      {/* White header bar */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>
-            {selectedOta === "Overview" ? "Listing Dashboard" : selectedOta === "GMB" ? "Google My Business" : selectedOta}
-          </div>
-          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
-            {selectedOta === "Overview" ? "OTA listing status · all channels" : "OTA listing analytics & creation"}
+      {/* White header bar — Overview and GMB only; OTA pages own their header */}
+      {(selectedOta === "Overview" || selectedOta === "GMB") && (
+        <div style={{ background: "#fff", borderBottom: "1px solid #E2E8F0", padding: "16px 28px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#0F172A" }}>
+              {selectedOta === "Overview" ? "Listing Dashboard" : "Google My Business"}
+            </div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+              {selectedOta === "Overview" ? "OTA listing status · all channels" : "Google My Business listings"}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {selectedOta === "GMB" ? (
         <GmbTab />
