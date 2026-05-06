@@ -140,9 +140,9 @@ function MergedMonthTable({ title, rows, onMonthClick }: {
   rows: Array<Record<string, number | string>>;
   onMonthClick?: (month: string) => void;
 }) {
+  const [showAllMonths, setShowAllMonths] = useState(false);
   if (rows.length === 0) return null;
 
-  const [showAllMonths, setShowAllMonths] = useState(false);
   const sorted = [...rows].reverse();
   const visibleRows = showAllMonths ? sorted : sorted.slice(0, 4);
 
