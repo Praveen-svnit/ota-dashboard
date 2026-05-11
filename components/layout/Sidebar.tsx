@@ -197,6 +197,10 @@ export default function Sidebar({ lastRefreshed }: SidebarProps) {
         <SectionHeader label="MMT Reports" />
         <NavLink icon="🧼" label="MMT Hygiene"   href="/reports/mmt-hygiene" />
 
+        {/* Tools */}
+        <SectionHeader label="Tools" />
+        <NavLink icon="📄" label="OCM Generator" href="/ocm-generator" />
+
         {/* Admin */}
         <SectionHeader label="Admin" />
         <NavLink icon="🔄" label="Migration"      href="/admin/migration" />
